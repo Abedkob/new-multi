@@ -1,0 +1,191 @@
+import { prisma } from "@/lib/prisma";
+import { canTransition, type OrderStatusValue } from "@/lib/orders";
+import { effectivePrice, parseAttributes, variantLabel } from "@/lib/variants";
+
+/**
+ * Orders. Every function takes a tenantId (from the storefront's slug lookup when a customer
+ * orders, from the session on the admin side) and puts it in the WHERE clause. Variant ids in
+ * a cart are client-supplied, so they are only ever resolved through a product of THIS store.
+ */
+
+export type OrderErrorCode =
+  | "EMPTY"
+  | "INVALID"
+  | "UNAVAILABLE"
+  | "STOCK"
+  | "NOT_FOUND"
+  | "BAD_TRANSITION"
+  | "CHANGED";
+
+/** A problem the customer/owner can act on; the message is safe to show. */
+export class OrderError extends Error {
+  constructor(
+    public code: OrderErrorCode,
+    message: string,
+    /** For STOCK: the variant that ran short and how many are left. */
+    public detail?: { variantId: string; available: number },
+  ) {
+    super(message);
+  }
+}
+
+export type CustomerInput = {
+  customerName: string;
+  customerPhone: string;
+  customerAddress: string;
+  deliveryLocation: string;
+  notes: string;
+};
+
+export type OrderLineInput = { variantId: string; quantity: number };
+
+const MAX_LINES = 50;
+const MAX_QTY = 99;
+
+/**
+ * Creates the order and its items and deducts stock, all in one transaction.
+ *
+ * Stock is taken with a conditional UPDATE (`stock >= qty`), never read-then-write, so two
+ * customers racing for the last unit cannot both get it: the second UPDATE matches no row and
+ * the whole transaction (including any earlier deductions) rolls back with a clear error.
+ */
+export async function placeOrder(
+  tenantId: string,
+  customer: CustomerInput,
+  lines: OrderLineInput[],
+) {
+  // Merge duplicate variant ids and sanity-check quantities.
+  const wanted = new Map<string, number>();
+  for (const l of lines) {
+    if (!Number.isInteger(l.quantity) || l.quantity < 1 || l.quantity > MAX_QTY) {
+      throw new OrderError("INVALID", "Invalid quantity in your cart.");
+    }
+    wanted.set(l.variantId, (wanted.get(l.variantId) ?? 0) + l.quantity);
+  }
+  if (wanted.size === 0) throw new OrderError("EMPTY", "Your cart is empty.");
+  if (wanted.size > MAX_LINES) throw new OrderError("INVALID", "Too many different items in one order.");
+  for (const q of wanted.values()) {
+    if (q > MAX_QTY) throw new OrderError("INVALID", "Invalid quantity in your cart.");
+  }
+
+  // Deterministic order so concurrent orders touching the same variants can't deadlock.
+  const ids = [...wanted.keys()].sort();
+
+  return prisma.$transaction(async (tx) => {
+    const variants = await tx.productVariant.findMany({
+      where: { id: { in: ids }, product: { tenantId } },
+      include: { product: true },
+    });
+    // Covers deleted variants and ids that belong to another store.
+    if (variants.length !== ids.length) {
+      throw new OrderError("UNAVAILABLE", "Some items in your cart are no longer available.");
+    }
+    const byId = new Map(variants.map((v) => [v.id, v]));
+
+    for (const id of ids) {
+      const qty = wanted.get(id)!;
+      const { count } = await tx.productVariant.updateMany({
+        where: { id, stock: { gte: qty }, product: { tenantId } },
+        data: { stock: { decrement: qty } },
+      });
+      if (count !== 1) {
+        const v = byId.get(id)!;
+        const fresh = await tx.productVariant.findUnique({ where: { id }, select: { stock: true } });
+        const available = fresh?.stock ?? 0;
+        const label = variantLabel(parseAttributes(v.attributes), "");
+        throw new OrderError(
+          "STOCK",
+          available > 0
+            ? `Only ${available} left of "${v.product.name}${label ? ` (${label})` : ""}". Please lower the quantity.`
+            : `"${v.product.name}${label ? ` (${label})` : ""}" just sold out.`,
+          { variantId: id, available },
+        );
+      }
+    }
+
+    return tx.order.create({
+      data: {
+        tenantId,
+        customerName: customer.customerName,
+        customerPhone: customer.customerPhone,
+        customerAddress: customer.customerAddress,
+        deliveryLocation: customer.deliveryLocation,
+        notes: customer.notes,
+        items: {
+          create: ids.map((id) => {
+            const v = byId.get(id)!;
+            return {
+              variantId: id,
+              productNameSnapshot: v.product.name,
+              variantAttributesSnapshot: parseAttributes(v.attributes),
+              // Priced here on the server, never from anything the client sent.
+              priceCentsSnapshot: effectivePrice(v.product.basePriceCents, v.priceCentsOverride),
+              quantity: wanted.get(id)!,
+            };
+          }),
+        },
+      },
+      include: { items: true },
+    });
+  });
+}
+
+export function listOrders(tenantId: string) {
+  return prisma.order.findMany({
+    where: { tenantId },
+    orderBy: { createdAt: "desc" },
+    include: { items: { select: { priceCentsSnapshot: true, quantity: true } } },
+  });
+}
+
+export function getOrder(tenantId: string, id: string) {
+  return prisma.order.findFirst({
+    where: { id, tenantId },
+    include: { items: { orderBy: { id: "asc" } } },
+  });
+}
+
+export function countOrdersByStatus(tenantId: string, status: OrderStatusValue) {
+  return prisma.order.count({ where: { tenantId, status } });
+}
+
+/**
+ * Moves an order along Pending -> Confirmed -> Delivered, or to Cancelled. Cancelling gives
+ * the stock back to the variants, exactly once: the status write is guarded on the status we
+ * read, so a double click (or two admin tabs) can't restore the same stock twice.
+ */
+export async function updateOrderStatus(tenantId: string, id: string, next: OrderStatusValue) {
+  return prisma.$transaction(async (tx) => {
+    const order = await tx.order.findFirst({
+      where: { id, tenantId },
+      include: { items: true },
+    });
+    if (!order) throw new OrderError("NOT_FOUND", "Order not found.");
+    if (!canTransition(order.status, next)) {
+      throw new OrderError(
+        "BAD_TRANSITION",
+        `An order that is ${order.status.toLowerCase()} can't be changed to ${next.toLowerCase()}.`,
+      );
+    }
+
+    const { count } = await tx.order.updateMany({
+      where: { id, tenantId, status: order.status },
+      data: { status: next },
+    });
+    if (count !== 1) {
+      throw new OrderError("CHANGED", "This order was just changed elsewhere. Refresh and try again.");
+    }
+
+    if (next === "CANCELLED") {
+      for (const item of order.items) {
+        // variantId is null when the variant was deleted after the order: nothing to restore.
+        if (!item.variantId) continue;
+        await tx.productVariant.updateMany({
+          where: { id: item.variantId, product: { tenantId } },
+          data: { stock: { increment: item.quantity } },
+        });
+      }
+    }
+    return next;
+  });
+}

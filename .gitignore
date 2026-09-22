@@ -32,6 +32,7 @@ yarn-error.log*
 
 # env files (can opt-in for committing if needed)
 .env*
+!.env.example
 
 # vercel
 .vercel
@@ -39,3 +40,12 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# prisma client
+/generated/
+
+# locally uploaded images (dev/single-server only; swap for object storage before scaling)
+/public/uploads/
+
+# playwright
+/.playwright-mcp/

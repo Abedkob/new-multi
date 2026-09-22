@@ -1,0 +1,176 @@
+generator client {
+  provider = "prisma-client"
+  output   = "../generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum Role {
+  PLATFORM_ADMIN
+  STORE_OWNER
+}
+
+model User {
+  id                 String   @id @default(cuid())
+  email              String   @unique
+  passwordHash       String
+  name               String
+  role               Role     @default(STORE_OWNER)
+  mustChangePassword Boolean  @default(true)
+  createdAt          DateTime @default(now())
+
+  // One owner owns exactly one tenant.
+  tenant Tenant?
+}
+
+model Tenant {
+  id                String   @id @default(cuid())
+  slug              String   @unique
+  name              String
+  ownerId           String   @unique
+  owner             User     @relation(fields: [ownerId], references: [id])
+  templateId        String   @default("minimal")
+  themeOverrides    Json     @default("{}")
+  // Owner-controlled on/off switches for the optional storefront sections.
+  // Missing keys fall back to defaults (see lib/sections.ts).
+  sectionVisibility Json     @default("{}")
+  createdAt         DateTime @default(now())
+
+  contents   TenantContent[]
+  products   Product[]
+  categories Category[]
+  orders     Order[]
+}
+
+// A tree of any depth (Men -> Shoes -> Nike). Slugs are unique per store because the
+// storefront looks categories up by slug alone. Parent/child and product links use
+// NoAction so a category that still has children or products cannot be deleted by accident;
+// the app checks first and shows a clear message.
+model Category {
+  id        String     @id @default(cuid())
+  tenantId  String
+  tenant    Tenant     @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  name      String
+  slug      String
+  parentId  String?
+  parent    Category?  @relation("CategoryTree", fields: [parentId], references: [id], onDelete: NoAction)
+  children  Category[] @relation("CategoryTree")
+  products  Product[]
+  imageUrl  String?
+  createdAt DateTime   @default(now())
+
+  @@unique([tenantId, slug])
+  @@index([tenantId])
+  @@index([parentId])
+}
+
+model TenantContent {
+  id       String @id @default(cuid())
+  tenantId String
+  tenant   Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  key      String
+  value    String
+
+  @@unique([tenantId, key])
+  @@index([tenantId])
+}
+
+// Stock and (optional) price/image live on variants. A product always has at least one; a
+// product without real variation gets a single default variant with empty attributes.
+// `attributes` is free-form ({ size: "40", color: "white" }), so there is no fixed schema.
+model ProductVariant {
+  id                 String      @id @default(cuid())
+  productId          String
+  product            Product     @relation(fields: [productId], references: [id], onDelete: Cascade)
+  attributes         Json        @default("{}")
+  stock              Int         @default(0)
+  priceCentsOverride Int?
+  imageUrl           String?
+  sortOrder          Int         @default(0)
+  createdAt          DateTime    @default(now())
+  orderItems         OrderItem[]
+
+  @@index([productId])
+}
+
+model Product {
+  id             String           @id @default(cuid())
+  tenantId       String
+  tenant         Tenant           @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  name           String
+  description    String           @default("")
+  // Used when a variant has no price override of its own.
+  basePriceCents Int
+  imageUrl       String           @default("")
+  slug           String
+  categoryId     String?
+  category       Category?        @relation(fields: [categoryId], references: [id], onDelete: NoAction)
+  // Manually flagged for the "Best sellers" section (no sales data yet).
+  isBestSeller   Boolean          @default(false)
+  variants       ProductVariant[]
+  images         ProductImage[]
+  createdAt      DateTime         @default(now())
+  updatedAt      DateTime         @updatedAt
+
+  // Product slugs only need to be unique within a store.
+  @@unique([tenantId, slug])
+  @@index([tenantId])
+  @@index([categoryId])
+}
+
+model ProductImage {
+  id        String   @id @default(cuid())
+  productId String
+  product   Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  url       String
+  altText   String?
+  sortOrder Int      @default(0)
+  createdAt DateTime @default(now())
+
+  @@index([productId])
+}
+
+enum OrderStatus {
+  PENDING
+  CONFIRMED
+  DELIVERED
+  CANCELLED
+}
+
+// Guest cash-on-delivery orders. Stock is deducted when the order is placed and restored if
+// it is cancelled.
+model Order {
+  id               String      @id @default(cuid())
+  tenantId         String
+  tenant           Tenant      @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  customerName     String
+  customerPhone    String
+  customerAddress  String
+  // A Google Maps link or a description of where to deliver (free text).
+  deliveryLocation String
+  notes            String      @default("")
+  status           OrderStatus @default(PENDING)
+  createdAt        DateTime    @default(now())
+  items            OrderItem[]
+
+  @@index([tenantId, createdAt])
+}
+
+// Name, attributes and price are copied at order time, so later edits to (or deletion of) the
+// product never rewrite order history. `variantId` becomes null if the variant is deleted.
+model OrderItem {
+  id                        String          @id @default(cuid())
+  orderId                   String
+  order                     Order           @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  variantId                 String?
+  variant                   ProductVariant? @relation(fields: [variantId], references: [id], onDelete: SetNull)
+  productNameSnapshot       String
+  variantAttributesSnapshot Json            @default("{}")
+  priceCentsSnapshot        Int
+  quantity                  Int
+
+  @@index([orderId])
+  @@index([variantId])
+}
