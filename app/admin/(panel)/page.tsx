@@ -8,15 +8,15 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { countOrdersByStatus } from "@/lib/data/orders";
+import { countProducts } from "@/lib/data/products";
 import { getTenantById } from "@/lib/data/tenants";
-import { prisma } from "@/lib/prisma";
 import { requireOwner } from "@/lib/session";
 
 export default async function AdminHome() {
   const { tenantId, name } = await requireOwner();
   const [tenant, productCount, pendingOrders] = await Promise.all([
     getTenantById(tenantId),
-    prisma.product.count({ where: { tenantId } }),
+    countProducts(tenantId),
     countOrdersByStatus(tenantId, "PENDING"),
   ]);
   if (!tenant) notFound();

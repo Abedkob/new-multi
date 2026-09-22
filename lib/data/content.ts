@@ -1,8 +1,8 @@
-import { prisma } from "@/lib/prisma";
+import { withTenant } from "@/lib/prisma";
 import { resolveContent } from "@/lib/content";
 
 export function listContentRows(tenantId: string) {
-  return prisma.tenantContent.findMany({ where: { tenantId } });
+  return withTenant(tenantId, (db) => db.tenantContent.findMany({ where: { tenantId } }));
 }
 
 export async function getContentMap(tenantId: string) {
@@ -16,16 +16,16 @@ export async function saveContent(
 ) {
   const toSet = entries.filter((e) => e.value !== "");
   const toClear = entries.filter((e) => e.value === "").map((e) => e.key);
-  await prisma.$transaction([
-    ...toSet.map((e) =>
-      prisma.tenantContent.upsert({
+  await withTenant(tenantId, async (db) => {
+    for (const e of toSet) {
+      await db.tenantContent.upsert({
         where: { tenantId_key: { tenantId, key: e.key } },
         create: { tenantId, key: e.key, value: e.value },
         update: { value: e.value },
-      }),
-    ),
-    prisma.tenantContent.deleteMany({
+      });
+    }
+    await db.tenantContent.deleteMany({
       where: { tenantId, key: { in: toClear } },
-    }),
-  ]);
+    });
+  });
 }

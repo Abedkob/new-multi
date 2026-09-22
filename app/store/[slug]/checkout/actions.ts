@@ -1,8 +1,10 @@
 "use server";
 
+import { headers } from "next/headers";
 import { z } from "zod";
 import { OrderError, placeOrder } from "@/lib/data/orders";
 import { getTenantBySlug } from "@/lib/data/tenants";
+import { RATE_LIMITS, clientIp, rateLimit, retryAfterText } from "@/lib/rate-limit";
 import { cartLinesSchema, checkoutSchema } from "@/lib/validation";
 
 /**
@@ -32,6 +34,15 @@ export async function placeOrderAction(
 ): Promise<PlaceOrderResult> {
   const tenant = typeof slug === "string" ? await getTenantBySlug(slug) : null;
   if (!tenant) return { error: "This store could not be found." };
+
+  // One flood of pending orders can tie up a store's stock, so cap orders per source per store.
+  const ip = clientIp(await headers());
+  const limit = rateLimit(`checkout:${tenant.id}:${ip}`, RATE_LIMITS.checkout);
+  if (!limit.ok) {
+    return {
+      error: `Too many orders from here. Please try again in ${retryAfterText(limit.retryAfterMs)}.`,
+    };
+  }
 
   const customer = checkoutSchema.safeParse(input);
   if (!customer.success) {

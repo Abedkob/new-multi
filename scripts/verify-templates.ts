@@ -13,6 +13,7 @@
  * hardcode colors. The store's original settings are restored at the end.
  */
 import "dotenv/config";
+import "./_owner";
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import { readdirSync, readFileSync, statSync } from "node:fs";

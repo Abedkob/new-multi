@@ -1,12 +1,13 @@
-import { prisma } from "@/lib/prisma";
+import { withTenant, type TxClient } from "@/lib/prisma";
 import { slugCandidate, slugify } from "@/lib/slug";
 import { isUniqueViolation } from "@/lib/data/tenants";
 import { variantSetIssues } from "@/lib/variants";
 
 /**
- * Every function takes a tenantId and puts it in the WHERE clause. Callers get it from the
- * session (admin) or from the slug lookup (storefront), never from user-supplied form data,
- * so a record id from another tenant matches nothing.
+ * Every function takes a tenantId and runs inside withTenant(), which scopes the queries and
+ * sets the Postgres RLS context. Callers get the tenantId from the session (admin) or the slug
+ * lookup (storefront), never from user-supplied form data, so a record id from another tenant
+ * matches nothing (and RLS hides it at the database level regardless).
  *
  * Variants have no tenantId of their own: they are always reached through their product, so
  * variant queries here filter on `product: { tenantId }`. Never query ProductVariant by id
@@ -41,9 +42,9 @@ const withVariants = {
   images: { orderBy: [{ sortOrder: "asc" as const }, { createdAt: "asc" as const }] },
 };
 
-async function assertCategory(tenantId: string, categoryId: string | null) {
+async function assertCategory(db: TxClient, tenantId: string, categoryId: string | null) {
   if (categoryId === null) return;
-  const found = await prisma.category.findFirst({
+  const found = await db.category.findFirst({
     where: { id: categoryId, tenantId },
     select: { id: true },
   });
@@ -59,69 +60,81 @@ function assertVariants(variants: VariantInput[]) {
 // ---- admin ---------------------------------------------------------------------------------
 
 export function listProducts(tenantId: string) {
-  return prisma.product.findMany({
-    where: { tenantId },
-    orderBy: { createdAt: "desc" },
-    include: { ...withVariants, category: { select: { name: true } } },
-  });
+  return withTenant(tenantId, (db) =>
+    db.product.findMany({
+      where: { tenantId },
+      orderBy: { createdAt: "desc" },
+      include: { ...withVariants, category: { select: { name: true } } },
+    }),
+  );
 }
 
 export function getProduct(tenantId: string, id: string) {
-  return prisma.product.findFirst({ where: { id, tenantId }, include: withVariants });
+  return withTenant(tenantId, (db) =>
+    db.product.findFirst({ where: { id, tenantId }, include: withVariants }),
+  );
+}
+
+/** Total products in a store, for the owner's dashboard. */
+export function countProducts(tenantId: string) {
+  return withTenant(tenantId, (db) => db.product.count({ where: { tenantId } }));
 }
 
 export async function createProduct(tenantId: string, input: ProductInput) {
   assertVariants(input.variants);
-  await assertCategory(tenantId, input.categoryId);
 
-  const base = slugify(input.name);
-  for (let attempt = 0; attempt < 5; attempt++) {
-    const taken = new Set(
-      (
-        await prisma.product.findMany({
-          where: { tenantId, slug: { startsWith: base } },
-          select: { slug: true },
-        })
-      ).map((p) => p.slug),
-    );
-    let n = 1;
-    while (taken.has(slugCandidate(base, n))) n++;
-    try {
-      // One statement: the product and its variants are created together or not at all.
-      return await prisma.product.create({
-        data: {
-          tenantId,
-          slug: slugCandidate(base, n),
-          name: input.name,
-          description: input.description,
-          basePriceCents: input.basePriceCents,
-          imageUrl: input.imageUrl,
-          isBestSeller: input.isBestSeller,
-          categoryId: input.categoryId,
-          variants: {
-            create: input.variants.map((v, i) => ({
-              attributes: v.attributes,
-              stock: v.stock,
-              priceCentsOverride: v.priceCentsOverride,
-              imageUrl: v.imageUrl,
-              sortOrder: i,
-            })),
+  return withTenant(tenantId, async (db) => {
+    await assertCategory(db, tenantId, input.categoryId);
+
+    const base = slugify(input.name);
+    for (let attempt = 0; attempt < 5; attempt++) {
+      const taken = new Set(
+        (
+          await db.product.findMany({
+            where: { tenantId, slug: { startsWith: base } },
+            select: { slug: true },
+          })
+        ).map((p) => p.slug),
+      );
+      let n = 1;
+      while (taken.has(slugCandidate(base, n))) n++;
+      try {
+        // One statement: the product and its variants are created together or not at all.
+        return await db.product.create({
+          data: {
+            tenantId,
+            slug: slugCandidate(base, n),
+            name: input.name,
+            description: input.description,
+            basePriceCents: input.basePriceCents,
+            imageUrl: input.imageUrl,
+            isBestSeller: input.isBestSeller,
+            categoryId: input.categoryId,
+            variants: {
+              create: input.variants.map((v, i) => ({
+                attributes: v.attributes,
+                stock: v.stock,
+                priceCentsOverride: v.priceCentsOverride,
+                imageUrl: v.imageUrl,
+                sortOrder: i,
+              })),
+            },
+            images: {
+              create: input.images.map((img, i) => ({
+                url: img.url,
+                altText: img.altText,
+                sortOrder: i,
+              })),
+            },
           },
-          images: {
-            create: input.images.map((img, i) => ({
-              url: img.url,
-              altText: img.altText,
-              sortOrder: i,
-            })),
-          },
-        },
-        include: withVariants,
-      });
-    } catch (e) {
-      if (!isUniqueViolation(e)) throw e;
+          include: withVariants,
+        });
+      } catch (e) {
+        if (!isUniqueViolation(e)) throw e;
+      }
     }
-  }
-  throw new ProductError("Could not allocate a unique product URL, please retry.");
+    throw new ProductError("Could not allocate a unique product URL, please retry.");
+  });
 }
 
 /**
@@ -131,9 +144,10 @@ export async function createProduct(tenantId: string, input: ProductInput) {
  */
 export async function updateProduct(tenantId: string, id: string, input: ProductInput) {
   assertVariants(input.variants);
-  await assertCategory(tenantId, input.categoryId);
 
-  return prisma.$transaction(async (tx) => {
+  return withTenant(tenantId, async (tx) => {
+    await assertCategory(tx, tenantId, input.categoryId);
+
     const product = await tx.product.findFirst({
       where: { id, tenantId },
       select: { id: true, variants: { select: { id: true } }, images: { select: { id: true } } },
@@ -202,46 +216,56 @@ export async function updateProduct(tenantId: string, id: string, input: Product
 }
 
 export async function deleteProduct(tenantId: string, id: string) {
-  const { count } = await prisma.product.deleteMany({ where: { id, tenantId } });
-  return count > 0;
+  return withTenant(tenantId, async (db) => {
+    const { count } = await db.product.deleteMany({ where: { id, tenantId } });
+    return count > 0;
+  });
 }
 
 // ---- storefront ----------------------------------------------------------------------------
 
 export function getProductBySlug(tenantId: string, slug: string) {
-  return prisma.product.findUnique({
-    where: { tenantId_slug: { tenantId, slug } },
-    include: withVariants,
-  });
+  return withTenant(tenantId, (db) =>
+    db.product.findUnique({
+      where: { tenantId_slug: { tenantId, slug } },
+      include: withVariants,
+    }),
+  );
 }
 
 /** "New arrivals": the most recently created products. */
 export function listNewArrivals(tenantId: string, take = 8) {
-  return prisma.product.findMany({
-    where: { tenantId },
-    orderBy: { createdAt: "desc" },
-    take,
-    include: withVariants,
-  });
+  return withTenant(tenantId, (db) =>
+    db.product.findMany({
+      where: { tenantId },
+      orderBy: { createdAt: "desc" },
+      take,
+      include: withVariants,
+    }),
+  );
 }
 
 /** "Best sellers": products the owner flagged (no sales data yet). */
 export function listBestSellers(tenantId: string, take = 8) {
-  return prisma.product.findMany({
-    where: { tenantId, isBestSeller: true },
-    orderBy: { createdAt: "desc" },
-    take,
-    include: withVariants,
-  });
+  return withTenant(tenantId, (db) =>
+    db.product.findMany({
+      where: { tenantId, isBestSeller: true },
+      orderBy: { createdAt: "desc" },
+      take,
+      include: withVariants,
+    }),
+  );
 }
 
 export function listRelatedProducts(tenantId: string, excludeId: string, take = 4) {
-  return prisma.product.findMany({
-    where: { tenantId, id: { not: excludeId } },
-    orderBy: { createdAt: "desc" },
-    take,
-    include: withVariants,
-  });
+  return withTenant(tenantId, (db) =>
+    db.product.findMany({
+      where: { tenantId, id: { not: excludeId } },
+      orderBy: { createdAt: "desc" },
+      take,
+      include: withVariants,
+    }),
+  );
 }
 
 export const CATALOG_PAGE_SIZE = 12;
@@ -269,17 +293,19 @@ export async function listCatalog(
         }
       : {}),
   };
-  const total = await prisma.product.count({ where });
-  const pages = Math.max(1, Math.ceil(total / pageSize));
-  const page = Math.min(Math.max(1, Math.floor(opts.page ?? 1)), pages);
-  const items = await prisma.product.findMany({
-    where,
-    orderBy: [{ createdAt: "desc" }, { id: "asc" }],
-    skip: (page - 1) * pageSize,
-    take: pageSize,
-    include: withVariants,
+  return withTenant(tenantId, async (db) => {
+    const total = await db.product.count({ where });
+    const pages = Math.max(1, Math.ceil(total / pageSize));
+    const page = Math.min(Math.max(1, Math.floor(opts.page ?? 1)), pages);
+    const items = await db.product.findMany({
+      where,
+      orderBy: [{ createdAt: "desc" }, { id: "asc" }],
+      skip: (page - 1) * pageSize,
+      take: pageSize,
+      include: withVariants,
+    });
+    return { items, total, page, pages, pageSize };
   });
-  return { items, total, page, pages, pageSize };
 }
 
 /**
@@ -287,8 +313,10 @@ export async function listCatalog(
  * product of THIS store: an id from another store simply isn't returned.
  */
 export function getVariantsForStore(tenantId: string, variantIds: string[]) {
-  return prisma.productVariant.findMany({
-    where: { id: { in: variantIds }, product: { tenantId } },
-    include: { product: true },
-  });
+  return withTenant(tenantId, (db) =>
+    db.productVariant.findMany({
+      where: { id: { in: variantIds }, product: { tenantId } },
+      include: { product: true },
+    }),
+  );
 }

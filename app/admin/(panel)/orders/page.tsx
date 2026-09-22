@@ -8,7 +8,8 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { listOrders } from "@/lib/data/orders";
+import { expireStalePendingOrders, listOrders } from "@/lib/data/orders";
+import { env } from "@/lib/env";
 import { formatPrice } from "@/lib/format";
 import { orderRef, orderTotal } from "@/lib/orders";
 import { requireOwner } from "@/lib/session";
@@ -16,6 +17,16 @@ import { StatusBadge } from "./status-badge";
 
 export default async function OrdersPage() {
   const { tenantId } = await requireOwner();
+
+  // Lazy cleanup (no scheduler): release stock held by PENDING orders the owner never acted on,
+  // so this page shows accurate state. Best-effort — a failure here must never break the page.
+  const cutoff = new Date(Date.now() - env.ORDER_PENDING_TTL_HOURS * 3_600_000);
+  try {
+    await expireStalePendingOrders(tenantId, cutoff);
+  } catch (e) {
+    console.error("expireStalePendingOrders failed:", e instanceof Error ? e.message : e);
+  }
+
   const orders = await listOrders(tenantId);
 
   return (

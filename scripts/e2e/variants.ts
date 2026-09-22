@@ -1,5 +1,6 @@
 /** Real-browser check of product variants: admin form + storefront picker (pnpm e2e:variants). */
 import "dotenv/config";
+import "../_owner";
 import assert from "node:assert/strict";
 import type { Page } from "playwright-core";
 import { prisma } from "../../lib/prisma";

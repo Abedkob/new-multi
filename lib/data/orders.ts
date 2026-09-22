@@ -1,4 +1,4 @@
-import { prisma } from "@/lib/prisma";
+import { withTenant } from "@/lib/prisma";
 import { canTransition, type OrderStatusValue } from "@/lib/orders";
 import { effectivePrice, parseAttributes, variantLabel } from "@/lib/variants";
 
@@ -71,7 +71,7 @@ export async function placeOrder(
   // Deterministic order so concurrent orders touching the same variants can't deadlock.
   const ids = [...wanted.keys()].sort();
 
-  return prisma.$transaction(async (tx) => {
+  return withTenant(tenantId, async (tx) => {
     const variants = await tx.productVariant.findMany({
       where: { id: { in: ids }, product: { tenantId } },
       include: { product: true },
@@ -131,22 +131,26 @@ export async function placeOrder(
 }
 
 export function listOrders(tenantId: string) {
-  return prisma.order.findMany({
-    where: { tenantId },
-    orderBy: { createdAt: "desc" },
-    include: { items: { select: { priceCentsSnapshot: true, quantity: true } } },
-  });
+  return withTenant(tenantId, (db) =>
+    db.order.findMany({
+      where: { tenantId },
+      orderBy: { createdAt: "desc" },
+      include: { items: { select: { priceCentsSnapshot: true, quantity: true } } },
+    }),
+  );
 }
 
 export function getOrder(tenantId: string, id: string) {
-  return prisma.order.findFirst({
-    where: { id, tenantId },
-    include: { items: { orderBy: { id: "asc" } } },
-  });
+  return withTenant(tenantId, (db) =>
+    db.order.findFirst({
+      where: { id, tenantId },
+      include: { items: { orderBy: { id: "asc" } } },
+    }),
+  );
 }
 
 export function countOrdersByStatus(tenantId: string, status: OrderStatusValue) {
-  return prisma.order.count({ where: { tenantId, status } });
+  return withTenant(tenantId, (db) => db.order.count({ where: { tenantId, status } }));
 }
 
 /**
@@ -155,7 +159,7 @@ export function countOrdersByStatus(tenantId: string, status: OrderStatusValue) 
  * read, so a double click (or two admin tabs) can't restore the same stock twice.
  */
 export async function updateOrderStatus(tenantId: string, id: string, next: OrderStatusValue) {
-  return prisma.$transaction(async (tx) => {
+  return withTenant(tenantId, async (tx) => {
     const order = await tx.order.findFirst({
       where: { id, tenantId },
       include: { items: true },
@@ -188,4 +192,46 @@ export async function updateOrderStatus(tenantId: string, id: string, next: Orde
     }
     return next;
   });
+}
+
+export type ExpireResult = {
+  scanned: number;
+  cancelled: number;
+  skipped: { id: string; reason: string }[];
+};
+
+/**
+ * Cancels this store's PENDING orders placed before `olderThan`, which restores their stock.
+ * Pending orders hold stock the moment they are placed and never expire on their own, so
+ * abandoned or fake orders would otherwise tie up inventory forever. Run lazily when the owner
+ * opens their Orders page (no scheduler): they get accurate state and stale stock is released.
+ *
+ * Each candidate is cancelled through the normal `updateOrderStatus` path, so stock restoration
+ * and the status guard are identical to a manual cancel. An order the owner just confirmed or
+ * cancelled fails that guard and is skipped, never double-processed. Idempotent.
+ */
+export async function expireStalePendingOrders(
+  tenantId: string,
+  olderThan: Date,
+): Promise<ExpireResult> {
+  const stale = await withTenant(tenantId, (db) =>
+    db.order.findMany({
+      where: { tenantId, status: "PENDING", createdAt: { lt: olderThan } },
+      select: { id: true },
+      orderBy: { createdAt: "asc" },
+    }),
+  );
+
+  let cancelled = 0;
+  const skipped: { id: string; reason: string }[] = [];
+  for (const o of stale) {
+    try {
+      await updateOrderStatus(tenantId, o.id, "CANCELLED");
+      cancelled++;
+    } catch (e) {
+      // Most likely the owner just confirmed/cancelled it (BAD_TRANSITION / CHANGED / NOT_FOUND).
+      skipped.push({ id: o.id, reason: e instanceof OrderError ? e.code : "ERROR" });
+    }
+  }
+  return { scanned: stale.length, cancelled, skipped };
 }

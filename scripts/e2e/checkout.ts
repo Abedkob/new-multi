@@ -5,6 +5,7 @@
  * a lost race for the last unit, tenant isolation, and every template.
  */
 import "dotenv/config";
+import "../_owner";
 import assert from "node:assert/strict";
 import type { Page } from "playwright-core";
 import { prisma } from "../../lib/prisma";

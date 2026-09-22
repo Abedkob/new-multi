@@ -1,5 +1,6 @@
 /** Real-browser check of shop / category / search / content pages (pnpm e2e:pages). */
 import "dotenv/config";
+import "../_owner";
 import assert from "node:assert/strict";
 import { prisma } from "../../lib/prisma";
 import { createCategory } from "../../lib/data/categories";

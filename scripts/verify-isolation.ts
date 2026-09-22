@@ -4,6 +4,7 @@
  * data through the same data-layer functions the admin actions use, then cleans up.
  */
 import "dotenv/config";
+import "./_owner";
 import assert from "node:assert/strict";
 import { prisma } from "../lib/prisma";
 import { createStoreWithOwner } from "../lib/data/tenants";

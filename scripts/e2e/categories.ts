@@ -1,5 +1,6 @@
 /** Real-browser check of /admin/categories (pnpm e2e:categories; server must be running). */
 import "dotenv/config";
+import "../_owner";
 import assert from "node:assert/strict";
 import { prisma } from "../../lib/prisma";
 import { BASE, launch, login, makeStore } from "./browser";

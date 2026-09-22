@@ -6,13 +6,10 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import { prisma } from "@/lib/prisma";
+import { getPlatformStats } from "@/lib/data/tenants";
 
 export default async function PlatformHome() {
-  const [stores, products] = await Promise.all([
-    prisma.tenant.count(),
-    prisma.product.count(),
-  ]);
+  const { stores, products } = await getPlatformStats();
   return (
     <div className="grid gap-6">
       <h1 className="text-2xl font-semibold">Platform overview</h1>

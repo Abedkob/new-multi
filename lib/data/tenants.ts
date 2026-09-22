@@ -1,5 +1,5 @@
 import { Prisma } from "@/generated/prisma/client";
-import { prisma } from "@/lib/prisma";
+import { prisma, withBypass } from "@/lib/prisma";
 import { SEED_CONTENT } from "@/lib/content";
 import { slugCandidate, slugify } from "@/lib/slug";
 
@@ -23,13 +23,27 @@ export function getTenantById(id: string) {
   return prisma.tenant.findUnique({ where: { id } });
 }
 
+// Cross-tenant read for the platform admin: the product `_count` touches the RLS-guarded
+// Product table, so this runs with the bypass context set.
 export function listTenants() {
-  return prisma.tenant.findMany({
-    orderBy: { createdAt: "desc" },
-    include: {
-      owner: { select: { name: true, email: true } },
-      _count: { select: { products: true } },
-    },
+  return withBypass((db) =>
+    db.tenant.findMany({
+      orderBy: { createdAt: "desc" },
+      include: {
+        owner: { select: { name: true, email: true } },
+        _count: { select: { products: true } },
+      },
+    }),
+  );
+}
+
+/** Platform-wide totals for the admin overview (spans every tenant). */
+export function getPlatformStats() {
+  return withBypass(async (db) => {
+    // Sequential: both queries share this transaction's single connection.
+    const stores = await db.tenant.count();
+    const products = await db.product.count();
+    return { stores, products };
   });
 }
 
@@ -47,9 +61,11 @@ export async function createStoreWithOwner(input: {
 
   // A concurrent create can grab the slug between our check and insert; the
   // unique index rejects it, so re-pick the slug and try again.
+  // Runs under bypass: the new tenant has no RLS context yet, and its seed content rows
+  // (TenantContent is RLS-guarded) would otherwise fail the row-security WITH CHECK.
   for (let attempt = 0; attempt < 5; attempt++) {
     try {
-      return await prisma.$transaction(async (tx) => {
+      return await withBypass(async (tx) => {
         if (
           await tx.user.findUnique({
             where: { email: input.ownerEmail },

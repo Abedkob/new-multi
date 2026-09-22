@@ -3,10 +3,34 @@
 Things we knowingly left out or that are rough edges. Come back to these.
 Newest sections at the bottom; delete an item when it's fixed.
 
+## Tenant isolation (Row-Level Security)
+
+- **Database-level isolation is now enforced** (see `prisma/migrations/*_row_level_security`).
+  The Next.js runtime connects as a restricted, non-superuser role (`APP_DATABASE_URL`); every
+  tenant-scoped query runs through `withTenant()` in `lib/prisma.ts`, which sets `app.tenant_id`
+  per transaction, and RLS policies on the 7 tenant-owned tables (Category, Product,
+  ProductVariant, ProductImage, TenantContent, Order, OrderItem) filter on it. The platform
+  admin's cross-tenant reads use `withBypass()`. This is defence-in-depth *under* the existing
+  app-level `tenantId` WHERE clauses, not a replacement for them.
+- **Depends on `APP_DATABASE_URL` being set.** If the runtime falls back to `DATABASE_URL`
+  (the owner/superuser), RLS is silently NOT enforced. Create the role with
+  `scripts/sql/rls-role.sql` and point `APP_DATABASE_URL` at it in every environment.
+- **User and Tenant tables are intentionally NOT under RLS (v1 scope).** Login looks up users
+  by email before any tenant context exists, and the storefront resolves a Tenant by slug the
+  same way; both are still guarded only by application code. Owner email + store metadata could
+  leak if one of those queries ever dropped its filter. Consider RLS (or a `nolint` review) for
+  them in a later pass.
+- **Dev/CI scripts run as the owner** (`scripts/_owner.ts` points `APP_DATABASE_URL` at
+  `DATABASE_URL`), so they bypass RLS to manage fixtures. `verify:isolation` therefore proves the
+  app-level isolation, not the database policies; the RLS policies are covered by the SQL-level
+  checks run at migration time.
+
 ## Auth and accounts
 
-- **No login rate limiting or lockout.** `/login` can be brute-forced. Add a
-  limiter (IP + email) before exposing this publicly.
+- **Login is rate-limited** (per IP, `lib/rate-limit.ts`): 8 attempts / 5 min, then a "try
+  again in N minutes" message. The limiter is in-memory, so it protects a single app instance
+  only — back it with a shared store (Redis) before running multiple instances. There is still
+  no account lockout or CAPTCHA.
 - **No password reset.** A store owner who forgets their password has no
   recovery path, and the platform admin has no "reset owner password" action
   (it would generate a new one-time password, same as store creation).
@@ -91,10 +115,16 @@ Newest sections at the bottom; delete an item when it's fixed.
 
 ## Catalog, checkout and orders
 
-- **No spam protection on checkout.** Guest checkout has no rate limiting, CAPTCHA or
-  verification, and stock is deducted the moment an order is placed with no expiry on Pending
-  orders, so someone can place fake orders to tie up stock. Add rate limiting plus a way to
-  auto-cancel stale Pending orders before a real launch.
+- **Checkout is rate-limited** (per IP + store, `lib/rate-limit.ts`): 10 orders / 10 min, to blunt
+  order-flooding. No CAPTCHA/verification. The limiter is in-memory (single instance).
+- **Stale PENDING orders are auto-cancelled** (stock restored) by `expireStalePendingOrders`,
+  run lazily when the owner opens `/admin/orders` — anything PENDING older than
+  `ORDER_PENDING_TTL_HOURS` (default 24) is cancelled through the normal guarded path. This is a
+  deliberate no-scheduler design: if the owner never opens their orders they aren't selling, so
+  held stock doesn't matter. If you later want expiry independent of admin activity (e.g. a busy
+  store), move the same call behind a cron-triggered endpoint or a checkout-time sweep.
+- The public search endpoint (`/api/store/[slug]/search`) is likewise rate-limited (30 / min per
+  IP, returns 429 with `Retry-After`); the live-search box degrades silently when throttled.
 - **No notifications.** Owners are not emailed or texted about new orders; they must check
   `/admin/orders` (the dashboard shows a pending count). Customers get no confirmation email.
 - **Orders admin is basic:** no search, filter or pagination, no editing of items or customer
@@ -102,6 +132,18 @@ Newest sections at the bottom; delete an item when it's fixed.
   Status can only move forward (or to Cancelled).
 - **The confirmation page is a bearer link.** Anyone with the long random order URL sees the
   customer's name, phone and address; there are no customer accounts or order lookup.
+- **TODO (returning customers): remember delivery details so they aren't re-typed.** A returning
+  shopper re-enters name/phone/address/location on every order. Save these and prefill next time,
+  showing "Are you still at <address>?" so they confirm or edit rather than retype.
+  - **Prefer a table over localStorage.** localStorage is per-device and lost on a new
+    browser/phone; a table works everywhere and is per store. Likely shape: a `Customer` row
+    keyed by `(tenantId, phone)` — phone is the natural identity for guest checkout (no accounts,
+    see above) — storing last name/address/deliveryLocation and updatedAt. On checkout, if the
+    entered phone matches, prefill and ask to confirm; otherwise create/update the row.
+  - **Consent:** low-stakes (it's their own delivery info for reorders), so saving without an
+    explicit opt-in is probably fine, but revisit against local privacy rules before launch; at
+    minimum note it in the store's terms. localStorage prefill needs no consent.
+  - Interacts with the bearer-link/privacy point above and with any future customer-accounts work.
 - **Money is simple:** USD only, no shipping fees, tax, discounts or coupons. The cart doesn't
   warn if a price changed; the order is priced when placed and the summary shows current prices.
 - **Cart is per browser tab and lost on a full reload** (by requirement). A shopper who reloads

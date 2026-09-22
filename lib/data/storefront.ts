@@ -3,7 +3,7 @@ import { listCategories } from "@/lib/data/categories";
 import { getContentMap } from "@/lib/data/content";
 import { listBestSellers, listNewArrivals } from "@/lib/data/products";
 import { getTenantBySlug } from "@/lib/data/tenants";
-import { prisma } from "@/lib/prisma";
+import { withTenant } from "@/lib/prisma";
 import { buildStorefrontData } from "@/lib/storefront-data";
 import { toStoreProduct } from "@/lib/store-product";
 
@@ -11,11 +11,13 @@ import { toStoreProduct } from "@/lib/store-product";
 // render only (not across requests), so this stays plain SSR.
 /** Light query: which photo belongs to which category (newest products first). */
 export function listCategoryProductImages(tenantId: string) {
-  return prisma.product.findMany({
-    where: { tenantId, categoryId: { not: null }, imageUrl: { not: "" } },
-    orderBy: { createdAt: "desc" },
-    select: { categoryId: true, imageUrl: true },
-  });
+  return withTenant(tenantId, (db) =>
+    db.product.findMany({
+      where: { tenantId, categoryId: { not: null }, imageUrl: { not: "" } },
+      orderBy: { createdAt: "desc" },
+      select: { categoryId: true, imageUrl: true },
+    }),
+  );
 }
 
 export const loadTenant = cache((slug: string) => getTenantBySlug(slug));

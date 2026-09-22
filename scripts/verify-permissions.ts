@@ -7,6 +7,7 @@
  * and each other's areas. Also statically checks that every server action verifies a role.
  */
 import "dotenv/config";
+import "./_owner";
 import assert from "node:assert/strict";
 import { readdirSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";

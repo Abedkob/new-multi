@@ -8,6 +8,7 @@
  * text for this fake store, not real customer feedback.
  */
 import "dotenv/config";
+import "./_owner";
 import { prisma } from "../lib/prisma";
 import { CONTENT_KEY_NAMES } from "../lib/content";
 import { createCategory } from "../lib/data/categories";

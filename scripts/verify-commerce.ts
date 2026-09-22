@@ -4,6 +4,7 @@
  * from the other store, then removes everything.
  */
 import "dotenv/config";
+import "./_owner";
 import assert from "node:assert/strict";
 import { prisma } from "../lib/prisma";
 import { descendantIds, flattenCategories } from "../lib/categories";
