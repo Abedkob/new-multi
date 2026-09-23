@@ -23,12 +23,17 @@ FROM node:22-alpine AS runner
 WORKDIR /app
 
 ENV NODE_ENV=production
+ENV NODE_PATH=/usr/local/lib/node_modules
+
+# Make the Prisma CLI available for the startup migration step.
+RUN npm install -g prisma@7.10.0 dotenv@18.0.2
 
 # Standalone output contains only the traced runtime files and dependencies.
 COPY --from=builder /app/.next/standalone ./
 COPY --from=builder /app/.next/static ./.next/static
 COPY --from=builder /app/public ./public
 COPY prisma ./prisma
+COPY prisma.config.ts ./prisma.config.ts
 
 # Health check
 HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
@@ -36,4 +41,4 @@ HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
 
 EXPOSE 3000
 
-CMD ["node", "server.js"]
+CMD ["sh", "-c", "prisma migrate deploy && node server.js"]
