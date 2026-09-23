@@ -8,6 +8,7 @@ RUN npm install -g pnpm && pnpm install --frozen-lockfile --ignore-scripts
 # Stage 2: Builder
 FROM node:22-alpine AS builder
 WORKDIR /app
+ENV SKIP_ENV_VALIDATION=1
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
 
@@ -23,13 +24,11 @@ WORKDIR /app
 
 ENV NODE_ENV=production
 
-# Copy runtime dependencies only (not dev dependencies)
-COPY --from=builder /app/node_modules ./node_modules
+# Standalone output contains only the traced runtime files and dependencies.
 COPY --from=builder /app/.next/standalone ./
 COPY --from=builder /app/.next/static ./.next/static
 COPY --from=builder /app/public ./public
 COPY prisma ./prisma
-COPY .env* ./
 
 # Health check
 HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \

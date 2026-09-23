@@ -46,5 +46,4 @@ SETUP.md
 KNOWN_GAPS.md
 .prettierrc
 .eslintrc
-tsconfig.json
 jest.config.js
