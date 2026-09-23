@@ -1,6 +1,7 @@
 import { Prisma } from "@/generated/prisma/client";
 import { prisma, withBypass } from "@/lib/prisma";
 import { SEED_CONTENT } from "@/lib/content";
+import type { IntegrationKey } from "@/lib/integrations";
 import { slugCandidate, slugify } from "@/lib/slug";
 
 export class EmailTakenError extends Error {
@@ -19,8 +20,95 @@ export function getTenantBySlug(slug: string) {
   return prisma.tenant.findUnique({ where: { slug } });
 }
 
+/** Tenant.domain is stored normalized (lib/domain-format.ts), so pass a normalized hostname. */
+export function getTenantByDomain(domain: string) {
+  return prisma.tenant.findUnique({ where: { domain }, select: { id: true, slug: true } });
+}
+
 export function getTenantById(id: string) {
   return prisma.tenant.findUnique({ where: { id } });
+}
+
+/**
+ * Lean listing for the platform's sitemap index and robots.txt: every store still reachable at
+ * /store/[slug] (a custom domain removes a store from here — see lib/store-url.ts — since once
+ * a store has its own domain, its pages shouldn't also be indexed under the platform's path).
+ * Tenant itself isn't RLS-guarded (see withTenant's docstring), so this is a bare query.
+ */
+export function listTenantSlugsWithoutDomain() {
+  return prisma.tenant.findMany({ where: { domain: null }, select: { slug: true } });
+}
+
+// Platform admin's store detail page: owner contact info plus counts that live on
+// RLS-guarded tables, so this runs with the bypass context set (like listTenants).
+export function getTenantForAdmin(slug: string) {
+  return withBypass((db) =>
+    db.tenant.findUnique({
+      where: { slug },
+      include: {
+        owner: { select: { id: true, name: true, email: true } },
+        _count: { select: { products: true, orders: true } },
+      },
+    }),
+  );
+}
+
+export function updateTenantName(id: string, name: string) {
+  return withBypass((db) => db.tenant.update({ where: { id }, data: { name } }));
+}
+
+/** null disconnects the domain (the store falls back to /store/[slug]). The caller is
+ * responsible for the DNS-resolves check and the "verified and live" invariant on this column
+ * (see schema.prisma) — this just writes it. */
+export function updateTenantDomain(id: string, domain: string | null) {
+  return withBypass((db) => db.tenant.update({ where: { id }, data: { domain } }));
+}
+
+/** Marketing integrations (lib/integrations.ts). The caller validates; null turns one off. */
+export function updateTenantIntegrations(
+  id: string,
+  data: Partial<Record<IntegrationKey, string | null>>,
+) {
+  return withBypass((db) => db.tenant.update({ where: { id }, data, select: { id: true } }));
+}
+
+export function updateTenantFavicon(id: string, faviconUrl: string | null) {
+  return withBypass((db) =>
+    db.tenant.update({ where: { id }, data: { faviconUrl }, select: { id: true } }),
+  );
+}
+
+/**
+ * Deletes the store and its owner account together. The Tenant row cascades to every
+ * tenant-owned table (Category, Product, ProductVariant, ProductImage, TenantContent, Order,
+ * OrderItem); the owner User has no cascade from Tenant (FK points the other way), so it is
+ * deleted in the same transaction once the Tenant row referencing it is gone.
+ * Runs under bypass: the cascaded deletes touch RLS-guarded tables with no tenant context.
+ */
+export async function deleteTenant(id: string) {
+  await withBypass(async (db) => {
+    const tenant = await db.tenant.findUnique({
+      where: { id },
+      select: { ownerId: true },
+    });
+    if (!tenant) return;
+    await db.tenant.delete({ where: { id } });
+    await db.user.delete({ where: { id: tenant.ownerId } });
+  });
+}
+
+/**
+ * Platform admin issues a new temporary password for a store owner (forgot their password,
+ * or a support reset — possibly because the account was compromised). Forces
+ * mustChangePassword, and bumps sessionVersion so every existing session is revoked on its
+ * next request (requireOwner() compares it), not merely redirected to change-password. The
+ * User table isn't RLS-guarded, so no bypass needed.
+ */
+export function resetOwnerPassword(ownerId: string, passwordHash: string) {
+  return prisma.user.update({
+    where: { id: ownerId },
+    data: { passwordHash, mustChangePassword: true, sessionVersion: { increment: 1 } },
+  });
 }
 
 // Cross-tenant read for the platform admin: the product `_count` touches the RLS-guarded

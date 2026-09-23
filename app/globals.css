@@ -128,3 +128,8 @@
     @apply font-sans;
   }
 }
+/* A store's heading font, picked in the platform theme editor (lib/fonts.ts). Set only when one
+   is chosen (data-heading-font on the theme scope), so templates otherwise keep their own type. */
+[data-theme-scope][data-heading-font] :where(h1, h2, h3, h4, h5, h6, [data-store-brand]) {
+  font-family: var(--font-heading);
+}

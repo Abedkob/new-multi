@@ -2,24 +2,23 @@
 
 import { useActionState } from "react";
 import { deleteCategoryAction } from "./actions";
-import { Button } from "@/components/ui/button";
+import { ConfirmSubmitButton } from "@/components/confirm-dialog";
 
 /** Shows the server's reason inline when deletion is blocked (children or products). */
 export function DeleteCategoryButton({ id, name }: { id: string; name: string }) {
   const [state, action, pending] = useActionState(deleteCategoryAction.bind(null, id), {});
   return (
     <form action={action} className="grid justify-items-end gap-1">
-      <Button
-        type="submit"
+      <ConfirmSubmitButton
         variant="destructive"
         size="sm"
         disabled={pending}
-        onClick={(e) => {
-          if (!window.confirm(`Delete "${name}"?`)) e.preventDefault();
-        }}
+        title={`Delete "${name}"?`}
+        description="The category is removed from your store's menu. A category that still has subcategories or products can't be deleted."
+        confirmLabel="Delete category"
       >
         {pending ? "Deleting..." : "Delete"}
-      </Button>
+      </ConfirmSubmitButton>
       {state.error && (
         <p role="alert" className="max-w-xs text-right text-xs text-destructive">
           {state.error}

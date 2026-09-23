@@ -50,7 +50,7 @@ export function buildStorefrontData(input: {
         label: c.name,
         slug: c.slug,
         image,
-        href: `/store/${store.slug}/category/${c.slug}`,
+        href: `${store.basePath}/category/${c.slug}`,
       };
     });
 
@@ -60,7 +60,7 @@ export function buildStorefrontData(input: {
       pages.push({
         slug,
         label: at(content, `${slug}.title`) || slug,
-        href: `/store/${store.slug}/${slug}`,
+        href: `${store.basePath}/${slug}`,
       });
     }
   }

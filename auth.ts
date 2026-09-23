@@ -34,6 +34,7 @@ export const { handlers, auth, signIn, signOut, unstable_update } = NextAuth({
           role: user.role,
           tenantId: user.tenant?.id ?? null,
           mustChangePassword: user.mustChangePassword,
+          sessionVersion: user.sessionVersion,
         };
       },
     }),
@@ -47,13 +48,19 @@ export const { handlers, auth, signIn, signOut, unstable_update } = NextAuth({
         claims.role = user.role;
         claims.tenantId = user.tenantId;
         claims.mustChangePassword = user.mustChangePassword;
+        claims.sessionVersion = user.sessionVersion;
       } else if (trigger === "update") {
-        // Never trust client-supplied update data: re-read the flag from the DB.
+        // Never trust client-supplied update data: re-read the flag from the DB. sessionVersion
+        // is deliberately NOT refreshed here — any cookie holder can trigger an update, so a
+        // revoked token must stay revoked (lib/session.ts rejects it); only a fresh login
+        // issues the new version.
         const fresh = await prisma.user.findUnique({
           where: { id: claims.userId },
-          select: { mustChangePassword: true },
+          select: { mustChangePassword: true, sessionVersion: true },
         });
-        if (fresh) claims.mustChangePassword = fresh.mustChangePassword;
+        if (fresh && fresh.sessionVersion === (claims.sessionVersion ?? 0)) {
+          claims.mustChangePassword = fresh.mustChangePassword;
+        }
       }
       return token;
     },

@@ -5,7 +5,11 @@ import { z } from "zod";
  * fails fast with a clear message instead of surfacing as a confusing error deep in a request.
  *
  * Server-only: this reads secrets (DATABASE_URL, AUTH_SECRET), so it must never be imported into
- * client or Edge bundles. The Edge middleware (proxy.ts -> auth.config.ts) deliberately avoids it.
+ * a client bundle. proxy.ts does import it (for PLATFORM_BASE_URL, to tell a custom domain apart
+ * from the platform's own host) — safe because Next 16 runs Proxy on the Node.js runtime by
+ * default, not Edge. auth.config.ts, the piece of the auth setup proxy.ts also pulls in, still
+ * avoids this file (and any database/bcrypt import) on its own separate grounds — see its
+ * docstring — not because of an Edge constraint that no longer applies here.
  *
  * Set SKIP_ENV_VALIDATION=1 to bypass (e.g. a Docker image build where the real values are only
  * injected at run time).
@@ -18,6 +22,14 @@ const pgUrl = z
     (s) => /^postgres(ql)?:\/\//.test(s),
     "must be a postgres:// connection string",
   );
+
+const R2_KEYS = [
+  "R2_ACCOUNT_ID",
+  "R2_ACCESS_KEY_ID",
+  "R2_SECRET_ACCESS_KEY",
+  "R2_BUCKET",
+  "R2_PUBLIC_URL",
+] as const;
 
 const schema = z
   .object({
@@ -33,10 +45,61 @@ const schema = z
     // A PENDING order older than this many hours is auto-cancelled (stock restored) when the
     // owner next opens their Orders page.
     ORDER_PENDING_TTL_HOURS: z.coerce.number().int().positive().max(8760).default(24),
+    // Origin the platform itself is served from, e.g. "https://shops.example.com" (no trailing
+    // slash). Used to build absolute URLs for path-based stores (/store/[slug]/...) in sitemaps,
+    // robots.txt and canonical tags — see lib/store-url.ts. A store with its own custom domain
+    // (Tenant.domain) doesn't use this at all.
+    PLATFORM_BASE_URL: z
+      .string()
+      .trim()
+      .url("Must be a full origin like https://shops.example.com")
+      .refine((v) => !v.endsWith("/"), "Must not end with a trailing slash")
+      .optional(),
+    // This server's own public IPv4 address. Connecting a custom domain
+    // (app/platform/(admin)/stores/[slug]/actions.ts) requires its DNS to resolve to exactly
+    // this IP before saving — see lib/domain-check.ts. Required in production: without it any
+    // domain that resolves *anywhere* (a typo pointing at someone else's site) would be accepted
+    // as "verified", and sitemaps/canonicals/redirects would start sending traffic there.
+    // Optional in development, where the check falls back to "resolves to something".
+    SERVER_PUBLIC_IP: z.ipv4("Must be a bare IPv4 address, e.g. 203.0.113.10").optional(),
+    // How many reverse proxies you control sit in front of Next and append to X-Forwarded-For
+    // (1 = nginx/Caddy alone; 2 = e.g. Cloudflare -> nginx). The rate limiter takes the client
+    // IP from that many entries from the right — see lib/rate-limit.ts's clientIp().
+    TRUSTED_PROXY_COUNT: z.coerce.number().int().min(1).max(10).default(1),
+    // Cloudflare R2 bucket for owner-uploaded images (lib/storage.ts). All five or none: when
+    // unset, uploads fall back to local disk (public/uploads/), which is development-only.
+    R2_ACCOUNT_ID: z.string().trim().regex(/^[0-9a-f]{32}$/, "Must be the 32-character hex Cloudflare account ID").optional(),
+    R2_ACCESS_KEY_ID: z.string().trim().min(1).optional(),
+    R2_SECRET_ACCESS_KEY: z.string().trim().min(1).optional(),
+    R2_BUCKET: z.string().trim().min(1).optional(),
+    // Public origin the bucket is served from — the r2.dev URL or a custom domain, e.g.
+    // "https://pub-xxxx.r2.dev" or "https://cdn.example.com" (no trailing slash).
+    R2_PUBLIC_URL: z
+      .string()
+      .trim()
+      .url("Must be a full origin like https://pub-xxxx.r2.dev")
+      .refine((v) => !v.endsWith("/"), "Must not end with a trailing slash")
+      .optional(),
   })
   .refine((v) => v.APP_DATABASE_URL || v.DATABASE_URL, {
     message: "Set APP_DATABASE_URL (preferred for the runtime) or DATABASE_URL",
     path: ["APP_DATABASE_URL"],
+  })
+  .refine((v) => v.NODE_ENV !== "production" || v.PLATFORM_BASE_URL, {
+    message: "PLATFORM_BASE_URL is required in production (sitemaps/canonicals need a real origin)",
+    path: ["PLATFORM_BASE_URL"],
+  })
+  .refine((v) => v.NODE_ENV !== "production" || v.SERVER_PUBLIC_IP, {
+    message: "SERVER_PUBLIC_IP is required in production (custom-domain DNS verification checks against it)",
+    path: ["SERVER_PUBLIC_IP"],
+  })
+  .refine((v) => R2_KEYS.every((k) => v[k]) || R2_KEYS.every((k) => !v[k]), {
+    message: `Set all of ${R2_KEYS.join(", ")} or none of them`,
+    path: ["R2_BUCKET"],
+  })
+  .refine((v) => v.NODE_ENV !== "production" || v.R2_BUCKET, {
+    message: "R2_* is required in production (local-disk uploads don't survive a redeploy)",
+    path: ["R2_BUCKET"],
   });
 
 function load() {
@@ -49,6 +112,14 @@ function load() {
       AUTH_SECRET: raw.AUTH_SECRET ?? "",
       NODE_ENV: (raw.NODE_ENV as "development" | "test" | "production") ?? "development",
       ORDER_PENDING_TTL_HOURS: Number(raw.ORDER_PENDING_TTL_HOURS) || 24,
+      PLATFORM_BASE_URL: raw.PLATFORM_BASE_URL || undefined,
+      SERVER_PUBLIC_IP: raw.SERVER_PUBLIC_IP || undefined,
+      TRUSTED_PROXY_COUNT: Number(raw.TRUSTED_PROXY_COUNT) || 1,
+      R2_ACCOUNT_ID: raw.R2_ACCOUNT_ID || undefined,
+      R2_ACCESS_KEY_ID: raw.R2_ACCESS_KEY_ID || undefined,
+      R2_SECRET_ACCESS_KEY: raw.R2_SECRET_ACCESS_KEY || undefined,
+      R2_BUCKET: raw.R2_BUCKET || undefined,
+      R2_PUBLIC_URL: raw.R2_PUBLIC_URL || undefined,
     };
   }
 
@@ -62,6 +133,10 @@ function load() {
         "AUTH_SECRET",
         "NODE_ENV",
         "ORDER_PENDING_TTL_HOURS",
+        "PLATFORM_BASE_URL",
+        "SERVER_PUBLIC_IP",
+        "TRUSTED_PROXY_COUNT",
+        ...R2_KEYS,
       ] as const
     ).map((k) => [k, process.env[k] === "" ? undefined : process.env[k]]),
   );
@@ -83,6 +158,10 @@ const parsed = load();
 /** The connection string the Next.js runtime actually uses (restricted role when available). */
 const databaseUrl = parsed.APP_DATABASE_URL ?? parsed.DATABASE_URL!;
 
+// The schema requires PLATFORM_BASE_URL in production; this default only ever applies in
+// development/test, where localhost is always correct.
+const baseUrl = parsed.PLATFORM_BASE_URL ?? "http://localhost:3000";
+
 // Running in production against the owner role (no restricted role set) silently disables the
 // Row-Level Security that enforces tenant isolation. Warn loudly; don't hard-fail (some setups
 // legitimately run a single trusted role).
@@ -93,4 +172,4 @@ if (parsed.NODE_ENV === "production" && !parsed.APP_DATABASE_URL) {
   );
 }
 
-export const env = { ...parsed, databaseUrl };
+export const env = { ...parsed, databaseUrl, baseUrl };

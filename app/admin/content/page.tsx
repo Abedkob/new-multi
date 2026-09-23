@@ -4,6 +4,7 @@ import { listContentRows } from "@/lib/data/content";
 import { getTenantById } from "@/lib/data/tenants";
 import { parseSectionVisibility } from "@/lib/sections";
 import { requireOwner } from "@/lib/session";
+import { getStoreUrl } from "@/lib/store-url";
 import { ContentEditor, type ContentSectionView } from "./content-editor";
 
 /**
@@ -37,7 +38,7 @@ export default async function ContentPage() {
   return (
     <ContentEditor
       storeName={tenant.name}
-      storeSlug={tenant.slug}
+      storeUrl={getStoreUrl(tenant)}
       sections={sections}
       initialVisibility={parseSectionVisibility(tenant.sectionVisibility)}
     />

@@ -1,15 +1,27 @@
+import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { buttonVariants } from "@/components/ui/button";
 import { getOrder } from "@/lib/data/orders";
+import { privatePageMeta } from "@/lib/seo";
 import { loadStorefrontData, loadTenant } from "@/lib/data/storefront";
 import { formatPrice } from "@/lib/format";
-import { orderRef, orderTotal } from "@/lib/orders";
+import { PurchaseTracker } from "@/lib/analytics";
+import { isFreshOrder, orderRef, orderTotal } from "@/lib/orders";
 import { cn } from "@/lib/utils";
 import { getTemplate } from "@/templates";
 import { variantLabel, parseAttributes } from "@/lib/variants";
+import { shopHref } from "@/templates/shared";
 
 export const dynamic = "force-dynamic";
+
+// Never indexed (see lib/seo.ts privatePageMeta).
+export async function generateMetadata({
+  params,
+}: PageProps<"/store/[slug]/order-confirmation/[orderId]">): Promise<Metadata> {
+  const data = await loadStorefrontData((await params).slug);
+  return privatePageMeta(data?.content["confirmation.heading"] || "Thank you!");
+}
 
 /**
  * The thank-you page. The order is looked up by (store, id), so an order id from another store
@@ -30,6 +42,21 @@ export default async function OrderConfirmationPage({
 
   return (
     <div className={s.container} data-testid="confirmation-page">
+      {isFreshOrder(order.createdAt) && (
+        <PurchaseTracker
+          orderId={order.id}
+          items={order.items.map((i) => {
+            const label = variantLabel(parseAttributes(i.variantAttributesSnapshot), "");
+            return {
+              id: i.variantId ?? i.id,
+              name: i.productNameSnapshot,
+              ...(label ? { variant: label } : {}),
+              priceCents: i.priceCentsSnapshot,
+              quantity: i.quantity,
+            };
+          })}
+        />
+      )}
       <h1 className={s.title}>{content["confirmation.heading"]}</h1>
       <p className="mt-4 max-w-xl text-lg">{content["confirmation.body"]}</p>
       <p className="mt-2 text-sm text-muted-foreground">{content["confirmation.payment"]}</p>
@@ -81,7 +108,7 @@ export default async function OrderConfirmationPage({
         </dl>
       </section>
 
-      <Link href={`/store/${slug}/shop`} className={cn(buttonVariants({ variant: "outline" }), "mt-8")}>
+      <Link href={shopHref(data.store)} className={cn(buttonVariants({ variant: "outline" }), "mt-8")}>
         {content["confirmation.continue"]}
       </Link>
     </div>

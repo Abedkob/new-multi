@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect } from "react";
+import { fontVars, googleFontsHref, parseThemeFonts } from "@/lib/fonts";
 import {
   THEME_FIELDS,
   hexColorSchema,
@@ -19,8 +20,23 @@ export function PreviewBridge() {
 
     function onMessage(e: MessageEvent) {
       if (e.origin !== window.location.origin || !root) return;
-      const data = e.data as { type?: string; colors?: Record<string, unknown> } | null;
+      const data = e.data as { type?: string; colors?: Record<string, unknown>; fonts?: unknown } | null;
       if (data?.type !== "preview-colors" || !data.colors) return;
+
+      // Fonts: only known ids (parseThemeFonts), loaded from Google Fonts on demand.
+      const fonts = parseThemeFonts(data.fonts);
+      for (const name of ["--font-sans", "--font-heading", "--font-serif"]) root.style.removeProperty(name);
+      for (const [name, value] of Object.entries(fontVars(fonts))) root.style.setProperty(name, value);
+      root.style.fontFamily = fonts.bodyFont ? "var(--font-sans)" : "";
+      root.toggleAttribute("data-heading-font", !!fonts.headingFont);
+      const href = googleFontsHref([fonts.headingFont, fonts.bodyFont]);
+      if (href && !document.querySelector(`link[data-preview-font][href="${href}"]`)) {
+        const link = document.createElement("link");
+        link.rel = "stylesheet";
+        link.href = href;
+        link.dataset.previewFont = "";
+        document.head.appendChild(link);
+      }
 
       const colors = {} as ThemeColors;
       for (const { key } of THEME_FIELDS) {

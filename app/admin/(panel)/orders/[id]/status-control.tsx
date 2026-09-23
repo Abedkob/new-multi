@@ -3,6 +3,7 @@
 import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
 import { updateOrderStatusAction } from "../actions";
+import { ConfirmDialog } from "@/components/confirm-dialog";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { STATUS_LABEL, nextStatuses, type OrderStatusValue } from "@/lib/orders";
@@ -14,6 +15,16 @@ export function StatusControl({ id, status }: { id: string; status: OrderStatusV
   const [next, setNext] = useState<OrderStatusValue | "">(options[0] ?? "");
   const [error, setError] = useState<string>();
   const [pending, startTransition] = useTransition();
+  const [confirmCancel, setConfirmCancel] = useState(false);
+
+  const save = (to: OrderStatusValue) => {
+    setError(undefined);
+    startTransition(async () => {
+      const res = await updateOrderStatusAction(id, to);
+      if (res.error) setError(res.error);
+      else router.refresh();
+    });
+  };
 
   if (options.length === 0) {
     return (
@@ -45,13 +56,8 @@ export function StatusControl({ id, status }: { id: string; status: OrderStatusV
           variant={next === "CANCELLED" ? "destructive" : "default"}
           onClick={() => {
             if (!next) return;
-            if (next === "CANCELLED" && !window.confirm("Cancel this order? The items go back into stock.")) return;
-            setError(undefined);
-            startTransition(async () => {
-              const res = await updateOrderStatusAction(id, next);
-              if (res.error) setError(res.error);
-              else router.refresh();
-            });
+            if (next === "CANCELLED") setConfirmCancel(true);
+            else save(next);
           }}
         >
           {pending ? "Saving..." : "Update status"}
@@ -60,6 +66,16 @@ export function StatusControl({ id, status }: { id: string; status: OrderStatusV
       {options.includes("CANCELLED") && (
         <p className="text-xs text-muted-foreground">Cancelling puts the items back into stock.</p>
       )}
+      <ConfirmDialog
+        open={confirmCancel}
+        onOpenChange={setConfirmCancel}
+        title="Cancel this order?"
+        description="The items go back into stock and the order can't be changed afterwards."
+        confirmLabel="Cancel order"
+        cancelLabel="Keep order"
+        destructive
+        onConfirm={() => save("CANCELLED")}
+      />
       {error && (
         <p role="alert" className="text-sm text-destructive">
           {error}

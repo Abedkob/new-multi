@@ -2,8 +2,9 @@
 
 import Link from "next/link";
 import { useCallback, useEffect, useRef, useState, useTransition } from "react";
-import { saveContentAction, uploadImageAction } from "./actions";
+import { saveContentAction } from "./actions";
 import { SectionToggle } from "./section-toggle";
+import { ImageField } from "@/components/image-field";
 import { Segmented } from "@/components/segmented";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -40,12 +41,14 @@ const same = (a: Record<string, string>, b: Record<string, string>) =>
 
 export function ContentEditor({
   storeName,
-  storeSlug,
+  storeUrl,
   sections,
   initialVisibility,
 }: {
   storeName: string;
-  storeSlug: string;
+  /** This store's live URL (custom domain if it has one, else the platform path) — computed
+   * server-side since only the server can resolve which one applies. */
+  storeUrl: string;
   sections: ContentSectionView[];
   initialVisibility: SectionVisibility;
 }) {
@@ -62,22 +65,6 @@ export function ContentEditor({
   const [errors, setErrors] = useState<Record<string, string[] | undefined>>({});
   const [message, setMessage] = useState<{ text: string; error: boolean }>();
   const [pending, startTransition] = useTransition();
-  const [uploadingKey, setUploadingKey] = useState<string | null>(null);
-  const fileInputs = useRef<Record<string, HTMLInputElement | null>>({});
-
-  const uploadImage = async (key: string, file: File) => {
-    setUploadingKey(key);
-    setErrors((e) => ({ ...e, [key]: undefined }));
-    const formData = new FormData();
-    formData.append("file", file);
-    const res = await uploadImageAction(formData);
-    setUploadingKey(null);
-    if (res.url) {
-      setValues((v) => ({ ...v, [key]: res.url! }));
-    } else {
-      setErrors((e) => ({ ...e, [key]: [res.error ?? "Upload failed."] }));
-    }
-  };
 
   const dirty =
     !same(values, saved) ||
@@ -188,7 +175,7 @@ export function ContentEditor({
             </span>
           )}
           <a
-            href={`/store/${storeSlug}`}
+            href={storeUrl}
             target="_blank"
             rel="noopener noreferrer"
             className="text-sm underline underline-offset-4"
@@ -273,42 +260,20 @@ export function ContentEditor({
                         </Label>
                         {f.kind === "textarea" ? (
                           <Textarea rows={3} {...common} />
+                        ) : f.kind === "image" ? (
+                          <ImageField
+                            id={id}
+                            name={id}
+                            value={values[f.key] ?? ""}
+                            placeholder={f.placeholder}
+                            invalid={!!fieldErrors?.length}
+                            onChange={(url) => {
+                              setErrors((e) => ({ ...e, [f.key]: undefined }));
+                              setValues((v) => ({ ...v, [f.key]: url }));
+                            }}
+                          />
                         ) : (
                           <Input {...common} />
-                        )}
-                        {f.kind === "image" && (
-                          <div className="flex items-center gap-2">
-                            {values[f.key] && (
-                              // eslint-disable-next-line @next/next/no-img-element -- tiny admin-only preview, not worth next/image's ceremony here.
-                              <img
-                                src={values[f.key]}
-                                alt=""
-                                className="size-9 shrink-0 rounded border object-cover"
-                              />
-                            )}
-                            <input
-                              ref={(el) => {
-                                fileInputs.current[f.key] = el;
-                              }}
-                              type="file"
-                              accept="image/png,image/jpeg,image/webp,image/gif,image/svg+xml"
-                              className="hidden"
-                              onChange={(e) => {
-                                const file = e.target.files?.[0];
-                                e.target.value = "";
-                                if (file) void uploadImage(f.key, file);
-                              }}
-                            />
-                            <Button
-                              type="button"
-                              variant="outline"
-                              size="sm"
-                              disabled={uploadingKey === f.key}
-                              onClick={() => fileInputs.current[f.key]?.click()}
-                            >
-                              {uploadingKey === f.key ? "Uploading..." : "Upload image"}
-                            </Button>
-                          </div>
                         )}
                         {fieldErrors?.map((e) => (
                           <p key={e} className="text-xs text-destructive">

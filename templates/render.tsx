@@ -1,4 +1,5 @@
 import { MotionConfig } from "motion/react";
+import { cn } from "@/lib/utils";
 import type { SectionId } from "@/lib/sections";
 import type { StorefrontData, Template } from "./types";
 
@@ -16,6 +17,10 @@ import type { StorefrontData, Template } from "./types";
 export function isSectionShown(id: SectionId, data: StorefrontData) {
   const c = data.content;
   switch (id) {
+    case "hero":
+      // The Hero switch (heroText) hides only the headline/subtext/button: an image-only hero
+      // stays. The section disappears only when the text is off and there's no image either.
+      return data.visibility.heroText || c["hero.image"] !== "" || c["hero.imageMobile"] !== "";
     case "announcement":
       return data.visibility.announcementBar && c["announcement.text"].trim() !== "";
     case "promoBanner":
@@ -69,7 +74,18 @@ function Section({
     footer: template.Footer,
   }[id];
   return (
-    <div data-section={id} id={KEBAB[id] ?? id} className="scroll-mt-4">
+    <div
+      data-section={id}
+      id={KEBAB[id] ?? id}
+      className={cn(
+        // Anchor jumps (#new-arrivals) land below the sticky navbar, not under it.
+        "scroll-mt-28",
+        // The navbar stays pinned to the top while scrolling, in every template. Sticky goes
+        // on this wrapper, not the template's <header>: a sticky element only sticks inside
+        // its parent, and this wrapper is exactly as tall as the header.
+        id === "navbar" && "sticky top-0 z-40",
+      )}
+    >
       <Component data={data} />
     </div>
   );

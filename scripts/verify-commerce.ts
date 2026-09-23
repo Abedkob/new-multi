@@ -426,7 +426,7 @@ async function main() {
       assert.equal((await getOrder(A, order.id))!.status, "CANCELLED");
     });
 
-    await check("status flow Pending > Confirmed > Delivered; no skipping; Cancelled is final", async () => {
+    await check("status flow Pending > Confirmed > Delivered; no skipping; Delivered and Cancelled are final", async () => {
       const o = await placeOrder(A, customer, [{ variantId: tS.id, quantity: 1 }]);
       await orderErr(updateOrderStatus(A, o.id, "DELIVERED"), "BAD_TRANSITION");
       await orderErr(updateOrderStatus(A, o.id, "PENDING"), "BAD_TRANSITION");
@@ -434,10 +434,18 @@ async function main() {
       await orderErr(updateOrderStatus(A, o.id, "PENDING"), "BAD_TRANSITION");
       await updateOrderStatus(A, o.id, "DELIVERED");
       assert.equal(await stockOf(tS.id), 4, "stock stays deducted for delivered orders");
-      await updateOrderStatus(A, o.id, "CANCELLED"); // cancelling is allowed at any point
-      assert.equal(await stockOf(tS.id), 5);
-      await orderErr(updateOrderStatus(A, o.id, "CONFIRMED"), "BAD_TRANSITION");
+      // Delivered goods are gone: cancelling (which restores stock) is no longer allowed.
       await orderErr(updateOrderStatus(A, o.id, "CANCELLED"), "BAD_TRANSITION");
+      assert.equal(await stockOf(tS.id), 4);
+
+      const c = await placeOrder(A, customer, [{ variantId: tS.id, quantity: 1 }]);
+      await updateOrderStatus(A, c.id, "CONFIRMED");
+      await updateOrderStatus(A, c.id, "CANCELLED"); // cancelling a confirmed order is allowed
+      assert.equal(await stockOf(tS.id), 4);
+      await orderErr(updateOrderStatus(A, c.id, "CONFIRMED"), "BAD_TRANSITION");
+      await orderErr(updateOrderStatus(A, c.id, "CANCELLED"), "BAD_TRANSITION");
+      // The delivered unit is gone for good; put it back so the checks below start from 5.
+      await prisma.productVariant.update({ where: { id: tS.id }, data: { stock: 5 } });
     });
 
     await check("cancelling restores stock exactly once, even when cancelled twice at the same time", async () => {

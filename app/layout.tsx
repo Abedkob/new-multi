@@ -15,6 +15,10 @@ const geistMono = Geist_Mono({
 export const metadata: Metadata = {
   title: "Multi-Tenant Stores",
   description: "Multi-tenant storefront platform",
+  // The platform's own icon (admin, platform panel, login). Declared here rather than as
+  // app/favicon.ico: a file-based icon would override every storefront's per-store favicon
+  // (app/store/[slug]/layout.tsx), since file-based metadata beats generateMetadata.
+  icons: { icon: "/favicon.ico" },
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {

@@ -19,6 +19,9 @@ model User {
   name               String
   role               Role     @default(STORE_OWNER)
   mustChangePassword Boolean  @default(true)
+  // Stamped into the session JWT at login and compared on every owner/admin request
+  // (lib/session.ts). Bumping it (admin password reset) revokes every existing session.
+  sessionVersion     Int      @default(0)
   createdAt          DateTime @default(now())
 
   // One owner owns exactly one tenant.
@@ -26,17 +29,37 @@ model User {
 }
 
 model Tenant {
-  id                String   @id @default(cuid())
-  slug              String   @unique
-  name              String
-  ownerId           String   @unique
-  owner             User     @relation(fields: [ownerId], references: [id])
-  templateId        String   @default("minimal")
-  themeOverrides    Json     @default("{}")
+  id                     String   @id @default(cuid())
+  slug                   String   @unique
+  name                   String
+  ownerId                String   @unique
+  owner                  User     @relation(fields: [ownerId], references: [id])
+  // Custom storefront domain (e.g. "acme.com") — set ONLY once it's verified and DNS actually
+  // points here. Every URL-emitting surface (SEO helpers, sitemap, robots.txt, canonicals, and
+  // the domain-routing proxy) trusts this field unconditionally and starts sending traffic and
+  // search engines there the moment it's non-null. An unverified or mistyped value here sends
+  // real traffic to a domain that doesn't serve this store. Null means the store is only
+  // reachable at the platform's own /store/[slug] path. See lib/store-url.ts.
+  domain                 String?  @unique
+  // Per-store marketing integrations, set by the platform admin (/platform/stores/[slug]/...)
+  // and injected into this store's storefront only. All nullable = off. Every value is
+  // format-validated on save AND again before it is rendered into a <script> or <meta>
+  // (lib/integrations.ts), since these strings end up in inline script text.
+  gaMeasurementId        String? // GA4, "G-XXXXXXX"
+  googleAdsId            String? // Google Ads tag, "AW-123456789"
+  googleAdsPurchaseLabel String? // Ads conversion label for purchases, sent as AW-.../<label>
+  metaPixelId            String? // Meta (Facebook/Instagram) Pixel / dataset id, digits
+  googleSiteVerification String? // Search Console HTML-tag token (google-site-verification)
+  metaDomainVerification String? // Meta Business domain verification token
+  // Browser-tab icon for this store's storefront, set by the platform admin only (Branding
+  // section). An image URL in our storage (lib/storage.ts). Null = a generated letter icon.
+  faviconUrl             String?
+  templateId             String   @default("minimal")
+  themeOverrides         Json     @default("{}")
   // Owner-controlled on/off switches for the optional storefront sections.
   // Missing keys fall back to defaults (see lib/sections.ts).
-  sectionVisibility Json     @default("{}")
-  createdAt         DateTime @default(now())
+  sectionVisibility      Json     @default("{}")
+  createdAt              DateTime @default(now())
 
   contents   TenantContent[]
   products   Product[]

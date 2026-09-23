@@ -1,13 +1,12 @@
 "use server";
 
-import { randomUUID } from "node:crypto";
-import { mkdir, writeFile } from "node:fs/promises";
-import path from "node:path";
 import { CONTENT_KEYS } from "@/lib/content";
 import { saveContent } from "@/lib/data/content";
 import { setSectionVisible } from "@/lib/data/sections";
 import { optionalSectionSchema } from "@/lib/sections";
 import { requireOwner } from "@/lib/session";
+import { RATE_LIMITS, rateLimit, retryAfterText } from "@/lib/rate-limit";
+import { importImageFromUrl, isOwnImageUrl, storeImage } from "@/lib/storage";
 import { contentSchema, type FormState } from "@/lib/validation";
 
 export type ContentFormState = FormState & {
@@ -64,38 +63,36 @@ export async function saveContentAction(
   };
 }
 
-const MAX_UPLOAD_BYTES = 5 * 1024 * 1024;
-const UPLOAD_EXTENSIONS: Record<string, string> = {
-  "image/png": "png",
-  "image/jpeg": "jpg",
-  "image/webp": "webp",
-  "image/gif": "gif",
-  "image/svg+xml": "svg",
-};
-
 export type UploadImageResult = { url?: string; error?: string };
 
 /**
- * Stores an uploaded image on local disk under public/uploads/<tenantId>/, for content image
- * fields (logo, hero, etc). Local disk only for now: fine on a single server, but a fresh
- * deploy or a second instance won't have the file. Swap for real object storage (S3, R2...)
- * before that matters.
+ * Stores an uploaded image (R2, or local disk in development — see lib/storage.ts) for any
+ * owner image field: content (logo, hero...), products, variants and categories.
  */
 export async function uploadImageAction(formData: FormData): Promise<UploadImageResult> {
   const { tenantId } = await requireOwner();
 
   const file = formData.get("file");
-  if (!(file instanceof File) || file.size === 0) return { error: "Choose an image file." };
-  if (file.size > MAX_UPLOAD_BYTES) return { error: "Image must be 5MB or smaller." };
-  const ext = UPLOAD_EXTENSIONS[file.type];
-  if (!ext) return { error: "Use a PNG, JPG, WEBP, GIF or SVG image." };
+  if (!(file instanceof File)) return { error: "Choose an image file." };
+  return storeImage(tenantId, file);
+}
 
-  const dir = path.join(process.cwd(), "public", "uploads", tenantId);
-  await mkdir(dir, { recursive: true });
-  const filename = `${randomUUID()}.${ext}`;
-  await writeFile(path.join(dir, filename), Buffer.from(await file.arrayBuffer()));
+/**
+ * Copies the image behind a pasted link into our storage (see importImageFromUrl). A link that's
+ * already ours comes back unchanged without counting against the rate limit.
+ */
+export async function importImageUrlAction(link: string): Promise<UploadImageResult> {
+  const { tenantId } = await requireOwner();
+  if (typeof link !== "string" || !link.trim() || link.length > 2000) {
+    return { error: "That doesn't look like a link." };
+  }
+  if (isOwnImageUrl(link.trim())) return { url: link.trim() };
 
-  return { url: `/uploads/${tenantId}/${filename}` };
+  const limit = rateLimit(`image-import:${tenantId}`, RATE_LIMITS.imageImport);
+  if (!limit.ok) {
+    return { error: `Too many imports. Try again in ${retryAfterText(limit.retryAfterMs)}.` };
+  }
+  return importImageFromUrl(tenantId, link);
 }
 
 /**

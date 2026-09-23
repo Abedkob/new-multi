@@ -6,6 +6,7 @@ declare module "next-auth" {
     role: Role;
     tenantId: string | null;
     mustChangePassword: boolean;
+    sessionVersion: number;
   }
   interface Session {
     user: {
@@ -13,6 +14,7 @@ declare module "next-auth" {
       role: Role;
       tenantId: string | null;
       mustChangePassword: boolean;
+      sessionVersion: number;
     } & DefaultSession["user"];
   }
 }

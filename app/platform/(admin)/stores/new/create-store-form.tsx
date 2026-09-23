@@ -13,6 +13,7 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import { cn } from "@/lib/utils";
 
 export function CreateStoreForm() {
   const [state, action] = useActionState<CreateStoreState, FormData>(
@@ -134,7 +135,7 @@ function Credentials({
           </CopyButton>
           <Link
             href="/platform/stores"
-            className={buttonVariants({ variant: "ghost", size: "sm" })}
+            className={cn(buttonVariants({ variant: "ghost", size: "sm" }))}
           >
             Done, back to stores
           </Link>

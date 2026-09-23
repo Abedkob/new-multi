@@ -2,7 +2,7 @@
 
 import { redirect } from "next/navigation";
 import { z } from "zod";
-import { unstable_update } from "@/auth";
+import { signIn } from "@/auth";
 import { setPassword } from "@/lib/data/users";
 import { hashPassword } from "@/lib/passwords";
 import { requireOwner } from "@/lib/session";
@@ -12,7 +12,7 @@ export async function changePasswordAction(
   _prev: FormState,
   formData: FormData,
 ): Promise<FormState> {
-  const { userId } = await requireOwner({ allowMustChange: true });
+  const { userId, email } = await requireOwner({ allowMustChange: true });
 
   const parsed = changePasswordSchema.safeParse({
     password: formData.get("password"),
@@ -22,9 +22,11 @@ export async function changePasswordAction(
     return { fieldErrors: z.flattenError(parsed.error).fieldErrors };
   }
 
+  // Bumps sessionVersion: every other session (e.g. one an attacker holds) is revoked.
   await setPassword(userId, await hashPassword(parsed.data.password));
-  // Re-issues the session cookie; the jwt callback re-reads
-  // mustChangePassword from the database.
-  await unstable_update({});
+  // Revocation includes this session's own token, so sign in again with the new password to get
+  // a fresh one carrying the new version (and mustChangePassword: false). Not unstable_update():
+  // the jwt callback deliberately never refreshes sessionVersion on update.
+  await signIn("credentials", { email, password: parsed.data.password, redirect: false });
   redirect("/admin");
 }

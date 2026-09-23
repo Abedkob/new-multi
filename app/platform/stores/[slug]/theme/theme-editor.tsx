@@ -15,6 +15,7 @@ import {
   type ThemeKey,
   type ThemeOverrides,
 } from "@/lib/theme";
+import { FONT_GROUPS, FONT_IDS, fontStack, googleFontsHref, type FontId, type ThemeFonts } from "@/lib/fonts";
 import { cn } from "@/lib/utils";
 
 type TemplateOption = {
@@ -41,28 +42,38 @@ function differing(colors: ThemeColors, defaults: ThemeColors) {
 
 export function ThemeEditor({
   slug,
+  storeUrl,
   storeName,
   templates,
   initialTemplate,
   initialOverrides,
+  initialFonts,
+  fontOptions,
 }: {
   slug: string;
+  /** This store's live URL (custom domain if it has one, else the platform path) — computed
+   * server-side since only the server can resolve which one applies. */
+  storeUrl: string;
   storeName: string;
   templates: TemplateOption[];
   initialTemplate: string;
   initialOverrides: ThemeOverrides;
+  initialFonts: ThemeFonts;
+  fontOptions: { id: FontId; label: string; group: string }[];
 }) {
   const byId = useMemo(() => new Map(templates.map((t) => [t.id, t])), [templates]);
   const defaultsFor = useCallback((id: string) => byId.get(id)!.defaults, [byId]);
 
   const [template, setTemplate] = useState(initialTemplate);
   const [overrides, setOverrides] = useState<ThemeOverrides>(initialOverrides);
+  const [fonts, setFonts] = useState<ThemeFonts>(initialFonts);
   // Raw text for fields being typed into (may be an incomplete hex).
   const [typed, setTyped] = useState<Partial<Record<ThemeKey, string>>>({});
   const [view, setView] = useState<"home" | "product">("home");
   const [device, setDevice] = useState<(typeof DEVICES)[number]["id"]>("desktop");
   const [saved, setSaved] = useState({
     template: initialTemplate,
+    fonts: JSON.stringify(initialFonts),
     snapshot: differing(
       { ...defaultsFor(initialTemplate), ...initialOverrides },
       defaultsFor(initialTemplate),
@@ -74,26 +85,31 @@ export function ThemeEditor({
   const colors: ThemeColors = { ...defaultsFor(template), ...overrides };
   const invalid = THEME_FIELDS.filter(({ key }) => typed[key] !== undefined && !isHex(typed[key]!));
   const dirty =
-    template !== saved.template || differing(colors, defaultsFor(template)) !== saved.snapshot;
+    template !== saved.template ||
+    differing(colors, defaultsFor(template)) !== saved.snapshot ||
+    JSON.stringify(fonts) !== saved.fonts;
 
   // ---- live preview plumbing -------------------------------------------------------------
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const latestColors = useRef(colors);
+  const latestFonts = useRef(fonts);
   useEffect(() => {
     latestColors.current = colors;
+    latestFonts.current = fonts;
   });
 
   const sendColors = useCallback(() => {
     iframeRef.current?.contentWindow?.postMessage(
-      { type: "preview-colors", colors: latestColors.current },
+      { type: "preview-colors", colors: latestColors.current, fonts: latestFonts.current },
       window.location.origin,
     );
   }, []);
 
   // Colors change instantly (no reload)...
-  const colorsKey = THEME_FIELDS.map(({ key }) => colors[key]).join(",");
+  const colorsKey = THEME_FIELDS.map(({ key }) => colors[key]).join(",") + JSON.stringify(fonts);
   useEffect(() => {
     latestColors.current = colors;
+    latestFonts.current = fonts;
     sendColors();
     // eslint-disable-next-line react-hooks/exhaustive-deps -- colorsKey covers `colors`
   }, [colorsKey, sendColors]);
@@ -135,9 +151,9 @@ export function ThemeEditor({
   const save = () => {
     setMessage(undefined);
     startTransition(async () => {
-      const res = await saveThemeAction(slug, { templateId: template, colors });
+      const res = await saveThemeAction(slug, { templateId: template, colors, fonts });
       if (res.ok) {
-        setSaved({ template, snapshot: differing(colors, defaultsFor(template)) });
+        setSaved({ template, fonts: JSON.stringify(fonts), snapshot: differing(colors, defaultsFor(template)) });
         setMessage({ text: "Saved. The live storefront is updated.", error: false });
       } else {
         setMessage({ text: res.error ?? "Could not save.", error: true });
@@ -176,7 +192,7 @@ export function ThemeEditor({
             </span>
           )}
           <a
-            href={`/store/${slug}`}
+            href={storeUrl}
             target="_blank"
             rel="noopener noreferrer"
             className="text-sm underline underline-offset-4"
@@ -289,6 +305,63 @@ export function ThemeEditor({
               </Button>
               <p className="text-xs text-muted-foreground">
                 Colors left at the default keep following the template if you switch.
+              </p>
+            </section>
+
+            <section className="grid gap-3">
+              <h2 className="text-sm font-semibold">Fonts</h2>
+              {/* Every font in the list, so the samples below render in their own face. */}
+              <link rel="stylesheet" href={googleFontsHref([...FONT_IDS])!} precedence="default" />
+              {(
+                [
+                  { key: "headingFont", label: "Headings", sample: "Summer collection" },
+                  { key: "bodyFont", label: "Body text", sample: "Soft linen shirt, relaxed fit." },
+                ] as const
+              ).map(({ key, label, sample }) => (
+                <div key={key} className="grid gap-1">
+                  <Label htmlFor={key} className="text-xs">
+                    {label}
+                  </Label>
+                  <select
+                    id={key}
+                    value={fonts[key] ?? ""}
+                    disabled={pending}
+                    onChange={(e) => {
+                      const v = e.target.value as FontId | "";
+                      setFonts((f) => {
+                        const next = { ...f };
+                        if (v) next[key] = v;
+                        else delete next[key];
+                        return next;
+                      });
+                      setMessage(undefined);
+                    }}
+                    className="h-8 w-full rounded-lg border border-input bg-transparent px-2.5 text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50"
+                  >
+                    <option value="">Template default</option>
+                    {FONT_GROUPS.map((g) => (
+                      <optgroup key={g} label={g}>
+                        {fontOptions
+                          .filter((f) => f.group === g)
+                          .map((f) => (
+                            <option key={f.id} value={f.id}>
+                              {f.label}
+                            </option>
+                          ))}
+                      </optgroup>
+                    ))}
+                  </select>
+                  <p
+                    className={cn("truncate rounded-md bg-muted px-2 py-1.5", key === "headingFont" ? "text-lg font-semibold" : "text-sm")}
+                    style={fonts[key] ? { fontFamily: fontStack(fonts[key]!) } : undefined}
+                  >
+                    {sample}
+                  </p>
+                </div>
+              ))}
+              <p className="text-xs text-muted-foreground">
+                Arabic fonts also cover Latin letters. &ldquo;Template default&rdquo; keeps the
+                template&apos;s own look.
               </p>
             </section>
 

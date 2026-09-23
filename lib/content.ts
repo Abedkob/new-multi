@@ -136,6 +136,8 @@ export const CONTENT_KEYS = [
   { section: "navbar", key: "navbar.logoText", label: "Text beside logo (optional)", kind: "text", default: "" },
   { section: "navbar", key: "navbar.shopLabel", label: "Shop link text", kind: "text", default: "Shop" },
   { section: "navbar", key: "navbar.cartLabel", label: "Cart link text", kind: "text", default: "Cart" },
+  { section: "navbar", key: "navbar.menuLabel", label: "Phone menu: button label", kind: "text", default: "Menu" },
+  { section: "navbar", key: "navbar.categoriesLabel", label: "Phone menu: categories heading", kind: "text", default: "Categories" },
 
   // 3. Hero
   { section: "hero", key: "hero.headline", label: "Headline", kind: "text", default: "Welcome to our store", seed: true },
@@ -147,6 +149,7 @@ export const CONTENT_KEYS = [
   // 4. Featured categories
   // Tiles are your real top-level categories (manage them under Categories).
   { section: "featuredCategories", key: "featuredCategories.heading", label: "Heading", kind: "text", default: "Shop by category" },
+  { section: "featuredCategories", key: "featuredCategories.tileCta", label: "Text under each category (some templates)", kind: "text", default: "Explore" },
 
   // 5. New arrivals
   { section: "newArrivals", key: "newArrivals.heading", label: "Heading", kind: "text", default: "New arrivals" },
@@ -191,6 +194,7 @@ export const CONTENT_KEYS = [
 
   // 11. Footer
   { section: "footer", key: "footer.about", label: "About text", kind: "textarea", default: "We are a small store. Tell your customers about yourself here.", seed: true },
+  { section: "footer", key: "footer.linksHeading", label: "Links heading", kind: "text", default: "Quick links" },
   { section: "footer", key: "footer.copyright", label: "Copyright line", kind: "text", default: "© {year} {store}. All rights reserved." },
 
   // Pages (each is only linked and reachable when its text is non-empty)
@@ -214,6 +218,19 @@ export const CONTENT_KEYS = [
   { section: "catalog", key: "catalog.previous", label: "Previous page link", kind: "text", default: "Previous" },
   { section: "catalog", key: "catalog.next", label: "Next page link", kind: "text", default: "Next" },
   { section: "catalog", key: "catalog.pageOf", label: "Page indicator ({page}, {pages})", kind: "text", default: "Page {page} of {pages}" },
+  { section: "catalog", key: "catalog.filters", label: "Filters button", kind: "text", default: "Filters" },
+  { section: "catalog", key: "catalog.sort", label: "Sort label", kind: "text", default: "Sort by" },
+  { section: "catalog", key: "catalog.sortNewest", label: "Sort option: newest", kind: "text", default: "Newest" },
+  { section: "catalog", key: "catalog.sortPriceAsc", label: "Sort option: price low to high", kind: "text", default: "Price: low to high" },
+  { section: "catalog", key: "catalog.sortPriceDesc", label: "Sort option: price high to low", kind: "text", default: "Price: high to low" },
+  { section: "catalog", key: "catalog.sortName", label: "Sort option: name", kind: "text", default: "Name: A to Z" },
+  { section: "catalog", key: "catalog.price", label: "Price filter heading", kind: "text", default: "Price" },
+  { section: "catalog", key: "catalog.min", label: "Minimum price placeholder", kind: "text", default: "Min" },
+  { section: "catalog", key: "catalog.max", label: "Maximum price placeholder", kind: "text", default: "Max" },
+  { section: "catalog", key: "catalog.apply", label: "Apply price button", kind: "text", default: "Apply" },
+  { section: "catalog", key: "catalog.inStock", label: "In-stock filter", kind: "text", default: "In stock only" },
+  { section: "catalog", key: "catalog.clear", label: "Clear filters link", kind: "text", default: "Clear filters" },
+  { section: "catalog", key: "catalog.noMatch", label: "No products match the filters", kind: "text", default: "No products match these filters." },
   { section: "catalog", key: "search.heading", label: "Search page heading", kind: "text", default: "Search" },
   { section: "catalog", key: "search.placeholder", label: "Search box placeholder", kind: "text", default: "Search products" },
   { section: "catalog", key: "search.button", label: "Search button text", kind: "text", default: "Search" },
@@ -252,6 +269,7 @@ export const CONTENT_KEYS = [
   { section: "productPage", key: "product.back", label: "Back-to-store link", kind: "text", default: "Back to all products" },
   { section: "productPage", key: "product.descriptionHeading", label: "Description heading", kind: "text", default: "Description" },
   { section: "productPage", key: "product.relatedHeading", label: "Related products heading", kind: "text", default: "You may also like" },
+  { section: "productPage", key: "product.quantity", label: "Quantity label", kind: "text", default: "Quantity" },
   { section: "productPage", key: "product.addToCart", label: "Add-to-cart button", kind: "text", default: "Add to cart" },
   { section: "productPage", key: "product.added", label: "Message after adding to cart", kind: "text", default: "Added to your cart" },
   { section: "productPage", key: "product.viewCart", label: "View-cart link", kind: "text", default: "View cart" },

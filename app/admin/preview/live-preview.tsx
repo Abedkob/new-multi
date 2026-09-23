@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { ThemeScope } from "@/components/theme-scope";
+import type { ThemeFonts } from "@/lib/fonts";
 import type { CategoryNode } from "@/lib/categories";
 import {
   CONTENT_KEY_NAMES,
@@ -32,6 +33,7 @@ export function LivePreview({
   store,
   templateId,
   colors,
+  fonts,
   storedValues,
   visibility,
   newArrivals,
@@ -42,6 +44,7 @@ export function LivePreview({
   store: StoreInfo;
   templateId: string;
   colors: ThemeColors;
+  fonts: ThemeFonts;
   storedValues: Record<string, string>;
   visibility: SectionVisibility;
   newArrivals: StoreProduct[];
@@ -128,7 +131,7 @@ export function LivePreview({
   const related = product ? newArrivals.filter((p) => p.id !== product.id).slice(0, 4) : [];
 
   return (
-    <ThemeScope colors={colors} className="min-h-screen">
+    <ThemeScope colors={colors} fonts={fonts} className="min-h-screen">
       <StorefrontShell template={template} data={data}>
         {draft.view === "product" && product ? (
           <template.ProductPage data={data} product={product} related={related} />

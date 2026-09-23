@@ -13,7 +13,7 @@ import { Separator } from "@/components/ui/separator";
 import { fillTokens, type ContentMap } from "@/lib/content";
 import { cn } from "@/lib/utils";
 import { MotionDiv, MotionH1, MotionH2, MotionLi, MotionP, MotionUl } from "../motion";
-import { Picture, StoreBrand, cardPrice, productHref, sectionHref } from "../shared";
+import { HeroPicture, Picture, StoreBrand, StoreMenuButton, cardPrice, productHref, sectionHref, shopHref, storeHref } from "../shared";
 import { CartLink, SearchBox } from "../nav-client";
 import { ProductGallery, ProductImage, ProductPrice, ProductProvider, StockStatus, VariantPicker, AddToCart } from "../product-client";
 import type {
@@ -49,7 +49,9 @@ const stagger: Variants = {
   hidden: {},
   visible: { transition: { staggerChildren: 0.07, delayChildren: 0.03 } },
 };
-const viewport = { once: true, amount: 0.2 } as const;
+// A tiny threshold: a long product grid on a phone can be several screens tall, so "25% in
+// view" would never be reached and the grid would stay invisible until scrolled far enough.
+const viewport = { once: true, amount: 0.05 } as const;
 
 const Announcement: SectionComponent = ({ data }) => (
   <div className="bg-primary px-4 py-1.5 text-center text-xs text-primary-foreground">
@@ -57,32 +59,36 @@ const Announcement: SectionComponent = ({ data }) => (
   </div>
 );
 
-const Navbar: SectionComponent = ({ data: { store, content, categoryTiles, pages } }) => (
-  <header className="border-b border-border">
-    <div className={cn(wrap, "flex flex-wrap items-center gap-x-8 gap-y-3 py-5")}>
+const Navbar: SectionComponent = ({ data }) => {
+  const { store, content, categoryTiles, pages } = data;
+  return (
+  <header className="border-b border-border bg-background">
+    <div className={cn(wrap, "flex items-center gap-x-4 py-3 md:gap-x-8 md:py-5")}>
+      <StoreMenuButton data={data} className="-ml-2 md:hidden" />
       <StoreBrand
         store={store}
         content={content}
-        className={cn(serif, "text-3xl font-bold tracking-tight text-primary")}
-        logoClassName="h-9"
+        className={cn(serif, "min-w-0 truncate text-xl font-bold tracking-tight text-primary md:text-3xl")}
+        logoClassName="h-8 md:h-9"
       />
       <SearchBox
         slug={store.slug}
+        basePath={store.basePath}
         placeholder={content["search.placeholder"]}
         buttonLabel={content["search.button"]}
-        className="ml-auto w-full max-w-md sm:w-96"
+        className="ml-auto hidden w-96 max-w-md md:flex"
         inputClassName="w-full"
         buttonClassName="rounded-md bg-primary font-medium text-primary-foreground"
       />
       <CartLink
-        slug={store.slug}
-        className="rounded-md border border-border px-3 py-1.5 text-sm font-semibold hover:bg-muted"
+        basePath={store.basePath}
+        className="ml-auto rounded-md border border-border px-3 py-1.5 text-sm font-semibold hover:bg-muted md:ml-0"
       />
     </div>
-    <nav className="bg-primary text-primary-foreground">
+    <nav className="hidden bg-primary text-primary-foreground md:block">
       <ul className={cn(wrap, "flex gap-x-6 overflow-x-auto py-2.5 text-sm")}>
         <li>
-          <Link href={`/store/${store.slug}/shop`} className="font-semibold">
+          <Link href={shopHref(store)} className="font-semibold">
             {content["navbar.shopLabel"]}
           </Link>
         </li>
@@ -99,7 +105,8 @@ const Navbar: SectionComponent = ({ data: { store, content, categoryTiles, pages
       </ul>
     </nav>
   </header>
-);
+  );
+};
 
 const Hero: SectionComponent = ({ data: { store, content, visibility } }) => (
   <div className={cn(wrap, "pt-8")}>
@@ -127,14 +134,14 @@ const Hero: SectionComponent = ({ data: { store, content, visibility } }) => (
           </MotionDiv>
         </MotionDiv>
       )}
-      {content["hero.image"] && (
+      {(content["hero.image"] || content["hero.imageMobile"]) && (
         <MotionDiv
           initial="hidden"
           animate="visible"
           variants={settle}
           className={cn("min-h-48", visibility.heroText ? "md:col-span-2" : "md:col-span-5")}
         >
-          <Picture src={content["hero.image"]} alt={store.name} className="h-full" sizes="100vw" />
+          <HeroPicture content={content} alt={store.name} className="h-full" mobileClassName="aspect-[4/5]" />
         </MotionDiv>
       )}
     </section>
@@ -149,7 +156,7 @@ const FeaturedCategories: SectionComponent = ({ data: { content, categoryTiles }
       whileInView="visible"
       viewport={viewport}
       variants={stagger}
-      className="grid gap-5 sm:grid-cols-3"
+      className="grid grid-cols-2 gap-3 sm:grid-cols-3 sm:gap-5"
     >
       {categoryTiles.map((c) => (
         <MotionLi key={c.id} variants={settle}>
@@ -227,7 +234,7 @@ const NewArrivals: SectionComponent = ({ data: { store, content, newArrivals } }
         whileInView="visible"
         viewport={viewport}
         variants={stagger}
-        className="grid gap-5 sm:grid-cols-2 lg:grid-cols-4"
+        className="grid grid-cols-2 gap-3 sm:gap-5 lg:grid-cols-3 xl:grid-cols-4"
       >
         {newArrivals.map((p) => (
           <ProductCard key={p.id} store={store} product={p} content={content} />
@@ -460,7 +467,7 @@ const ProductPage: Template["ProductPage"] = ({ data, product, related }) => {
     <ProductProvider product={product} content={content}>
       <div className={cn(wrap, "py-8")}>
         <nav aria-label="Breadcrumb" className="text-sm text-muted-foreground">
-          <Link href={`/store/${store.slug}`} className="hover:text-primary hover:underline">
+          <Link href={storeHref(store)} className="hover:text-primary hover:underline">
             {store.name}
           </Link>
           <span className="mx-2">/</span>
@@ -495,7 +502,7 @@ const ProductPage: Template["ProductPage"] = ({ data, product, related }) => {
               <VariantPicker look="classic" labelClassName={serif} />
             </div>
             <div className="mt-6">
-              <AddToCart look="classic" slug={store.slug} />
+              <AddToCart look="classic" basePath={store.basePath} />
             </div>
             <Separator className="my-6" />
             {product.description && (
@@ -509,7 +516,7 @@ const ProductPage: Template["ProductPage"] = ({ data, product, related }) => {
               </>
             )}
             <Link
-              href={`/store/${store.slug}`}
+              href={storeHref(store)}
               className={cn(buttonVariants({ variant: "outline" }), "mt-8")}
             >
               &larr; {content["product.back"]}
@@ -525,7 +532,7 @@ const ProductPage: Template["ProductPage"] = ({ data, product, related }) => {
               whileInView="visible"
               viewport={viewport}
               variants={stagger}
-              className="grid gap-5 sm:grid-cols-2 lg:grid-cols-4"
+              className="grid grid-cols-2 gap-3 sm:gap-5 lg:grid-cols-4"
             >
               {related.map((p) => (
                 <ProductCard key={p.id} store={store} product={p} content={content} />
@@ -543,7 +550,7 @@ const ProductGrid: Template["ProductGrid"] = ({ data, products }) => (
     whileInView="visible"
     viewport={viewport}
     variants={stagger}
-    className="grid gap-5 sm:grid-cols-2 lg:grid-cols-4"
+    className="grid grid-cols-2 gap-3 sm:gap-5 lg:grid-cols-4"
   >
     {products.map((p) => (
       <ProductCard key={p.id} store={data.store} product={p} content={data.content} />
@@ -561,6 +568,7 @@ const pageStyle: Template["pageStyle"] = {
 
 export const classicTemplate: Template = {
   ProductGrid,
+  filterLayout: "sidebar",
   pageStyle,
   Announcement,
   Navbar,

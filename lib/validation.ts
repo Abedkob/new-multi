@@ -1,5 +1,11 @@
 import { z } from "zod";
 import { CONTENT_KEY_NAMES, IMAGE_CONTENT_KEYS } from "@/lib/content";
+// Pure format check only — lib/domain-check.ts (the real DNS/env-dependent checks) must never be
+// imported here: this file is also imported by a client component (live-preview.tsx), and
+// domain-check.ts pulls in node:dns/promises and env.ts, neither of which can reach a client
+// bundle. See lib/domain-check.ts's own docstring for the full story.
+import { isValidDomainFormat, normalizeHostname } from "@/lib/domain-format";
+import { INTEGRATION_FORMATS, extractMetaContent, type IntegrationKey } from "@/lib/integrations";
 import { variantSetIssues } from "@/lib/variants";
 
 export const loginSchema = z.object({
@@ -16,6 +22,76 @@ export const createStoreSchema = z.object({
     .toLowerCase()
     .pipe(z.email("Enter a valid email")),
 });
+
+export const updateStoreSchema = z.object({
+  storeName: z.string().trim().min(2, "At least 2 characters").max(80),
+});
+
+/** Empty clears the connected domain (mirrors saveContent's "empty value deletes the row"
+ * convention). A pasted full URL ("https://acme.com/") is trimmed down to the bare host, since
+ * that's the single most likely paste mistake. */
+export const domainFormSchema = z.object({
+  domain: z
+    .string()
+    .trim()
+    .toLowerCase()
+    .transform((v) => normalizeHostname(v.replace(/^https?:\/\//, "").replace(/[/?#].*$/, "")))
+    .transform((v) => (v === "" ? null : v))
+    .refine((v) => v === null || v.length <= 253, "Too long to be a real domain")
+    .refine((v) => v === null || isValidDomainFormat(v), {
+      message: "Enter a bare domain like acme.com (no https:// or path)",
+    }),
+  // The "is this the platform's own hostname" check lives in the server action instead of here
+  // (see its comment) — it needs lib/domain-check.ts, which this file must never import.
+});
+
+/** Empty -> null (turns the integration off); otherwise trimmed and format-checked. */
+function integrationField(key: IntegrationKey, message: string, normalize = (v: string) => v) {
+  return z
+    .string()
+    .trim()
+    .max(300)
+    .transform((v) => (v === "" ? null : normalize(v)))
+    .refine((v) => v === null || INTEGRATION_FORMATS[key].test(v), { message });
+}
+
+/** Platform admin -> store -> Google Search. */
+export const searchSettingsSchema = z.object({
+  googleSiteVerification: integrationField(
+    "googleSiteVerification",
+    "Paste the whole <meta> tag from Search Console, or just its content value.",
+    extractMetaContent,
+  ),
+});
+
+/** Platform admin -> store -> Analytics & ads. */
+export const analyticsSettingsSchema = z
+  .object({
+    gaMeasurementId: integrationField(
+      "gaMeasurementId",
+      "A GA4 Measurement ID looks like G-ABC123XYZ.",
+      (v) => v.toUpperCase(),
+    ),
+    googleAdsId: integrationField("googleAdsId", "A Google Ads tag ID looks like AW-123456789.", (v) =>
+      // Accept a pasted "AW-123/label" send_to value; the label goes in its own field.
+      v.toUpperCase().split("/")[0],
+    ),
+    googleAdsPurchaseLabel: integrationField(
+      "googleAdsPurchaseLabel",
+      "The conversion label is the part after the slash in AW-123456789/AbC-dEfGh.",
+      (v) => (v.includes("/") ? v.split("/").pop()! : v),
+    ),
+    metaPixelId: integrationField("metaPixelId", "A Meta Pixel (dataset) ID is 10-20 digits."),
+    metaDomainVerification: integrationField(
+      "metaDomainVerification",
+      "Paste the whole <meta> tag from Meta Business settings, or just its content value.",
+      extractMetaContent,
+    ),
+  })
+  .refine((v) => !v.googleAdsPurchaseLabel || v.googleAdsId, {
+    path: ["googleAdsId"],
+    message: "Add the Google Ads tag ID too — the label alone can't be sent anywhere.",
+  });
 
 // bcrypt only uses the first 72 bytes, so cap the length instead of silently truncating.
 export const changePasswordSchema = z

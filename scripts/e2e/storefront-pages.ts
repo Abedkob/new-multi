@@ -58,13 +58,33 @@ async function main() {
     await go("/shop");
     assert.equal(await page.locator('[data-testid="result-count"]').innerText(), "13 products");
     assert.equal((await productLinks()).length, 12);
-    assert.match(await page.locator('[data-testid="pagination"]').innerText(), /Page 1 of 2/);
+    const current = () => page.locator('[data-testid="pagination"] [aria-current="page"]').innerText();
+    assert.equal(await current(), "1");
     await Promise.all([page.waitForURL(/page=2/), page.locator('[data-testid="pagination"] a[rel="next"]').click()]);
     assert.equal((await productLinks()).length, 1);
-    assert.match(await page.locator('[data-testid="pagination"]').innerText(), /Page 2 of 2/);
+    assert.equal(await current(), "2");
     await page.locator('[data-testid="pagination"] a[rel="prev"]').click();
     await page.waitForURL(/\/shop$/);
-    ok("shop lists every product, 12 per page, with working previous/next");
+    await Promise.all([page.waitForURL(/page=2/), page.locator('[data-testid="pagination"] a', { hasText: /^2$/ }).click()]);
+    await page.locator('[data-testid="pagination"] a[rel="prev"]').click();
+    await page.waitForURL(/\/shop$/);
+    ok("shop lists every product, 12 per page, with working page numbers and previous/next");
+
+    // ---------- sort + filters (URL is the state; pagination keeps it)
+    await go("/shop?sort=price-desc");
+    // Sidebar templates show the filters on desktop; the others open them with the Filters button.
+    const toggle = page.getByRole("button", { name: /^Filters/ });
+    if (await toggle.isVisible()) await toggle.click();
+    await Promise.all([page.waitForURL(/stock=1/), page.getByLabel(/In stock only/).check()]);
+    assert.match(page.url(), /sort=price-desc/, "sort kept when a filter is added");
+    const href2 = await page.locator('[data-testid="pagination"] a', { hasText: /^2$/ }).getAttribute("href").catch(() => null);
+    if (href2) assert.match(href2, /sort=price-desc/, "pagination links keep the filters");
+    assert.equal(
+      await page.locator('meta[name="robots"]').getAttribute("content"),
+      "noindex, follow",
+      "filtered views are not indexed",
+    );
+    ok("sort and filters apply from the URL, survive paging, and aren't indexed");
 
     // ---------- categories include subcategories
     await go("/category/men");

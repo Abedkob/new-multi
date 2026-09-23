@@ -5,8 +5,8 @@ import type { ContentMap } from "@/lib/content";
 import { fillTokens } from "@/lib/content";
 import { cn } from "@/lib/utils";
 import { MotionDiv, MotionH1, MotionH2, MotionLi, MotionP, MotionSection, MotionUl } from "../motion";
-import { Picture, StoreBrand, cardPrice, productHref, sectionHref } from "../shared";
-import { CartLink, SearchBox, CategoryMenu } from "../nav-client";
+import { Picture, StoreBrand, StoreMenuButton, cardPrice, productHref, sectionHref, shopHref, storeHref } from "../shared";
+import { CartLink, SearchBox } from "../nav-client";
 import { ProductGallery, ProductImage, ProductPrice, ProductProvider, StockStatus, VariantPicker, AddToCart } from "../product-client";
 import type {
   SectionComponent,
@@ -33,7 +33,9 @@ const stagger: Variants = {
   hidden: {},
   visible: { transition: { staggerChildren: 0.15, delayChildren: 0.1 } },
 };
-const viewport = { once: true, amount: 0.2 } as const;
+// A tiny threshold: a long product grid on a phone can be several screens tall, so "25% in
+// view" would never be reached and the grid would stay invisible until scrolled far enough.
+const viewport = { once: true, amount: 0.05 } as const;
 
 const Announcement: SectionComponent = ({ data }) => (
   <div className="bg-primary px-6 py-3 text-center text-xs font-light tracking-widest uppercase text-primary-foreground">
@@ -41,15 +43,17 @@ const Announcement: SectionComponent = ({ data }) => (
   </div>
 );
 
-const Navbar: SectionComponent = ({ data: { store, content, categoryTiles, pages } }) => (
-  <header className="sticky top-0 z-40 w-full bg-background/95 backdrop-blur-sm border-b border-border/50">
+const Navbar: SectionComponent = ({ data }) => {
+  const { store, content, categoryTiles, pages } = data;
+  return (
+  <header className="w-full border-b border-border/50 bg-background/95 backdrop-blur-sm">
     <div className={cn(wrap, "flex items-center justify-between py-6")}>
       <div className="flex-1 md:hidden">
-        <CategoryMenu categories={categoryTiles} />
+        <StoreMenuButton data={data} className="-ml-2" />
       </div>
       <nav className="hidden flex-1 items-center gap-8 md:flex">
-        <CategoryMenu categories={categoryTiles} />
-        <Link href={`/store/${store.slug}/shop`} className="text-xs uppercase tracking-widest hover:opacity-60 transition-opacity">
+        <StoreMenuButton data={data} className="-ml-2" />
+        <Link href={shopHref(store)} className="text-xs uppercase tracking-widest hover:opacity-60 transition-opacity">
           {content["navbar.shopLabel"]}
         </Link>
         {categoryTiles.slice(0, 2).map((c) => (
@@ -64,18 +68,19 @@ const Navbar: SectionComponent = ({ data: { store, content, categoryTiles, pages
         ))}
       </nav>
       
-      <div className="flex-1 text-center md:flex-none">
+      <div className="min-w-0 flex-1 text-center md:flex-none">
         <StoreBrand
           store={store}
           content={content}
-          className="text-3xl font-serif tracking-tight"
-          logoClassName="h-10 mx-auto"
+          className="block truncate font-serif text-xl tracking-tight md:text-3xl"
+          logoClassName="mx-auto h-8 md:h-10"
         />
       </div>
 
       <div className="flex flex-1 items-center justify-end gap-6">
         <SearchBox
           slug={store.slug}
+          basePath={store.basePath}
           placeholder={content["search.placeholder"]}
           buttonLabel={content["search.button"]}
           className="hidden md:flex"
@@ -83,13 +88,14 @@ const Navbar: SectionComponent = ({ data: { store, content, categoryTiles, pages
           buttonClassName="sr-only"
         />
         <CartLink
-          slug={store.slug}
+          basePath={store.basePath}
           className="text-xs uppercase tracking-widest hover:opacity-60 transition-opacity"
         />
       </div>
     </div>
   </header>
-);
+  );
+};
 
 const Hero: SectionComponent = ({ data: { store, content, visibility } }) => {
   const hasImage = Boolean(content["hero.image"] || content["hero.imageMobile"]);
@@ -118,7 +124,8 @@ const Hero: SectionComponent = ({ data: { store, content, visibility } }) => {
             />
           )}
           {/* Subtle gradient for text readability */}
-          <div className="absolute inset-0 bg-black/30" />
+          {/* Scrim in the theme text colour; the text on it uses the background colour. */}
+          <div className="absolute inset-0 bg-foreground/35" />
         </div>
       )}
 
@@ -129,7 +136,7 @@ const Hero: SectionComponent = ({ data: { store, content, visibility } }) => {
             initial="hidden"
             animate="visible"
             variants={stagger}
-            className="text-white w-full max-w-3xl"
+            className={cn("w-full max-w-3xl", hasImage ? "text-background" : "text-foreground")}
           >
             <MotionH1
               variants={fadeUp}
@@ -141,7 +148,7 @@ const Hero: SectionComponent = ({ data: { store, content, visibility } }) => {
             {content["hero.subtext"] && (
               <MotionP
                 variants={fadeUp}
-                className="mt-6 text-base sm:text-lg md:text-xl font-light text-white/90 max-w-xl mx-auto leading-relaxed"
+                className="mt-6 text-base sm:text-lg md:text-xl font-light opacity-90 max-w-xl mx-auto leading-relaxed"
               >
                 {content["hero.subtext"]}
               </MotionP>
@@ -156,7 +163,10 @@ const Hero: SectionComponent = ({ data: { store, content, visibility } }) => {
                   href={sectionHref(store, "new-arrivals")}
                   className={cn(
                     "inline-flex items-center justify-center text-center px-12 py-4 text-xs font-medium tracking-[0.2em] uppercase",
-                    "bg-white text-black hover:bg-black hover:text-white transition-colors duration-500"
+                    hasImage
+                      ? "bg-background text-foreground hover:bg-foreground hover:text-background"
+                      : "bg-primary text-primary-foreground hover:bg-foreground hover:text-background",
+                    "transition-colors duration-500"
                   )}
                 >
                   {content["hero.ctaLabel"]}
@@ -173,7 +183,7 @@ const Hero: SectionComponent = ({ data: { store, content, visibility } }) => {
 const FeaturedCategories: SectionComponent = ({ data: { content, categoryTiles } }) => (
   <section className={cn(wrap, "py-32")}>
     <h2 className="mb-16 text-center text-4xl font-serif font-light tracking-tight">{content["featuredCategories.heading"]}</h2>
-    <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+    <div className="grid grid-cols-2 gap-4 sm:gap-8 md:grid-cols-3">
       {categoryTiles.slice(0, 3).map((c, i) => (
         <MotionDiv key={c.id} variants={fadeUp} initial="hidden" whileInView="visible" viewport={viewport} className="group cursor-pointer">
           <Link href={c.href} className="block">
@@ -184,11 +194,13 @@ const FeaturedCategories: SectionComponent = ({ data: { content, categoryTiles }
                 className="h-full w-full"
                 imgClassName="h-full w-full object-cover transition-transform duration-1000 group-hover:scale-110"
               />
-              <div className="absolute inset-0 bg-black/10 transition-colors duration-500 group-hover:bg-black/0" />
+              <div className="absolute inset-0 bg-foreground/10 transition-colors duration-500 group-hover:bg-transparent" />
             </div>
             <div className="mt-8 text-center">
               <h3 className="text-xl font-serif tracking-wide">{c.label}</h3>
-              <p className="text-xs uppercase tracking-widest mt-2 text-muted-foreground group-hover:text-primary transition-colors">Explore</p>
+              <p className="text-xs uppercase tracking-widest mt-2 text-muted-foreground group-hover:text-primary transition-colors">
+                {content["featuredCategories.tileCta"]}
+              </p>
             </div>
           </Link>
         </MotionDiv>
@@ -229,7 +241,7 @@ const NewArrivals: SectionComponent = ({ data: { store, content, newArrivals } }
         whileInView="visible"
         viewport={viewport}
         variants={stagger}
-        className="grid gap-x-8 gap-y-16 grid-cols-1 sm:grid-cols-2 lg:grid-cols-4"
+        className="grid grid-cols-2 gap-x-4 gap-y-10 sm:gap-x-8 sm:gap-y-16 lg:grid-cols-4"
       >
         {newArrivals.map((p) => (
           <ProductCard key={p.id} store={store} product={p} content={content} />
@@ -251,7 +263,7 @@ const BestSellers: SectionComponent = ({ data: { store, content, bestSellers } }
           whileInView="visible"
           viewport={viewport}
           variants={stagger}
-          className="grid gap-x-8 gap-y-16 grid-cols-2 lg:grid-cols-4"
+          className="grid grid-cols-2 gap-x-4 gap-y-10 sm:gap-x-8 sm:gap-y-16 lg:grid-cols-4"
         >
           {bestSellers.map((p) => (
             <ProductCard key={p.id} store={store} product={p} content={content} />
@@ -382,7 +394,7 @@ const Instagram: SectionComponent = ({ data: { store, content, instagram } }) =>
         {instagram.tiles.slice(0, 5).map((t, i) => (
           <MotionLi key={i} variants={fadeUp} className="flex-1 min-w-[20vw] aspect-square relative group">
             <Picture src={t.image} alt={store.name} className="h-full w-full" imgClassName="object-cover transition-transform duration-700 group-hover:scale-105" />
-            <div className="absolute inset-0 bg-black/0 group-hover:bg-black/20 transition-colors duration-500" />
+            <div className="absolute inset-0 bg-transparent group-hover:bg-foreground/20 transition-colors duration-500" />
           </MotionLi>
         ))}
       </MotionUl>
@@ -390,7 +402,7 @@ const Instagram: SectionComponent = ({ data: { store, content, instagram } }) =>
   </section>
 );
 
-const Footer: SectionComponent = ({ data: { store, content, pages } }) => (
+const Footer: SectionComponent = ({ data: { store, content, pages, instagram } }) => (
   <footer className="bg-primary text-primary-foreground border-t border-primary-foreground/10">
     <div className={cn(wrap, "py-24")}>
       <div className="grid gap-16 md:grid-cols-12">
@@ -398,7 +410,7 @@ const Footer: SectionComponent = ({ data: { store, content, pages } }) => (
           <StoreBrand
             store={store}
             content={content}
-            className="text-4xl font-serif font-light text-white tracking-tight"
+            className="text-4xl font-serif font-light text-primary-foreground tracking-tight"
             logoClassName="h-12"
           />
           <p className="mt-8 max-w-sm whitespace-pre-line text-sm font-light leading-relaxed text-primary-foreground/70">
@@ -407,36 +419,45 @@ const Footer: SectionComponent = ({ data: { store, content, pages } }) => (
         </div>
         
         <div className="md:col-span-3 md:col-start-8">
-          <h3 className="mb-8 text-xs font-medium uppercase tracking-[0.2em] text-white">Explore</h3>
+          <h3 className="mb-8 text-xs font-medium uppercase tracking-[0.2em] text-primary-foreground">
+            {content["footer.linksHeading"]}
+          </h3>
           <ul className="space-y-4">
             {pages.map((pg) => (
               <li key={pg.slug}>
-                <Link href={pg.href} className="text-sm font-light text-primary-foreground/70 hover:text-white transition-colors">
+                <Link href={pg.href} className="text-sm font-light text-primary-foreground/70 hover:text-primary-foreground transition-colors">
                   {pg.label}
                 </Link>
               </li>
             ))}
             <li>
-              <Link href={`/store/${store.slug}/shop`} className="text-sm font-light text-primary-foreground/70 hover:text-white transition-colors">
-                Shop All
+              <Link href={shopHref(store)} className="text-sm font-light text-primary-foreground/70 hover:text-primary-foreground transition-colors">
+                {content["navbar.shopLabel"]}
               </Link>
             </li>
           </ul>
         </div>
         
-        <div className="md:col-span-2">
-          <h3 className="mb-8 text-xs font-medium uppercase tracking-[0.2em] text-white">Social</h3>
-          <ul className="space-y-4">
-            <li><a href="#" className="text-sm font-light text-primary-foreground/70 hover:text-white transition-colors">Instagram</a></li>
-            <li><a href="#" className="text-sm font-light text-primary-foreground/70 hover:text-white transition-colors">Pinterest</a></li>
-            <li><a href="#" className="text-sm font-light text-primary-foreground/70 hover:text-white transition-colors">Twitter</a></li>
-          </ul>
-        </div>
+        {/* Only real links: the store Instagram, when it has one. */}
+        {instagram.url && (
+          <div className="md:col-span-2">
+            <h3 className="mb-8 text-xs font-medium uppercase tracking-[0.2em] text-primary-foreground">
+              {content["instagram.heading"]}
+            </h3>
+            <a
+              href={instagram.url}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-sm font-light text-primary-foreground/70 transition-colors hover:text-primary-foreground"
+            >
+              @{instagram.handle}
+            </a>
+          </div>
+        )}
       </div>
       
       <div className="mt-32 pt-8 border-t border-primary-foreground/10 flex flex-col md:flex-row justify-between items-center text-xs font-light text-primary-foreground/50 tracking-widest uppercase">
         <p>{fillTokens(content["footer.copyright"], store)}</p>
-        <p className="mt-4 md:mt-0">All Rights Reserved</p>
       </div>
     </div>
   </footer>
@@ -449,7 +470,7 @@ const ProductPage: Template["ProductPage"] = ({ data, product, related }) => {
       <div className={cn(wrap, "py-16 md:py-24")}>
         <div className="mb-12">
           <Link
-            href={`/store/${store.slug}`}
+            href={storeHref(store)}
             className="text-xs uppercase tracking-widest text-muted-foreground hover:text-primary transition-colors"
           >
             &larr; {content["product.back"]}
@@ -481,7 +502,7 @@ const ProductPage: Template["ProductPage"] = ({ data, product, related }) => {
               <StockStatus look="dot" className="block text-sm font-light" />
               
               <div className="pt-4">
-                <AddToCart look="solid" slug={store.slug} />
+                <AddToCart look="solid" basePath={store.basePath} />
               </div>
             </div>
             
@@ -504,7 +525,7 @@ const ProductPage: Template["ProductPage"] = ({ data, product, related }) => {
               whileInView="visible"
               viewport={viewport}
               variants={stagger}
-              className="grid gap-x-8 gap-y-16 grid-cols-2 lg:grid-cols-4"
+              className="grid grid-cols-2 gap-x-4 gap-y-10 sm:gap-x-8 sm:gap-y-16 lg:grid-cols-4"
             >
               {related.map((p) => (
                 <ProductCard key={p.id} store={store} product={p} content={content} />
@@ -523,7 +544,7 @@ const ProductGrid: Template["ProductGrid"] = ({ data, products }) => (
     whileInView="visible"
     viewport={viewport}
     variants={stagger}
-    className="grid gap-x-8 gap-y-16 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3"
+    className="grid grid-cols-2 gap-x-4 gap-y-10 sm:gap-x-8 sm:gap-y-16 lg:grid-cols-3"
   >
     {products.map((p) => (
       <ProductCard key={p.id} store={data.store} product={p} content={data.content} />
@@ -533,6 +554,7 @@ const ProductGrid: Template["ProductGrid"] = ({ data, products }) => (
 
 const pageStyle: Template["pageStyle"] = {
   container: "mx-auto max-w-3xl px-6 py-32",
+  catalogContainer: "mx-auto max-w-6xl px-6 py-32",
   title: "text-5xl font-serif font-light tracking-tight mb-4 text-center",
   subtitle: "text-lg font-light text-muted-foreground text-center",
   chip: "rounded-none border border-border px-6 py-2 text-xs uppercase tracking-widest hover:bg-secondary transition-colors",
@@ -541,6 +563,7 @@ const pageStyle: Template["pageStyle"] = {
 
 export const luxuryTemplate: Template = {
   ProductGrid,
+  filterLayout: "sidebar",
   pageStyle,
   Announcement,
   Navbar,

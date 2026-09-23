@@ -3,7 +3,8 @@ import Link from "next/link";
 import type { ContentMap } from "@/lib/content";
 import { formatPrice } from "@/lib/format";
 import { cn } from "@/lib/utils";
-import type { StoreInfo, StoreProduct } from "./types";
+import { StoreMenu } from "./nav-client";
+import type { StoreInfo, StorefrontData, StoreProduct } from "./types";
 
 /** Product/hero image, or a neutral placeholder tile (theme "muted" color) when there is none. */
 export function Picture({
@@ -61,7 +62,7 @@ export function StoreBrand({
   const logo = content["navbar.logo"];
   const text = content["navbar.logoText"];
   return (
-    <Link href={`/store/${store.slug}`} className={cn(logo && "flex items-center gap-2", className)}>
+    <Link href={storeHref(store)} data-store-brand className={cn(logo && "flex items-center gap-2", className)}>
       {logo && (
         // eslint-disable-next-line @next/next/no-img-element -- intrinsic size, not a cropped box; next/image needs fixed dimensions this doesn't have.
         <img src={logo} alt={text || store.name} className={cn("w-auto object-contain", logoClassName)} />
@@ -71,13 +72,94 @@ export function StoreBrand({
   );
 }
 
+/**
+ * Every storefront-internal href goes through here (or one of the specific helpers below), never
+ * through a hand-rolled `/store/${store.slug}` template literal — store.basePath is "" once the
+ * store has its own domain (see templates/types.ts), and a literal would then produce a broken
+ * double-prefixed link. `path`, if given, is store-relative, e.g. "/shop" or "/products/x".
+ */
+export const storeHref = (store: StoreInfo, path = "") => {
+  if (!path) return store.basePath || "/";
+  return `${store.basePath}${path.startsWith("/") ? path : `/${path}`}`;
+};
+
+export const shopHref = (store: StoreInfo) => storeHref(store, "/shop");
+export const searchHref = (store: StoreInfo) => storeHref(store, "/search");
+export const cartHref = (store: StoreInfo) => storeHref(store, "/cart");
+
 export const productHref = (store: StoreInfo, p: StoreProduct) =>
-  `/store/${store.slug}/products/${p.slug}`;
+  storeHref(store, `/products/${p.slug}`);
 
 /** Links that also work from product pages (not just same-page anchors). */
 export const sectionHref = (store: StoreInfo, anchor: string) =>
-  `/store/${store.slug}#${anchor}`;
+  `${storeHref(store)}#${anchor}`;
 
 /** Card price: "From $x" when a product's variants have different prices. */
 export const cardPrice = (product: StoreProduct, content: ContentMap) =>
   `${product.hasPriceRange ? `${content["product.fromLabel"]} ` : ""}${formatPrice(product.priceCents)}`;
+
+/** The store menu (hamburger + drawer) with everything filled in from the storefront data. */
+export function StoreMenuButton({
+  data,
+  className,
+  buttonClassName,
+}: {
+  data: StorefrontData;
+  className?: string;
+  buttonClassName?: string;
+}) {
+  const { store, content, categoryTiles, pages } = data;
+  return (
+    <StoreMenu
+      slug={store.slug}
+      basePath={store.basePath}
+      shopHref={shopHref(store)}
+      categories={categoryTiles.map((c) => ({ id: c.id, label: c.label, href: c.href }))}
+      pages={pages.map((p) => ({ slug: p.slug, label: p.label, href: p.href }))}
+      labels={{
+        menu: content["navbar.menuLabel"],
+        shop: content["navbar.shopLabel"],
+        categories: content["navbar.categoriesLabel"],
+        searchPlaceholder: content["search.placeholder"],
+        searchButton: content["search.button"],
+      }}
+      className={className}
+      buttonClassName={buttonClassName}
+    />
+  );
+}
+
+/**
+ * The hero photo: "Hero image (Mobile)" on phones, "Hero image (Desktop & Tablet)" from the sm
+ * breakpoint up; whichever one exists is used everywhere when only one is set. `className`
+ * sizes the desktop picture, `mobileClassName` (default: the same) the phone one.
+ */
+export function HeroPicture({
+  content,
+  alt,
+  className,
+  mobileClassName,
+}: {
+  content: ContentMap;
+  alt: string;
+  className?: string;
+  mobileClassName?: string;
+}) {
+  const desktop = content["hero.image"];
+  const mobile = content["hero.imageMobile"];
+  return (
+    <>
+      {mobile && (
+        <Picture
+          src={mobile}
+          alt={alt}
+          sizes="100vw"
+          className={cn(mobileClassName ?? className, desktop && "sm:hidden")}
+        />
+      )}
+      {desktop && (
+        <Picture src={desktop} alt={alt} sizes="100vw" className={cn(className, mobile && "hidden sm:block")} />
+      )}
+    </>
+  );
+}

@@ -15,6 +15,7 @@ export const authConfig = {
       session.user.role = claims.role;
       session.user.tenantId = claims.tenantId;
       session.user.mustChangePassword = claims.mustChangePassword;
+      session.user.sessionVersion = claims.sessionVersion ?? 0;
       return session;
     },
   },

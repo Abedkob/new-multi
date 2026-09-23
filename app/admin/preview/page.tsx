@@ -7,6 +7,7 @@ import { getTenantById } from "@/lib/data/tenants";
 import { parseSectionVisibility } from "@/lib/sections";
 import { requireOwner } from "@/lib/session";
 import { toStoreProduct } from "@/lib/store-product";
+import { parseThemeFonts } from "@/lib/fonts";
 import { parseThemeOverrides, resolveTheme } from "@/lib/theme";
 import { TEMPLATE_META, normalizeTemplateId } from "@/templates/meta";
 import { LivePreview } from "./live-preview";
@@ -34,12 +35,16 @@ export default async function OwnerPreviewPage() {
 
   return (
     <LivePreview
-      store={{ name: tenant.name, slug: tenant.slug }}
+      // Always path-based here, regardless of tenant.domain: this preview is only ever rendered
+      // inside the /admin/preview iframe on the platform's own host, never on the store's real
+      // domain, so its links need the /store/[slug] prefix even for a store that already has one.
+      store={{ name: tenant.name, slug: tenant.slug, basePath: `/store/${tenant.slug}` }}
       templateId={templateId}
       colors={resolveTheme(
         TEMPLATE_META[templateId].defaults,
         parseThemeOverrides(tenant.themeOverrides),
       )}
+      fonts={parseThemeFonts(tenant.themeOverrides)}
       storedValues={Object.fromEntries(rows.map((r) => [r.key, r.value]))}
       visibility={parseSectionVisibility(tenant.sectionVisibility)}
       newArrivals={newArrivals.map(toStoreProduct)}

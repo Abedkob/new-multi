@@ -8,6 +8,8 @@ Storefronts are public at `/store/<slug>`.
 
 ## Setup
 
+**New to the project? Follow [SETUP.md](SETUP.md)** for step-by-step instructions (prerequisites, database, `.env`, troubleshooting). The short version:
+
 ```bash
 cp .env.example .env        # fill in DATABASE_URL, AUTH_SECRET, PLATFORM_ADMIN_* FIRST:
 pnpm install                # postinstall runs `prisma generate`, which needs DATABASE_URL

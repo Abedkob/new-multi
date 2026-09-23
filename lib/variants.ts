@@ -10,6 +10,9 @@
  * Different products can use entirely different keys (size+color, just size, material+size...).
  */
 
+/** At or below this many left, the admin flags a variant as low on stock. */
+export const LOW_STOCK = 3;
+
 export type Attributes = Record<string, string>;
 
 export type VariantDraft = {

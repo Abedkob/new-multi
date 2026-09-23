@@ -2,7 +2,16 @@ import type { ComponentType } from "react";
 import type { ContentMap } from "@/lib/content";
 import type { SectionVisibility } from "@/lib/sections";
 
-export type StoreInfo = { name: string; slug: string };
+export type StoreInfo = {
+  name: string;
+  slug: string;
+  /**
+   * Prefix every storefront-internal link needs: "/store/{slug}" for a path-based store, or ""
+   * once it has its own domain (the domain's root already IS the store, so links stay relative
+   * — see lib/store-url.ts's getStoreBasePath, which is where this value comes from).
+   */
+  basePath: string;
+};
 
 export type StoreVariant = {
   id: string;
@@ -99,6 +108,9 @@ export type Template = {
   Footer: SectionComponent;
   /** A grid of product cards, used by the shop, category and search pages. */
   ProductGrid: ComponentType<{ data: StorefrontData; products: StoreProduct[] }>;
+  /** Where the catalog sort + filters go: above the grid (default) or in a column on its left
+   * (from the lg breakpoint; phones always get the collapsible bar above). */
+  filterLayout?: "top" | "sidebar";
   /** Classes the shared utility pages (catalog, cart, checkout, content) use, so they match the template. */
   pageStyle: {
     container: string;
@@ -106,6 +118,9 @@ export type Template = {
     subtitle: string;
     chip: string;
     panel: string;
+    /** The shop/category/search pages' container when it should differ from `container`
+     * (e.g. wider, to fit the filter sidebar beside the grid). */
+    catalogContainer?: string;
   };
   ProductPage: ComponentType<{
     data: StorefrontData;

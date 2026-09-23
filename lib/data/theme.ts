@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/prisma";
+import type { ThemeFonts } from "@/lib/fonts";
 import type { ThemeOverrides } from "@/lib/theme";
 
 // tenantId always comes from the session, so these can only touch the caller's tenant.
@@ -11,11 +12,11 @@ export function saveThemeOverrides(tenantId: string, overrides: ThemeOverrides) 
   });
 }
 
-/** Template and colors change together (one Save in the theme editor). */
+/** Template, colors and fonts change together (one Save in the theme editor). */
 export function saveTemplateAndTheme(
   tenantId: string,
   templateId: string,
-  overrides: ThemeOverrides,
+  overrides: ThemeOverrides & ThemeFonts,
 ) {
   return prisma.tenant.update({
     where: { id: tenantId },

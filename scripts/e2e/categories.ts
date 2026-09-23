@@ -66,8 +66,8 @@ async function main() {
     ok("tree renders with correct nesting and indentation");
 
     // Deleting Men is blocked and nothing is deleted.
-    page.once("dialog", (d) => d.accept());
     await page.locator("tbody tr", { hasText: "Men" }).first().getByRole("button", { name: "Delete" }).click();
+    await page.getByTestId("confirm-dialog-confirm").click();
     const err = page.getByRole("alert").filter({ hasText: "Men" });
     await err.waitFor();
     assert.match((await err.textContent())!, /"Men" has 1 subcategory\. Move or delete it first\./);
@@ -85,8 +85,8 @@ async function main() {
     for (const name of ["Nike", "Shoes", "Men", "Women"]) {
       await page.goto(`${BASE}/admin/categories`);
       const before = await page.locator("tbody tr").count();
-      page.once("dialog", (d) => d.accept());
       await page.locator("tbody tr", { hasText: name }).first().getByRole("button", { name: "Delete" }).click();
+      await page.getByTestId("confirm-dialog-confirm").click();
       await page.waitForFunction(
         (count) =>
           document.querySelectorAll("tbody tr").length !== count ||

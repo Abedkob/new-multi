@@ -4,6 +4,7 @@ import { getCategory, listCategories } from "@/lib/data/categories";
 import { requireOwner } from "@/lib/session";
 import { updateCategoryAction } from "../../actions";
 import { CategoryForm } from "../../category-form";
+import { PageHeader } from "@/components/admin/page-header";
 
 export default async function EditCategoryPage({
   params,
@@ -24,8 +25,12 @@ export default async function EditCategoryPage({
     .map((c) => ({ id: c.id, label: c.name, depth: c.depth }));
 
   return (
-    <div className="grid gap-6">
-      <h1 className="text-2xl font-semibold">Edit category</h1>
+    <div className="grid">
+      <PageHeader
+        title="Edit category"
+        back={{ href: "/admin/categories", label: "Categories" }}
+        description="Changes show in your store straight away."
+      />
       <CategoryForm
         action={updateCategoryAction.bind(null, category.id)}
         parents={parents}

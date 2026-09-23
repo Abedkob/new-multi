@@ -1,23 +1,20 @@
 "use client";
 
 import { useFormStatus } from "react-dom";
-import { Button } from "@/components/ui/button";
+import { ConfirmSubmitButton } from "@/components/confirm-dialog";
 
 export function DeleteButton({ name }: { name: string }) {
   const { pending } = useFormStatus();
   return (
-    <Button
-      type="submit"
+    <ConfirmSubmitButton
       variant="destructive"
       size="sm"
       disabled={pending}
-      onClick={(e) => {
-        if (!window.confirm(`Delete "${name}"? This cannot be undone.`)) {
-          e.preventDefault();
-        }
-      }}
+      title={`Delete "${name}"?`}
+      description="It disappears from your store straight away. Past orders keep their details. This can't be undone."
+      confirmLabel="Delete product"
     >
       {pending ? "Deleting..." : "Delete"}
-    </Button>
+    </ConfirmSubmitButton>
   );
 }

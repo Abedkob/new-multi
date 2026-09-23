@@ -14,16 +14,21 @@ import type { Template } from "./types";
 /** Cart review page: line items, quantity controls (capped at stock), remove, subtotal. */
 export function CartView({
   slug,
+  basePath,
   content,
   style,
 }: {
+  /** Used only for the cart-details server action, which is always addressed by the real
+   * tenant slug regardless of custom-domain routing. */
   slug: string;
+  /** "" once the store has its own domain, else "/store/[slug]" — see templates/types.ts. */
+  basePath: string;
   content: ContentMap;
   style: Template["pageStyle"];
 }) {
   const cart = useCart();
   const { items, subtotal, loading, removedNotice, hasLines } = useCartDetails(slug);
-  const base = `/store/${slug}`;
+  const base = basePath;
 
   return (
     <div className={style.container} data-testid="cart-page">
@@ -56,12 +61,12 @@ export function CartView({
                   key={item.variantId}
                   data-testid="cart-line"
                   data-variant-id={item.variantId}
-                  className="flex flex-wrap items-center gap-4 py-5"
+                  className="grid grid-cols-[4.5rem_minmax(0,1fr)_auto] items-start gap-x-4 gap-y-3 py-5 sm:grid-cols-[5rem_minmax(0,1fr)_auto]"
                 >
-                  <Link href={`${base}/products/${item.productSlug}`} className="shrink-0">
-                    <Picture src={item.imageUrl} alt={item.productName} className="size-20" />
+                  <Link href={`${base}/products/${item.productSlug}`} className="row-span-2">
+                    <Picture src={item.imageUrl} alt={item.productName} className="size-[4.5rem] rounded-md sm:size-20" />
                   </Link>
-                  <div className="min-w-0 flex-1">
+                  <div className="min-w-0">
                     <Link
                       href={`${base}/products/${item.productSlug}`}
                       className="font-medium hover:underline"
@@ -77,12 +82,17 @@ export function CartView({
                     )}
                   </div>
 
+                  <p className="text-right font-medium tabular-nums" data-testid="line-total">
+                    {formatPrice(item.priceCents * item.quantity)}
+                  </p>
+
+                  <div className="col-span-2 flex items-center justify-between gap-3">
                   <div className="flex items-center gap-2">
                     <button
                       type="button"
                       aria-label="Decrease quantity"
                       onClick={() => cart.setQuantity(item.variantId, item.quantity - 1, item.stock)}
-                      className="size-8 rounded-md border border-border text-lg leading-none hover:bg-muted"
+                      className="size-9 rounded-md border border-border text-lg leading-none hover:bg-muted"
                     >
                       &minus;
                     </button>
@@ -95,7 +105,7 @@ export function CartView({
                       disabled={atMax}
                       onClick={() => cart.setQuantity(item.variantId, item.quantity + 1, item.stock)}
                       className={cn(
-                        "size-8 rounded-md border border-border text-lg leading-none hover:bg-muted",
+                        "size-9 rounded-md border border-border text-lg leading-none hover:bg-muted",
                         "disabled:cursor-not-allowed disabled:opacity-40",
                       )}
                     >
@@ -103,9 +113,6 @@ export function CartView({
                     </button>
                   </div>
 
-                  <p className="w-24 text-right font-medium tabular-nums" data-testid="line-total">
-                    {formatPrice(item.priceCents * item.quantity)}
-                  </p>
                   <button
                     type="button"
                     onClick={() => cart.remove(item.variantId)}
@@ -113,6 +120,7 @@ export function CartView({
                   >
                     {content["cart.remove"]}
                   </button>
+                  </div>
                 </li>
               );
             })}

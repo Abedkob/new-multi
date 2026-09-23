@@ -227,9 +227,10 @@ async function main() {
     ok("Pending -> Confirmed works (stock unchanged) and the next options update");
 
     // ---------------------------------------------------------------- cancel restores stock
-    admin.once("dialog", (d) => d.accept());
     await admin.selectOption("#next-status", "CANCELLED");
     await admin.getByRole("button", { name: "Update status" }).click();
+    // An in-app confirmation modal, not a browser dialog.
+    await admin.getByTestId("confirm-dialog-confirm").click();
     await admin.locator('[data-testid="order-status"]', { hasText: "Cancelled" }).waitFor();
     await admin.locator('[data-testid="status-final"]').waitFor();
     assert.equal(await stock(s40.id), 2, "cancelling should give the sneaker back (1 -> 2)");
@@ -260,7 +261,7 @@ async function main() {
       assert.match(await p.locator('[data-testid="checkout-lines"]').innerText(), /Sneaker/, `${id}: checkout summary`);
       await p.close();
     }
-    ok("product page -> add to cart -> cart -> checkout works in Minimal, Bold and Classic");
+    ok("product page -> add to cart -> cart -> checkout works in Minimal, Classic and Tonkic");
   } finally {
     await browser.close();
     await store.remove();

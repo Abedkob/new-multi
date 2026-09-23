@@ -1,3 +1,4 @@
+import { env } from "@/lib/env";
 import { withTenant } from "@/lib/prisma";
 import { canTransition, type OrderStatusValue } from "@/lib/orders";
 import { effectivePrice, parseAttributes, variantLabel } from "@/lib/variants";
@@ -140,6 +141,33 @@ export function listOrders(tenantId: string) {
   );
 }
 
+const ORDERS_PAGE_SIZE = 25;
+
+/** The owner's orders list, one page at a time, newest first, optionally one status only;
+ * `counts` has every status's total for the tabs. */
+export function listOrdersPage(tenantId: string, requestedPage: number, status?: OrderStatusValue) {
+  const where = { tenantId, ...(status ? { status } : {}) };
+  return withTenant(tenantId, async (db) => {
+    const [total, byStatus] = await Promise.all([
+      db.order.count({ where }),
+      db.order.groupBy({ by: ["status"], where: { tenantId }, _count: { _all: true } }),
+    ]);
+    const counts = Object.fromEntries(byStatus.map((r) => [r.status, r._count._all])) as Partial<
+      Record<OrderStatusValue, number>
+    >;
+    const pages = Math.max(1, Math.ceil(total / ORDERS_PAGE_SIZE));
+    const page = Math.min(Math.max(1, Math.floor(requestedPage) || 1), pages);
+    const items = await db.order.findMany({
+      where,
+      orderBy: [{ createdAt: "desc" }, { id: "asc" }],
+      skip: (page - 1) * ORDERS_PAGE_SIZE,
+      take: ORDERS_PAGE_SIZE,
+      include: { items: { select: { priceCentsSnapshot: true, quantity: true } } },
+    });
+    return { items, total, page, pages, counts };
+  });
+}
+
 export function getOrder(tenantId: string, id: string) {
   return withTenant(tenantId, (db) =>
     db.order.findFirst({
@@ -209,11 +237,12 @@ export type ExpireResult = {
  * Each candidate is cancelled through the normal `updateOrderStatus` path, so stock restoration
  * and the status guard are identical to a manual cancel. An order the owner just confirmed or
  * cancelled fails that guard and is skipped, never double-processed. Idempotent.
+ *
+ * `Date.now()` is read in here rather than by the caller (a Server Component render) so the
+ * page stays a pure function of its props/session — this is the one place "now" matters.
  */
-export async function expireStalePendingOrders(
-  tenantId: string,
-  olderThan: Date,
-): Promise<ExpireResult> {
+export async function expireStalePendingOrders(tenantId: string): Promise<ExpireResult> {
+  const olderThan = new Date(Date.now() - env.ORDER_PENDING_TTL_HOURS * 3_600_000);
   const stale = await withTenant(tenantId, (db) =>
     db.order.findMany({
       where: { tenantId, status: "PENDING", createdAt: { lt: olderThan } },

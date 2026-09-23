@@ -10,6 +10,8 @@
  * Memory is bounded: each key holds at most `limit` timestamps, and stale keys are swept out.
  */
 
+import { env } from "@/lib/env";
+
 type Store = Map<string, number[]>;
 
 const globalForRateLimit = globalThis as unknown as { __rateLimitStore?: Store };
@@ -71,18 +73,28 @@ export const RATE_LIMITS = {
   checkout: { limit: 10, windowMs: 10 * 60_000 },
   // Public search endpoint: generous enough for real typing, bounded against scraping.
   search: { limit: 30, windowMs: 60_000 },
+  // Importing an image from a pasted link makes the server fetch an outside URL: keyed per
+  // tenant, so an owner account can't be used as a download proxy.
+  imageImport: { limit: 40, windowMs: 10 * 60_000 },
 } as const;
 
 /**
  * Best-effort client IP from proxy headers. Falls back to "local" when nothing is present (e.g.
- * `next dev`), which simply means those requests share one bucket. Behind a proxy/CDN, trust
- * `x-forwarded-for`'s first entry only if the platform sets it (Vercel, most reverse proxies do).
+ * `next dev`), which simply means those requests share one bucket.
+ *
+ * Never the FIRST x-forwarded-for entry: that one is whatever the client sent, and a reverse
+ * proxy that appends (nginx's `$proxy_add_x_forwarded_for`, most others) keeps it — so an
+ * attacker could rotate it per request and never hit a limit. Each trusted proxy appends the
+ * address it received the request from, so the real client is the entry TRUSTED_PROXY_COUNT
+ * places from the right (1 = a single reverse proxy in front of Next; 2 = e.g. Cloudflare ->
+ * nginx -> Next). Anything further left is client-controlled and ignored.
  */
 export function clientIp(headers: Headers): string {
   const forwarded = headers.get("x-forwarded-for");
   if (forwarded) {
-    const first = forwarded.split(",")[0]?.trim();
-    if (first) return first;
+    const hops = forwarded.split(",").map((s) => s.trim()).filter(Boolean);
+    const ip = hops[Math.max(0, hops.length - env.TRUSTED_PROXY_COUNT)];
+    if (ip) return ip;
   }
   return headers.get("x-real-ip")?.trim() || "local";
 }

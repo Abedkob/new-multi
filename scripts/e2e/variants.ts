@@ -73,8 +73,8 @@ async function main() {
     const cells = (await line.locator("td").allTextContents()).map((c) => c.replace(/\s+/g, " ").trim());
     assert.equal(cells[1], "Nike");
     assert.equal(cells[2], "$100.00 - $120.00");
-    assert.equal(cells[3], "3");
-    assert.match(cells[4], /^5/);
+    assert.match(cells[0], /3 options/);
+    assert.match(cells[3], /^5 in stock/);
     ok("product created: category, price range, 3 variants, total stock 5 in the list");
 
     // ---- Product 2: two attributes (size + color) created through the UI as well

@@ -9,6 +9,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import type { ContentMap } from "@/lib/content";
+import { useTrack, useTrackOnce } from "@/lib/analytics";
 import { useCart } from "@/lib/cart/cart";
 import { useCartDetails } from "@/lib/cart/use-cart-details";
 import { formatPrice } from "@/lib/format";
@@ -18,17 +19,36 @@ import type { Template } from "./types";
 /** Guest cash-on-delivery checkout: customer details + a read-only summary of the cart. */
 export function CheckoutView({
   slug,
+  basePath,
   content,
   style,
 }: {
+  /** Used only for useCartDetails/placeOrderAction, which are always addressed by the real
+   * tenant slug regardless of custom-domain routing. */
   slug: string;
+  /** "" once the store has its own domain, else "/store/[slug]" — see templates/types.ts. */
+  basePath: string;
   content: ContentMap;
   style: Template["pageStyle"];
 }) {
   const router = useRouter();
   const cart = useCart();
   const { items, subtotal, refresh, hasLines } = useCartDetails(slug);
-  const base = `/store/${slug}`;
+  const base = basePath;
+
+  // begin_checkout / InitiateCheckout once per visit, as soon as the cart's prices are known.
+  const track = useTrack();
+  useTrackOnce(items.length > 0, () =>
+    track.beginCheckout(
+      items.map((i) => ({
+        id: i.variantId,
+        name: i.productName,
+        ...(i.label ? { variant: i.label } : {}),
+        priceCents: i.priceCents,
+        quantity: i.quantity,
+      })),
+    ),
+  );
 
   const [form, setForm] = useState({
     customerName: "",
@@ -135,7 +155,7 @@ export function CheckoutView({
             </p>
           )}
           <div>
-            <Button type="submit" size="lg" disabled={pending || items.length === 0} data-testid="place-order">
+            <Button type="submit" size="lg" disabled={pending || items.length === 0} data-testid="place-order" className="h-12 w-full sm:h-10 sm:w-auto">
               {pending ? content["checkout.placing"] : content["checkout.submit"]}
             </Button>
           </div>

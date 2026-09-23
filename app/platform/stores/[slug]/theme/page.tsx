@@ -1,7 +1,9 @@
 import { notFound } from "next/navigation";
 import { getTenantBySlug } from "@/lib/data/tenants";
 import { requirePlatformAdmin } from "@/lib/session";
+import { FONTS, parseThemeFonts } from "@/lib/fonts";
 import { parseThemeOverrides } from "@/lib/theme";
+import { getStoreUrl } from "@/lib/store-url";
 import { TEMPLATE_IDS, TEMPLATE_META, normalizeTemplateId } from "@/templates/meta";
 import { ThemeEditor } from "./theme-editor";
 
@@ -20,6 +22,7 @@ export default async function StoreThemePage({
   return (
     <ThemeEditor
       slug={tenant.slug}
+      storeUrl={getStoreUrl(tenant)}
       storeName={tenant.name}
       templates={TEMPLATE_IDS.map((id) => ({
         id,
@@ -29,6 +32,8 @@ export default async function StoreThemePage({
       }))}
       initialTemplate={normalizeTemplateId(tenant.templateId)}
       initialOverrides={parseThemeOverrides(tenant.themeOverrides)}
+      initialFonts={parseThemeFonts(tenant.themeOverrides)}
+      fontOptions={FONTS.map((f) => ({ id: f.id, label: f.label, group: f.group }))}
     />
   );
 }

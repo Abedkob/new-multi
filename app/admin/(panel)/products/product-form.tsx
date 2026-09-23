@@ -2,8 +2,10 @@
 
 import Link from "next/link";
 import { useState, useTransition } from "react";
+import { Boxes, Images, Info, type LucideIcon } from "lucide-react";
 import type { ProductActionState } from "./actions";
 import { CategoryPicker, type CategoryOption } from "./category-picker";
+import { ImageField } from "@/components/image-field";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -155,21 +157,21 @@ export function ProductForm({
   return (
     <div className="flex flex-col xl:flex-row gap-8 items-start">
       <div className="grid w-full max-w-3xl gap-6 flex-1">
-        <section className="grid gap-4 rounded-xl border p-5">
-        <h2 className="font-semibold">Product</h2>
+        <section className="grid gap-5 rounded-xl border bg-card p-6 shadow-xs">
+        <SectionTitle icon={Info} title="Basic details" text="What shoppers see first: the name, photo, price and a short description." />
         <div className="grid gap-1.5">
           <Label htmlFor="name">Name</Label>
           <Input id="name" value={name} onChange={(e) => setName(e.target.value)} aria-invalid={!!errors.name} />
           {err("name")}
         </div>
         <div className="grid gap-1.5">
-          <Label htmlFor="description">Description</Label>
+          <Label htmlFor="description">Description <Optional /></Label>
           <Textarea id="description" rows={4} value={description} onChange={(e) => setDescription(e.target.value)} />
           {err("description")}
         </div>
         <div className="grid gap-4 sm:grid-cols-2">
           <div className="grid gap-1.5">
-            <Label htmlFor="price">Base price (USD)</Label>
+            <Label htmlFor="price">Price (USD)</Label>
             <Input
               id="price"
               inputMode="decimal"
@@ -178,46 +180,48 @@ export function ProductForm({
               onChange={(e) => setPrice(e.target.value)}
               aria-invalid={!!errors.price}
             />
-            <p className="text-xs text-muted-foreground">Used by every variant without its own price.</p>
+            <p className="text-xs text-muted-foreground">Sizes or colours can have their own price further down.</p>
             {err("price")}
           </div>
           <div className="grid gap-1.5">
-            <Label htmlFor="category">Category</Label>
+            <Label htmlFor="category">Category <Optional /></Label>
             <CategoryPicker id="category" options={categories} value={categoryId} onChange={setCategoryId} />
             {err("categoryId")}
           </div>
         </div>
         <div className="grid gap-1.5">
-          <Label htmlFor="imageUrl">Image URL</Label>
-          <Input
+          <Label htmlFor="imageUrl">Main photo</Label>
+          <ImageField
             id="imageUrl"
-            placeholder="https://..."
             value={imageUrl}
-            onChange={(e) => setImageUrl(e.target.value)}
-            aria-invalid={!!errors.imageUrl}
+            onChange={setImageUrl}
+            invalid={!!errors.imageUrl}
           />
-          <p className="text-xs text-muted-foreground">Optional. Variants can override it.</p>
+          <p className="text-xs text-muted-foreground">Upload a photo, or paste a link to one. Square photos look best.</p>
           {err("imageUrl")}
         </div>
-        <label className="flex items-center gap-2 text-sm">
+        <label className="flex items-start gap-3 rounded-lg border bg-muted/40 p-3 text-sm">
           <input
             type="checkbox"
             checked={isBestSeller}
             onChange={(e) => setIsBestSeller(e.target.checked)}
-            className="size-4 accent-primary"
+            className="mt-0.5 size-4 accent-primary"
           />
-          Best seller
-          <span className="text-muted-foreground">&middot; shown in the Best sellers section</span>
+          <span>
+            <span className="block font-medium">Feature as a best seller</span>
+            <span className="block text-muted-foreground">Shows this product in the Best sellers section of your homepage.</span>
+          </span>
         </label>
       </section>
 
-      <section className="grid gap-4 rounded-xl border p-5">
+      <section className="grid gap-5 rounded-xl border bg-card p-6 shadow-xs">
         <div>
-          <h2 className="font-semibold">Gallery images</h2>
-          <p className="text-sm text-muted-foreground">
-            Extra photos shown on the product page, in this order. The image URL above is always
-            shown first; these are optional additions.
-          </p>
+          <SectionTitle
+            icon={Images}
+            title="More photos"
+            optional
+            text="Extra photos shoppers can flip through on the product page. The main photo always comes first; use the arrows to change the order."
+          />
           {err("images")}
         </div>
 
@@ -225,13 +229,12 @@ export function ProductForm({
           <div key={img.key} className="flex items-start gap-2 rounded-lg border bg-muted/30 p-3">
             <div className="grid flex-1 gap-2 sm:grid-cols-2">
               <div className="grid gap-1">
-                <Label className="text-xs">Image URL</Label>
-                <Input
+                <Label className="text-xs">Image</Label>
+                <ImageField
                   aria-label={`Gallery image ${i + 1} URL`}
-                  placeholder="https://..."
                   value={img.url}
-                  onChange={(e) => patchImage(img.key, { url: e.target.value })}
-                  aria-invalid={!!errors[`images.${i}.url`]}
+                  onChange={(url) => patchImage(img.key, { url })}
+                  invalid={!!errors[`images.${i}.url`]}
                 />
                 {err(`images.${i}.url`)}
               </div>
@@ -285,15 +288,13 @@ export function ProductForm({
         </div>
       </section>
 
-      <section className="grid gap-4 rounded-xl border p-5">
+      <section className="grid gap-5 rounded-xl border bg-card p-6 shadow-xs">
         <div>
-          <h2 className="font-semibold">Variants</h2>
-          <p className="text-sm text-muted-foreground">
-            Stock, and optionally price and image, are set per variant. Describe each variant with
-            any attributes you like (size, color, material...). A product without real variation
-            keeps one variant with no attributes. With several variants, all of them must use the
-            same attribute names, and no two may be identical.
-          </p>
+          <SectionTitle
+            icon={Boxes}
+            title="Sizes, colours & stock"
+            text="Selling just one version? Only fill in how many you have. Selling sizes or colours? Click “Add variant” for each one and describe it, e.g. size = M, color = Black. Every version needs the same option names."
+          />
           {err("variants")}
         </div>
 
@@ -302,6 +303,9 @@ export function ProductForm({
             <div className="flex items-center justify-between">
               <span className="text-sm font-medium">
                 {variants.length === 1 ? "Default variant" : `Variant ${i + 1}`}
+                {variantSummary(v) && (
+                  <span className="ml-2 font-normal text-muted-foreground">· {variantSummary(v)}</span>
+                )}
               </span>
               <Button
                 type="button"
@@ -315,7 +319,9 @@ export function ProductForm({
             </div>
 
             <div className="grid gap-2">
-              <span className="text-xs text-muted-foreground">Attributes</span>
+              <span className="text-xs text-muted-foreground">
+                Options {variants.length === 1 && "(not needed if there's only one version)"}
+              </span>
               {v.attrs.map((a, ai) => (
                 <div key={ai} className="flex items-center gap-2">
                   <Input
@@ -364,7 +370,7 @@ export function ProductForm({
 
             <div className="grid gap-3 sm:grid-cols-3">
               <div className="grid gap-1">
-                <Label className="text-xs">Stock</Label>
+                <Label className="text-xs">How many in stock</Label>
                 <Input
                   aria-label={`Variant ${i + 1} stock`}
                   inputMode="numeric"
@@ -374,23 +380,23 @@ export function ProductForm({
                 {err(`variants.${i}.stock`)}
               </div>
               <div className="grid gap-1">
-                <Label className="text-xs">Price override</Label>
+                <Label className="text-xs">Own price <Optional /></Label>
                 <Input
                   aria-label={`Variant ${i + 1} price override`}
                   inputMode="decimal"
-                  placeholder={price || "base price"}
+                  placeholder={price ? `Same as main (${price})` : "Same as main price"}
                   value={v.price}
                   onChange={(e) => patchVariant(v.key, { price: e.target.value })}
                 />
                 {err(`variants.${i}.price`)}
               </div>
               <div className="grid gap-1">
-                <Label className="text-xs">Image override</Label>
-                <Input
+                <Label className="text-xs">Own photo <Optional /></Label>
+                <ImageField
                   aria-label={`Variant ${i + 1} image override`}
-                  placeholder="https://..."
+                  uploadLabel="Upload"
                   value={v.imageUrl}
-                  onChange={(e) => patchVariant(v.key, { imageUrl: e.target.value })}
+                  onChange={(url) => patchVariant(v.key, { imageUrl: url })}
                 />
                 {err(`variants.${i}.imageUrl`)}
               </div>
@@ -405,23 +411,25 @@ export function ProductForm({
         </div>
       </section>
 
-      {state.error && (
-        <p role="alert" className="text-sm text-destructive">
-          {state.error}
-        </p>
-      )}
-      <div className="flex gap-2">
+      {/* Stays in view while scrolling a long form, so saving is always one click away. */}
+      <div className="sticky bottom-0 z-10 -mx-1 flex flex-wrap items-center gap-3 rounded-xl border bg-background/95 px-4 py-3 shadow-lg backdrop-blur">
         <Button onClick={submit} disabled={pending}>
           {pending ? "Saving..." : submitLabel}
         </Button>
         <Link href="/admin/products" className={buttonVariants({ variant: "ghost" })}>
           Cancel
         </Link>
+        {state.error && (
+          <p role="alert" className="text-sm text-destructive">
+            {state.error}
+          </p>
+        )}
       </div>
       </div>
 
       <div className="w-full xl:w-80 shrink-0 sticky top-6">
-        <h3 className="font-semibold mb-4 text-sm uppercase tracking-wider text-muted-foreground">Live Preview</h3>
+        <h3 className="mb-1 text-sm font-semibold">How it looks in your store</h3>
+        <p className="mb-4 text-xs text-muted-foreground">Updates as you type.</p>
         <ProductPreviewCard name={name} description={description} price={price} imageUrl={imageUrl} />
       </div>
     </div>
@@ -451,4 +459,42 @@ function ProductPreviewCard({ name, description, price, imageUrl }: { name: stri
       </div>
     </div>
   );
+}
+
+function SectionTitle({
+  icon: Icon,
+  title,
+  text,
+  optional,
+}: {
+  icon: LucideIcon;
+  title: string;
+  text: string;
+  optional?: boolean;
+}) {
+  return (
+    <div className="flex gap-3">
+      <span className="grid size-9 shrink-0 place-items-center rounded-lg bg-muted text-muted-foreground">
+        <Icon className="size-4" aria-hidden />
+      </span>
+      <div className="grid gap-0.5">
+        <h2 className="font-semibold">
+          {title} {optional && <Optional />}
+        </h2>
+        <p className="text-sm text-muted-foreground">{text}</p>
+      </div>
+    </div>
+  );
+}
+
+function Optional() {
+  return <span className="text-xs font-normal text-muted-foreground">(optional)</span>;
+}
+
+/** "size: M, color: Black" for a variant's header, once it has filled-in options. */
+function variantSummary(v: { attrs: { key: string; value: string }[] }) {
+  return v.attrs
+    .filter((a) => a.key.trim() && a.value.trim())
+    .map((a) => `${a.key.trim()}: ${a.value.trim()}`)
+    .join(", ");
 }

@@ -5,7 +5,7 @@ import type { ContentMap } from "@/lib/content";
 import { fillTokens } from "@/lib/content";
 import { cn } from "@/lib/utils";
 import { MotionDiv, MotionH1, MotionH2, MotionLi, MotionP, MotionSection, MotionUl } from "../motion";
-import { Picture, StoreBrand, cardPrice, productHref, sectionHref } from "../shared";
+import { HeroPicture, Picture, StoreBrand, StoreMenuButton, cardPrice, productHref, sectionHref, shopHref, storeHref } from "../shared";
 import { CartLink, SearchBox } from "../nav-client";
 import { ProductGallery, ProductImage, ProductPrice, ProductProvider, StockStatus, VariantPicker, AddToCart } from "../product-client";
 import type {
@@ -39,7 +39,9 @@ const stagger: Variants = {
   hidden: {},
   visible: { transition: { staggerChildren: 0.12, delayChildren: 0.05 } },
 };
-const viewport = { once: true, amount: 0.25 } as const;
+// A tiny threshold: a long product grid on a phone can be several screens tall, so "25% in
+// view" would never be reached and the grid would stay invisible until scrolled far enough.
+const viewport = { once: true, amount: 0.05 } as const;
 
 const Announcement: SectionComponent = ({ data }) => (
   <div className="bg-secondary px-6 py-2.5 text-center text-xs tracking-wide text-secondary-foreground">
@@ -47,11 +49,14 @@ const Announcement: SectionComponent = ({ data }) => (
   </div>
 );
 
-const Navbar: SectionComponent = ({ data: { store, content, categoryTiles, pages } }) => (
-  <header className="border-b border-border">
-    <div className={cn(wrap, "grid grid-cols-[1fr_auto_1fr] items-center gap-4 py-6")}>
-      <nav className="hidden flex-wrap gap-x-6 gap-y-1 sm:flex">
-        <Link href={`/store/${store.slug}/shop`} className={cn(eyebrow, "hover:text-foreground")}>
+const Navbar: SectionComponent = ({ data }) => {
+  const { store, content, categoryTiles, pages } = data;
+  return (
+  <header className="border-b border-border bg-background">
+    <div className={cn(wrap, "grid grid-cols-[1fr_auto_1fr] items-center gap-4 py-4 md:py-6")}>
+      <StoreMenuButton data={data} className="-ml-2 md:hidden" />
+      <nav className="hidden flex-wrap gap-x-6 gap-y-1 md:flex">
+        <Link href={shopHref(store)} className={cn(eyebrow, "hover:text-foreground")}>
           {content["navbar.shopLabel"]}
         </Link>
         {categoryTiles.slice(0, 2).map((c) => (
@@ -74,6 +79,7 @@ const Navbar: SectionComponent = ({ data: { store, content, categoryTiles, pages
       <div className="col-start-3 flex items-center justify-end gap-4">
         <SearchBox
           slug={store.slug}
+          basePath={store.basePath}
           placeholder={content["search.placeholder"]}
           buttonLabel={content["search.button"]}
           className="hidden md:flex"
@@ -81,13 +87,14 @@ const Navbar: SectionComponent = ({ data: { store, content, categoryTiles, pages
           buttonClassName="sr-only"
         />
         <CartLink
-          slug={store.slug}
+          basePath={store.basePath}
           className={cn(eyebrow, "hover:text-foreground")}
         />
       </div>
     </div>
   </header>
-);
+  );
+};
 
 const Hero: SectionComponent = ({ data: { store, content, visibility } }) => (
   <>
@@ -96,7 +103,7 @@ const Hero: SectionComponent = ({ data: { store, content, visibility } }) => (
         initial="hidden"
         animate="visible"
         variants={stagger}
-        className="mx-auto max-w-3xl px-6 py-24 text-center sm:py-36"
+        className="mx-auto max-w-3xl px-6 py-16 text-center sm:py-36"
       >
         <MotionH1 variants={fadeUp} className="text-4xl font-light tracking-tight sm:text-6xl">
           {content["hero.headline"]}
@@ -114,7 +121,7 @@ const Hero: SectionComponent = ({ data: { store, content, visibility } }) => (
         </MotionDiv>
       </MotionSection>
     )}
-    {content["hero.image"] && (
+    {(content["hero.image"] || content["hero.imageMobile"]) && (
       <MotionDiv
         initial="hidden"
         whileInView="visible"
@@ -122,21 +129,21 @@ const Hero: SectionComponent = ({ data: { store, content, visibility } }) => (
         variants={fadeUp}
         className={wrap}
       >
-        <Picture src={content["hero.image"]} alt={store.name} className="aspect-[21/9]" sizes="100vw" />
+        <HeroPicture content={content} alt={store.name} className="aspect-[21/9]" mobileClassName="aspect-[4/5]" />
       </MotionDiv>
     )}
   </>
 );
 
 const FeaturedCategories: SectionComponent = ({ data: { content, categoryTiles } }) => (
-  <section className={cn(wrap, "pt-28")}>
+  <section className={cn(wrap, "pt-16 sm:pt-28")}>
     <h2 className={cn(eyebrow, "mb-10 text-center")}>{content["featuredCategories.heading"]}</h2>
     <MotionUl
       initial="hidden"
       whileInView="visible"
       viewport={viewport}
       variants={stagger}
-      className="grid gap-6 sm:grid-cols-3"
+      className="grid grid-cols-2 gap-4 sm:grid-cols-3 sm:gap-6"
     >
       {categoryTiles.map((c) => (
         <MotionLi key={c.id} variants={fadeUp}>
@@ -189,7 +196,7 @@ function ProductCard({
 }
 
 const NewArrivals: SectionComponent = ({ data: { store, content, newArrivals } }) => (
-  <section className={cn(wrap, "py-28")}>
+  <section className={cn(wrap, "py-16 sm:py-28")}>
     <h2 className={cn(eyebrow, "mb-10 text-center")}>{content["newArrivals.heading"]}</h2>
     {newArrivals.length === 0 ? (
       <p className="text-center text-muted-foreground">{content["newArrivals.empty"]}</p>
@@ -199,7 +206,7 @@ const NewArrivals: SectionComponent = ({ data: { store, content, newArrivals } }
         whileInView="visible"
         viewport={viewport}
         variants={stagger}
-        className="grid gap-x-8 gap-y-14 sm:grid-cols-2 lg:grid-cols-3"
+        className="grid grid-cols-2 gap-x-4 gap-y-10 sm:gap-x-8 sm:gap-y-14 lg:grid-cols-3"
       >
         {newArrivals.map((p) => (
           <ProductCard key={p.id} store={store} product={p} content={content} />
@@ -211,7 +218,7 @@ const NewArrivals: SectionComponent = ({ data: { store, content, newArrivals } }
 
 const BestSellers: SectionComponent = ({ data: { store, content, bestSellers } }) => (
   <section className="border-t border-border">
-    <div className={cn(wrap, "py-28")}>
+    <div className={cn(wrap, "py-16 sm:py-28")}>
       <h2 className={cn(eyebrow, "mb-10 text-center")}>{content["bestSellers.heading"]}</h2>
       {bestSellers.length === 0 ? (
         <p className="text-center text-muted-foreground">{content["bestSellers.empty"]}</p>
@@ -221,7 +228,7 @@ const BestSellers: SectionComponent = ({ data: { store, content, bestSellers } }
           whileInView="visible"
           viewport={viewport}
           variants={stagger}
-          className="grid grid-cols-2 gap-x-6 gap-y-12 lg:grid-cols-4"
+          className="grid grid-cols-2 gap-x-4 gap-y-10 sm:gap-x-6 sm:gap-y-12 lg:grid-cols-4"
         >
           {bestSellers.map((p) => (
             <ProductCard key={p.id} store={store} product={p} content={content} ratio="aspect-square" />
@@ -264,7 +271,7 @@ const PromoBanner: SectionComponent = ({ data: { store, content } }) => (
 const BrandStory: SectionComponent = ({ data: { store, content } }) => {
   const image = content["brandStory.image"];
   return (
-    <section className={cn(wrap, "py-28")}>
+    <section className={cn(wrap, "py-16 sm:py-28")}>
       <MotionDiv
         initial="hidden"
         whileInView="visible"
@@ -299,7 +306,7 @@ const BrandStory: SectionComponent = ({ data: { store, content } }) => {
 
 const Reviews: SectionComponent = ({ data: { content, reviews } }) => (
   <section className="border-t border-border">
-    <div className={cn(wrap, "py-28")}>
+    <div className={cn(wrap, "py-16 sm:py-28")}>
       <h2 className={cn(eyebrow, "mb-12 text-center")}>{content["reviews.heading"]}</h2>
       <MotionUl
         initial="hidden"
@@ -322,7 +329,7 @@ const Reviews: SectionComponent = ({ data: { content, reviews } }) => (
 );
 
 const Instagram: SectionComponent = ({ data: { store, content, instagram } }) => (
-  <section className={cn(wrap, "py-28")}>
+  <section className={cn(wrap, "py-16 sm:py-28")}>
     <div className="mb-10 text-center">
       <h2 className={eyebrow}>{content["instagram.heading"]}</h2>
       {instagram.url && (
@@ -380,7 +387,7 @@ const ProductPage: Template["ProductPage"] = ({ data, product, related }) => {
     <ProductProvider product={product} content={content}>
       <div className={cn(wrap, "py-12")}>
         <Link
-          href={`/store/${store.slug}`}
+          href={storeHref(store)}
           className="text-sm text-muted-foreground hover:text-foreground"
         >
           &larr; {content["product.back"]}
@@ -404,7 +411,7 @@ const ProductPage: Template["ProductPage"] = ({ data, product, related }) => {
             </div>
             <StockStatus look="dot" className="mt-6 block" />
             <div className="mt-6">
-              <AddToCart look="minimal" slug={store.slug} />
+              <AddToCart look="minimal" basePath={store.basePath} />
             </div>
             {product.description && (
               <div className="mt-10 border-t border-border pt-8">
@@ -425,7 +432,7 @@ const ProductPage: Template["ProductPage"] = ({ data, product, related }) => {
               whileInView="visible"
               viewport={viewport}
               variants={stagger}
-              className="grid gap-x-8 gap-y-14 sm:grid-cols-2 lg:grid-cols-4"
+              className="grid grid-cols-2 gap-x-4 gap-y-10 sm:gap-x-8 sm:gap-y-14 lg:grid-cols-4"
             >
               {related.map((p) => (
                 <ProductCard key={p.id} store={store} product={p} content={content} />
@@ -443,7 +450,7 @@ const ProductGrid: Template["ProductGrid"] = ({ data, products }) => (
     whileInView="visible"
     viewport={viewport}
     variants={stagger}
-    className="grid gap-x-8 gap-y-14 sm:grid-cols-2 lg:grid-cols-3"
+    className="grid grid-cols-2 gap-x-4 gap-y-10 sm:gap-x-8 sm:gap-y-14 lg:grid-cols-3"
   >
     {products.map((p) => (
       <ProductCard key={p.id} store={data.store} product={p} content={data.content} />
@@ -461,6 +468,7 @@ const pageStyle: Template["pageStyle"] = {
 
 export const minimalTemplate: Template = {
   ProductGrid,
+  filterLayout: "sidebar",
   pageStyle,
   Announcement,
   Navbar,

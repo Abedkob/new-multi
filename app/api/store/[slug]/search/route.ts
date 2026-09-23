@@ -24,8 +24,8 @@ export async function GET(req: Request, { params }: { params: Promise<{ slug: st
   const tenant = await loadTenant(slug);
   if (!tenant) return NextResponse.json([]);
 
-  const result = await listCatalog(tenant.id, { q, page: 1 });
-  const items = result.items.slice(0, 5).map(toStoreProduct);
+  const result = await listCatalog(tenant.id, { q, page: 1, pageSize: 5 });
+  const items = result.items.map(toStoreProduct);
 
   return NextResponse.json(items);
 }

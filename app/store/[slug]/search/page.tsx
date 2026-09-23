@@ -1,12 +1,24 @@
+import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { fillVars } from "@/lib/content";
-import { listCatalog } from "@/lib/data/products";
+import { parseCatalogFilters } from "@/lib/catalog-filters";
+import { listAttributeFacets, listCatalog } from "@/lib/data/products";
+import { privatePageMeta } from "@/lib/seo";
 import { loadStorefrontData, loadTenant } from "@/lib/data/storefront";
 import { toStoreProduct } from "@/lib/store-product";
 import { getTemplate } from "@/templates";
 import { CatalogPage } from "@/templates/catalog-page";
+import { searchHref } from "@/templates/shared";
 
 export const dynamic = "force-dynamic";
+
+// Never indexed (see lib/seo.ts privatePageMeta).
+export async function generateMetadata({
+  params,
+}: PageProps<"/store/[slug]/search">): Promise<Metadata> {
+  const data = await loadStorefrontData((await params).slug);
+  return privatePageMeta(data?.content["search.heading"] || "Search");
+}
 
 const first = (v: string | string[] | undefined) => (Array.isArray(v) ? v[0] : v);
 
@@ -22,9 +34,13 @@ export default async function SearchPage({
 
   const q = (first(sp.q) ?? "").trim().slice(0, 100);
   const page = Number.parseInt(first(sp.page) ?? "1", 10) || 1;
-  const result = q
-    ? await listCatalog(tenant.id, { q, page })
-    : { items: [], total: 0, page: 1, pages: 1 };
+  const filters = parseCatalogFilters(sp);
+  const [result, facets] = q
+    ? await Promise.all([
+        listCatalog(tenant.id, { q, page, filters }),
+        listAttributeFacets(tenant.id, { q }),
+      ])
+    : [{ items: [], total: 0, page: 1, pages: 1 }, []];
 
   return (
     <CatalogPage
@@ -36,8 +52,9 @@ export default async function SearchPage({
       total={result.total}
       page={result.page}
       pages={result.pages}
-      basePath={`/store/${slug}/search`}
-      query={q ? { q } : undefined}
+      basePath={searchHref(data.store)}
+      keep={q ? [["q", q]] : []}
+      filters={q ? { value: filters, facets } : undefined}
       emptyText={q ? fillVars(data.content["search.empty"], { q }) : data.content["search.placeholder"]}
     />
   );

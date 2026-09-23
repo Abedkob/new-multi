@@ -26,7 +26,7 @@ import { setSectionVisible } from "../lib/data/sections";
 import { toStoreProduct } from "../lib/store-product";
 import { saveThemeOverrides, setTenantTemplate } from "../lib/data/theme";
 import { OPTIONAL_SECTIONS, SECTION_ORDER, type OptionalSection } from "../lib/sections";
-import { TEMPLATE_IDS, TEMPLATE_META } from "../templates/meta";
+import { TEMPLATE_IDS, TEMPLATE_META, normalizeTemplateId } from "../templates/meta";
 
 const BASE = process.env.BASE_URL ?? "http://localhost:3000";
 const SLUG = process.env.STORE_SLUG ?? "demo-boutique";
@@ -105,8 +105,9 @@ function staticChecks() {
   assert.deepEqual(unknown, [], `templates use non-canonical content keys: ${unknown}`);
   ok(`all ${used.size} content keys used by templates are canonical`);
 
+  // (?<!&): an HTML entity like &#9733; (a star) isn't a hex color.
   const colorLiteral =
-    /#[0-9a-fA-F]{3,8}\b|\b(?:bg|text|border|ring|fill|stroke|from|to|via|decoration|shadow|accent|outline|divide)-(?:slate|gray|zinc|neutral|stone|red|orange|amber|yellow|lime|green|emerald|teal|cyan|sky|blue|indigo|violet|purple|fuchsia|pink|rose|black|white)\b/;
+    /(?<!&)#[0-9a-fA-F]{3,8}\b|\b(?:bg|text|border|ring|fill|stroke|from|to|via|decoration|shadow|accent|outline|divide)-(?:slate|gray|zinc|neutral|stone|red|orange|amber|yellow|lime|green|emerald|teal|cyan|sky|blue|indigo|violet|purple|fuchsia|pink|rose|black|white)\b/;
   for (const f of files) {
     const hit = readFileSync(f, "utf8").match(colorLiteral);
     assert.ok(!hit, `${f} hardcodes a color: ${hit?.[0]}`);
@@ -230,11 +231,14 @@ async function main() {
       for (const [toggle, { section, probe }] of Object.entries(optionalContent) as [OptionalSection, { section: string; probe: string }][]) {
         await setSectionVisible(tenant.id, toggle, false);
         const off = await page(`/store/${SLUG}`);
-        assert.ok(!sectionsIn(off).includes(section), `${id}: ${section} still shown when off`);
+        // The Hero switch hides only the hero text: with a hero image the section stays
+        // (image only), so there it's the text that must be gone, not the section.
+        const stays = toggle === "heroText" && !!(c["hero.image"] || c["hero.imageMobile"]);
+        if (!stays) assert.ok(!sectionsIn(off).includes(section), `${id}: ${section} still shown when off`);
         assert.ok(!off.includes(probe), `${id}: ${section} content leaked while off`);
         assert.deepEqual(
           sectionsIn(off),
-          SECTION_ORDER.filter((s) => s !== section),
+          stays ? [...SECTION_ORDER] : SECTION_ORDER.filter((s) => s !== section),
           `${id}: other sections changed when ${section} was switched off`,
         );
         assert.equal(
@@ -301,9 +305,11 @@ async function main() {
       data: { sectionVisibility: { promoBanner: "yes", brandStory: 0, extra: true } },
     });
     const hostile = await page(`/store/${SLUG}`);
+    // The store's own template (whatever it is now), not a position in TEMPLATE_IDS.
+    const current = (await prisma.tenant.findUniqueOrThrow({ where: { id: tenant.id } })).templateId;
     assert.ok(!hostile.includes("display:none") && !hostile.includes("javascript:"), "unvalidated theme value leaked");
     assert.ok(
-      hostile.includes(`--color-primary:${TEMPLATE_META[TEMPLATE_IDS[2]].defaults.primaryColor}`),
+      hostile.includes(`--color-primary:${TEMPLATE_META[normalizeTemplateId(current)].defaults.primaryColor}`),
       "should fall back to template defaults",
     );
     const s = sectionsIn(hostile);

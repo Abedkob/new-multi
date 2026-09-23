@@ -1,9 +1,10 @@
 "use client";
 
 import Link from "next/link";
-import { createContext, useContext, useMemo, useState } from "react";
+import { createContext, useContext, useEffect, useMemo, useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { buttonVariants } from "@/components/ui/button";
+import { useTrack } from "@/lib/analytics";
 import { useCart } from "@/lib/cart/cart";
 import type { ContentMap } from "@/lib/content";
 import { formatPrice } from "@/lib/format";
@@ -85,6 +86,15 @@ export function ProductProvider({
     activeImage,
     setActiveImage,
   };
+
+  // One view_item / ViewContent per product shown (keyed on the id, so moving to another product
+  // page counts again). A no-op in the admin previews, which have no analytics provider.
+  const track = useTrack();
+  const { id, name, priceCents } = product;
+  useEffect(() => {
+    track.viewItem({ id, name, priceCents, quantity: 1 });
+  }, [track, id, name, priceCents]);
+
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }
 
@@ -200,7 +210,7 @@ export function StockStatus({
   className,
 }: {
   /** Server components can't pass functions to client ones, so templates pick a built-in look. */
-  look: "dot" | "boldBadge" | "classicBadge";
+  look: "dot" | "classicBadge";
   className?: string;
 }) {
   const { inStock, label } = useStockStatus();
@@ -215,14 +225,6 @@ export function StockStatus({
           {label}
         </span>
       )}
-      {look === "boldBadge" && (
-        <Badge
-          variant={inStock ? "default" : "outline"}
-          className="h-8 rounded-none px-3 text-sm font-bold uppercase tracking-wider"
-        >
-          {label}
-        </Badge>
-      )}
       {look === "classicBadge" && (
         <Badge variant={inStock ? "secondary" : "outline"}>{label}</Badge>
       )}
@@ -235,13 +237,13 @@ const STYLES = {
     group: "gap-2",
     option: "rounded-full px-4 py-1.5 text-xs tracking-wide",
   },
-  bold: {
-    group: "gap-2",
-    option: "rounded-none border-2 border-foreground px-4 py-2 text-sm font-black uppercase tracking-wider",
-  },
   classic: {
     group: "gap-2",
     option: "rounded-md px-3 py-1.5 text-sm",
+  },
+  atelier: {
+    group: "gap-2",
+    option: "min-w-12 px-4 py-2.5 text-xs uppercase tracking-[0.15em]",
   },
 } as const;
 
@@ -330,23 +332,44 @@ export function VariantPicker({
 
 const ADD_STYLES = {
   minimal: "h-11 w-full rounded-full text-sm tracking-wide",
-  bold: "h-14 w-full rounded-none text-base font-black uppercase tracking-widest",
   classic: "h-11 w-full rounded-md text-base font-semibold",
   tonkic: "h-14 w-full rounded-full text-base font-semibold",
   solid: "h-12 w-full rounded-xl text-sm font-medium",
+  atelier: "h-14 w-full rounded-none text-[11px] font-medium uppercase tracking-[0.25em]",
   default: "",
 } as const;
 
+// The quantity stepper matches each look's button height and corner shape.
+const QTY_STYLES = {
+  minimal: "h-11 rounded-full",
+  classic: "h-11 rounded-md",
+  tonkic: "h-14 rounded-full",
+  solid: "h-12 rounded-xl",
+  atelier: "h-14 rounded-none",
+  default: "h-10 rounded-md",
+} as const;
+
 /**
- * Adds the selected variant to the (in-memory) cart. A product with several variants needs a
- * choice first, and the quantity can never exceed that variant's stock.
+ * Adds the selected variant to the (in-memory) cart, with a quantity stepper beside it. A
+ * product with several variants needs a choice first, and the quantity can never exceed what's
+ * left of that variant's stock after what's already in the cart.
  */
-export function AddToCart({ look, slug, className }: { look: keyof typeof ADD_STYLES; slug: string; className?: string }) {
-  const { variant, complete, content } = useProduct();
+export function AddToCart({ look, basePath, className }: { look: keyof typeof ADD_STYLES; basePath: string; className?: string }) {
+  const { product, variant, complete, content } = useProduct();
   const cart = useCart();
+  const track = useTrack();
   // Remember which variant the message is about, so choosing another option clears it.
   const [noted, setNoted] = useState<{ variantId: string; kind: "added" | "max" } | null>(null);
   const note = variant && noted?.variantId === variant.id ? noted.kind : null;
+  // The chosen quantity belongs to one variant too: switching options starts again at 1.
+  const [qty, setQty] = useState<{ variantId: string | null; n: number }>({ variantId: null, n: 1 });
+
+  // How many more of this variant can go in the cart (at least 1 while it's in stock, so the
+  // stepper stays usable and the add itself reports "all stock is in your cart").
+  const room = variant ? Math.max(1, variant.stock - cart.quantityOf(variant.id)) : 1;
+  const n = Math.min(qty.variantId === variant?.id ? qty.n : 1, room);
+  const setN = (next: number) =>
+    setQty({ variantId: variant?.id ?? null, n: Math.min(room, Math.max(1, Math.floor(next) || 1)) });
 
   const label = !complete
     ? content["product.selectOptions"]
@@ -358,23 +381,78 @@ export function AddToCart({ look, slug, className }: { look: keyof typeof ADD_ST
   const disabled = !variant || variant.stock === 0;
 
   return (
-    <div className="grid gap-2" data-testid="add-to-cart">
-      <button
-        type="button"
-        disabled={disabled}
-        data-testid="add-to-cart-button"
-        onClick={() => {
-          if (!variant) return;
-          setNoted({ variantId: variant.id, kind: cart.add(variant.id, 1, variant.stock) > 0 ? "added" : "max" });
-        }}
-        className={cn(buttonVariants({ size: "lg" }), ADD_STYLES[look], className)}
-      >
-        {label}
-      </button>
+    <div className="grid min-w-0 gap-2" data-testid="add-to-cart">
+      <div className="flex items-stretch gap-3">
+        <div
+          role="group"
+          aria-label={content["product.quantity"]}
+          data-testid="quantity"
+          className={cn(
+            "flex shrink-0 items-center border border-border bg-background text-foreground",
+            QTY_STYLES[look],
+            disabled && "opacity-50",
+          )}
+        >
+          <button
+            type="button"
+            aria-label={`${content["product.quantity"]} −1`}
+            disabled={disabled || n <= 1}
+            onClick={() => setN(n - 1)}
+            data-testid="quantity-decrease"
+            className="grid h-full w-10 place-items-center text-lg disabled:opacity-40"
+          >
+            &minus;
+          </button>
+          <input
+            type="text"
+            inputMode="numeric"
+            pattern="[0-9]*"
+            aria-label={content["product.quantity"]}
+            value={n}
+            disabled={disabled}
+            onChange={(e) => setN(Number(e.target.value.replace(/\D/g, "")))}
+            data-testid="quantity-input"
+            className="h-full w-10 bg-transparent text-center text-sm tabular-nums outline-none"
+          />
+          <button
+            type="button"
+            aria-label={`${content["product.quantity"]} +1`}
+            disabled={disabled || n >= room}
+            onClick={() => setN(n + 1)}
+            data-testid="quantity-increase"
+            className="grid h-full w-10 place-items-center text-lg disabled:opacity-40"
+          >
+            +
+          </button>
+        </div>
+        <button
+          type="button"
+          disabled={disabled}
+          data-testid="add-to-cart-button"
+          onClick={() => {
+            if (!variant) return;
+            const added = cart.add(variant.id, n, variant.stock);
+            setNoted({ variantId: variant.id, kind: added > 0 ? "added" : "max" });
+            setQty({ variantId: variant.id, n: 1 });
+            if (added > 0) {
+              track.addToCart({
+                id: variant.id,
+                name: product.name,
+                ...(product.variants.length > 1 ? { variant: variant.label } : {}),
+                priceCents: variant.priceCents,
+                quantity: added,
+              });
+            }
+          }}
+          className={cn(buttonVariants({ size: "lg" }), ADD_STYLES[look], "min-w-0 flex-1", className)}
+        >
+          {label}
+        </button>
+      </div>
       {note && (
         <p role="status" className="text-sm text-muted-foreground" data-testid="add-to-cart-note">
           {note === "added" ? content["product.added"] : content["product.maxInCart"]}{" "}
-          <Link href={`/store/${slug}/cart`} className="font-medium text-foreground underline underline-offset-4">
+          <Link href={`${basePath}/cart`} className="font-medium text-foreground underline underline-offset-4">
             {content["product.viewCart"]}
           </Link>
         </p>

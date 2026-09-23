@@ -7,6 +7,7 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { getPlatformStats } from "@/lib/data/tenants";
+import { cn } from "@/lib/utils";
 
 export default async function PlatformHome() {
   const { stores, products } = await getPlatformStats();
@@ -28,12 +29,12 @@ export default async function PlatformHome() {
         </Card>
       </div>
       <div className="flex gap-3">
-        <Link href="/platform/stores/new" className={buttonVariants()}>
+        <Link href="/platform/stores/new" className={cn(buttonVariants())}>
           Create a store
         </Link>
         <Link
           href="/platform/stores"
-          className={buttonVariants({ variant: "outline" })}
+          className={cn(buttonVariants({ variant: "outline" }))}
         >
           View all stores
         </Link>

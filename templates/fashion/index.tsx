@@ -5,8 +5,8 @@ import type { ContentMap } from "@/lib/content";
 import { fillTokens } from "@/lib/content";
 import { cn } from "@/lib/utils";
 import { MotionDiv, MotionH1, MotionH2, MotionLi, MotionP, MotionSection, MotionUl } from "../motion";
-import { Picture, StoreBrand, cardPrice, productHref, sectionHref } from "../shared";
-import { CartLink, SearchBox, CategoryMenu } from "../nav-client";
+import { Picture, StoreBrand, StoreMenuButton, cardPrice, productHref, sectionHref, shopHref, storeHref } from "../shared";
+import { CartLink, SearchBox } from "../nav-client";
 import { ProductGallery, ProductImage, ProductPrice, ProductProvider, StockStatus, VariantPicker, AddToCart } from "../product-client";
 import type {
   SectionComponent,
@@ -34,7 +34,9 @@ const stagger: Variants = {
   hidden: {},
   visible: { transition: { staggerChildren: 0.1, delayChildren: 0.1 } },
 };
-const viewport = { once: true, amount: 0.2 } as const;
+// A tiny threshold: a long product grid on a phone can be several screens tall, so "25% in
+// view" would never be reached and the grid would stay invisible until scrolled far enough.
+const viewport = { once: true, amount: 0.05 } as const;
 
 const Announcement: SectionComponent = ({ data }) => (
   <div className="bg-primary px-6 py-2.5 text-center text-xs font-medium tracking-wide text-primary-foreground">
@@ -42,15 +44,17 @@ const Announcement: SectionComponent = ({ data }) => (
   </div>
 );
 
-const Navbar: SectionComponent = ({ data: { store, content, categoryTiles, pages } }) => (
-  <header className="sticky top-0 z-40 w-full bg-background border-b border-white">
+const Navbar: SectionComponent = ({ data }) => {
+  const { store, content, categoryTiles, pages } = data;
+  return (
+  <header className="w-full border-b border-border bg-background">
     <div className={cn(wrap, "flex items-center justify-between py-5")}>
       <div className="flex-1 md:hidden">
-        <CategoryMenu categories={categoryTiles} />
+        <StoreMenuButton data={data} className="-ml-2" />
       </div>
       <nav className="hidden flex-1 items-center gap-8 md:flex">
-        <CategoryMenu categories={categoryTiles} />
-        <Link href={`/store/${store.slug}/shop`} className="text-sm font-medium hover:text-primary">
+        <StoreMenuButton data={data} className="-ml-2" />
+        <Link href={shopHref(store)} className="text-sm font-medium hover:text-primary">
           {content["navbar.shopLabel"]}
         </Link>
         {categoryTiles.slice(0, 2).map((c) => (
@@ -65,18 +69,19 @@ const Navbar: SectionComponent = ({ data: { store, content, categoryTiles, pages
         ))}
       </nav>
       
-      <div className="flex-1 text-center md:flex-none">
+      <div className="min-w-0 flex-1 text-center md:flex-none">
         <StoreBrand
           store={store}
           content={content}
-          className="text-2xl font-serif tracking-tight"
-          logoClassName="h-8 mx-auto"
+          className="block truncate font-serif text-lg tracking-tight md:text-2xl"
+          logoClassName="mx-auto h-7 md:h-8"
         />
       </div>
 
       <div className="flex flex-1 items-center justify-end gap-6">
         <SearchBox
           slug={store.slug}
+          basePath={store.basePath}
           placeholder={content["search.placeholder"]}
           buttonLabel={content["search.button"]}
           className="hidden md:flex"
@@ -84,13 +89,14 @@ const Navbar: SectionComponent = ({ data: { store, content, categoryTiles, pages
           buttonClassName="sr-only"
         />
         <CartLink
-          slug={store.slug}
+          basePath={store.basePath}
           className="text-sm font-medium hover:text-primary"
         />
       </div>
     </div>
   </header>
-);
+  );
+};
 
 const Hero: SectionComponent = ({ data: { store, content, visibility } }) => {
   const hasImage = Boolean(content["hero.image"] || content["hero.imageMobile"]);
@@ -120,7 +126,9 @@ const Hero: SectionComponent = ({ data: { store, content, visibility } }) => {
               />
             )}
             {/* Dynamic Multi-stop Gradient Overlay for Superior Text Contrast */}
-            <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/40 to-transparent sm:bg-gradient-to-t sm:from-black/80 sm:via-black/30 sm:to-transparent" />
+            {/* Scrim in the theme text colour, so the text on it (theme background colour) stays
+                readable with any palette: a light theme gets the classic dark scrim + white text. */}
+            <div className="absolute inset-0 bg-gradient-to-t from-foreground/85 via-foreground/35 to-transparent" />
           </div>
         )}
 
@@ -131,12 +139,12 @@ const Hero: SectionComponent = ({ data: { store, content, visibility } }) => {
               initial="hidden"
               animate="visible"
               variants={stagger}
-              className="max-w-2xl text-white"
+              className={cn("max-w-2xl", hasImage ? "text-background" : "text-foreground")}
             >
               {/* Headline */}
               <MotionH1
                 variants={fadeUp}
-                className="text-3xl font-semibold tracking-tight text-white drop-shadow-sm sm:text-5xl lg:text-6xl xl:text-7xl leading-[1.1]"
+                className="text-3xl font-semibold tracking-tight drop-shadow-sm sm:text-5xl lg:text-6xl xl:text-7xl leading-[1.1]"
               >
                 {content["hero.headline"]}
               </MotionH1>
@@ -145,7 +153,7 @@ const Hero: SectionComponent = ({ data: { store, content, visibility } }) => {
               {content["hero.subtext"] && (
                 <MotionP
                   variants={fadeUp}
-                  className="mt-4 sm:mt-6 text-base sm:text-lg lg:text-xl text-white/85 max-w-xl leading-relaxed font-normal"
+                  className="mt-4 sm:mt-6 text-base sm:text-lg lg:text-xl opacity-85 max-w-xl leading-relaxed font-normal"
                 >
                   {content["hero.subtext"]}
                 </MotionP>
@@ -162,8 +170,11 @@ const Hero: SectionComponent = ({ data: { store, content, visibility } }) => {
                     className={cn(
                       solidCta,
                       "w-full sm:w-auto inline-flex items-center justify-center text-center px-8 py-4 rounded-full font-medium text-base",
-                      "bg-white text-zinc-900 hover:bg-zinc-100 active:scale-95 transition-all duration-200 shadow-lg hover:shadow-xl",
-                      "focus:outline-none focus:ring-2 focus:ring-white focus:ring-offset-2 focus:ring-offset-zinc-900"
+                      hasImage
+                        ? "bg-background text-foreground hover:bg-background/90"
+                        : "bg-primary text-primary-foreground hover:bg-primary/90",
+                      "active:scale-95 transition-all duration-200 shadow-lg hover:shadow-xl",
+                      "focus:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
                     )}
                   >
                     <span>{content["hero.ctaLabel"]}</span>
@@ -250,7 +261,7 @@ const NewArrivals: SectionComponent = ({ data: { store, content, newArrivals } }
         whileInView="visible"
         viewport={viewport}
         variants={stagger}
-        className="grid gap-x-8 gap-y-12 sm:grid-cols-2 lg:grid-cols-4"
+        className="grid grid-cols-2 gap-x-4 gap-y-10 sm:gap-x-8 sm:gap-y-12 lg:grid-cols-4"
       >
         {newArrivals.map((p) => (
           <ProductCard key={p.id} store={store} product={p} content={content} />
@@ -272,7 +283,7 @@ const BestSellers: SectionComponent = ({ data: { store, content, bestSellers } }
           whileInView="visible"
           viewport={viewport}
           variants={stagger}
-          className="grid gap-x-6 gap-y-12 grid-cols-2 lg:grid-cols-4"
+          className="grid grid-cols-2 gap-x-4 gap-y-10 sm:gap-x-6 sm:gap-y-12 lg:grid-cols-4"
         >
           {bestSellers.map((p) => (
             <ProductCard key={p.id} store={store} product={p} content={content} />
@@ -410,14 +421,14 @@ const Instagram: SectionComponent = ({ data: { store, content, instagram } }) =>
 );
 
 const Footer: SectionComponent = ({ data: { store, content, pages } }) => (
-  <footer className="bg-zinc-950 text-zinc-400">
+  <footer className="bg-foreground text-background/70">
     <div className={cn(wrap, "py-20")}>
       <div className="grid gap-12 md:grid-cols-2 lg:grid-cols-4">
         <div className="lg:col-span-2">
           <StoreBrand
             store={store}
             content={content}
-            className="text-3xl font-serif text-white tracking-tight"
+            className="text-3xl font-serif text-background tracking-tight"
             logoClassName="h-10"
           />
           <p className="mt-6 max-w-sm whitespace-pre-line text-sm leading-relaxed">
@@ -426,11 +437,13 @@ const Footer: SectionComponent = ({ data: { store, content, pages } }) => (
         </div>
         {pages.length > 0 && (
           <div>
-            <h3 className="mb-6 text-sm font-semibold uppercase tracking-wider text-white">Quick Links</h3>
+            <h3 className="mb-6 text-sm font-semibold uppercase tracking-wider text-background">
+              {content["footer.linksHeading"]}
+            </h3>
             <ul className="space-y-4">
               {pages.map((pg) => (
                 <li key={pg.slug}>
-                  <Link href={pg.href} className="text-sm hover:text-white transition-colors">
+                  <Link href={pg.href} className="text-sm hover:text-background transition-colors">
                     {pg.label}
                   </Link>
                 </li>
@@ -439,7 +452,7 @@ const Footer: SectionComponent = ({ data: { store, content, pages } }) => (
           </div>
         )}
       </div>
-      <div className="mt-20 flex flex-col items-center justify-between border-t border-zinc-800 pt-8 sm:flex-row">
+      <div className="mt-20 flex flex-col items-center justify-between border-t border-background/15 pt-8 sm:flex-row">
         <p className="text-sm">{fillTokens(content["footer.copyright"], store)}</p>
       </div>
       <div className="mt-10 overflow-hidden opacity-5 pointer-events-none select-none">
@@ -455,7 +468,7 @@ const ProductPage: Template["ProductPage"] = ({ data, product, related }) => {
     <ProductProvider product={product} content={content}>
       <div className={cn(wrap, "py-12")}>
         <Link
-          href={`/store/${store.slug}`}
+          href={storeHref(store)}
           className="text-sm font-medium text-muted-foreground hover:text-primary transition-colors"
         >
           &larr; {content["product.back"]}
@@ -481,7 +494,7 @@ const ProductPage: Template["ProductPage"] = ({ data, product, related }) => {
             </div>
             <StockStatus look="dot" className="mt-6 block" />
             <div className="mt-8">
-              <AddToCart look="solid" slug={store.slug} />
+              <AddToCart look="solid" basePath={store.basePath} />
             </div>
             {product.description && (
               <div className="mt-12">
@@ -502,7 +515,7 @@ const ProductPage: Template["ProductPage"] = ({ data, product, related }) => {
               whileInView="visible"
               viewport={viewport}
               variants={stagger}
-              className="grid gap-6 sm:grid-cols-2 lg:grid-cols-4"
+              className="grid grid-cols-2 gap-4 sm:gap-6 lg:grid-cols-3 xl:grid-cols-4"
             >
               {related.map((p) => (
                 <ProductCard key={p.id} store={store} product={p} content={content} />
@@ -521,7 +534,7 @@ const ProductGrid: Template["ProductGrid"] = ({ data, products }) => (
     whileInView="visible"
     viewport={viewport}
     variants={stagger}
-    className="grid gap-6 sm:grid-cols-2 lg:grid-cols-4"
+    className="grid grid-cols-2 gap-4 sm:gap-6 lg:grid-cols-4"
   >
     {products.map((p) => (
       <ProductCard key={p.id} store={data.store} product={p} content={data.content} />
@@ -531,6 +544,7 @@ const ProductGrid: Template["ProductGrid"] = ({ data, products }) => (
 
 const pageStyle: Template["pageStyle"] = {
   container: "mx-auto max-w-4xl px-6 py-20",
+  catalogContainer: "mx-auto max-w-7xl px-6 py-20",
   title: "text-4xl font-semibold tracking-tight",
   subtitle: "text-base text-muted-foreground",
   chip: "rounded-full border border-border px-5 py-2 text-sm font-medium hover:bg-secondary transition-colors",
@@ -539,6 +553,7 @@ const pageStyle: Template["pageStyle"] = {
 
 export const fashionTemplate: Template = {
   ProductGrid,
+  filterLayout: "sidebar",
   pageStyle,
   Announcement,
   Navbar,

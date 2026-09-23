@@ -10,4 +10,6 @@ export type AppClaims = {
   role: Role;
   tenantId: string | null;
   mustChangePassword: boolean;
+  /** User.sessionVersion at login; absent on tokens issued before the column existed (= 0). */
+  sessionVersion?: number;
 };

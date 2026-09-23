@@ -1,8 +1,13 @@
-import { withTenant } from "@/lib/prisma";
+import { withTenant, type TxClient } from "@/lib/prisma";
 import { resolveContent } from "@/lib/content";
 
+/** Runs on a transaction the caller already opened (see loadStorefrontData). */
+export function contentRowsQuery(db: TxClient, tenantId: string) {
+  return db.tenantContent.findMany({ where: { tenantId } });
+}
+
 export function listContentRows(tenantId: string) {
-  return withTenant(tenantId, (db) => db.tenantContent.findMany({ where: { tenantId } }));
+  return withTenant(tenantId, (db) => contentRowsQuery(db, tenantId));
 }
 
 export async function getContentMap(tenantId: string) {

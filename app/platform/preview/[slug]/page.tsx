@@ -12,6 +12,7 @@ import { getTenantBySlug } from "@/lib/data/tenants";
 import { requirePlatformAdmin } from "@/lib/session";
 import { buildStorefrontData } from "@/lib/storefront-data";
 import { toStoreProduct } from "@/lib/store-product";
+import { parseThemeFonts } from "@/lib/fonts";
 import { parseThemeOverrides, resolveTheme } from "@/lib/theme";
 import { getTemplate } from "@/templates";
 import { TEMPLATE_META, isTemplateId, normalizeTemplateId } from "@/templates/meta";
@@ -51,7 +52,9 @@ export default async function StorePreviewPage({
     listCategoryProductImages(tenant.id),
   ]);
   const data = buildStorefrontData({
-    store: { name: tenant.name, slug: tenant.slug },
+    // Always path-based, regardless of tenant.domain: this preview only ever renders inside the
+    // platform admin's own preview iframe, never on the store's real domain.
+    store: { name: tenant.name, slug: tenant.slug, basePath: `/store/${tenant.slug}` },
     content,
     sectionVisibility: tenant.sectionVisibility,
     newArrivals: newArrivals.map(toStoreProduct),
@@ -72,7 +75,7 @@ export default async function StorePreviewPage({
   );
 
   return (
-    <ThemeScope colors={colors} className="min-h-screen">
+    <ThemeScope colors={colors} fonts={parseThemeFonts(tenant.themeOverrides)} className="min-h-screen">
       <PreviewBridge />
       <StorefrontShell template={template} data={data}>
         {view === "product" && product ? (

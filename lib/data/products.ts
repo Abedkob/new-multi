@@ -1,3 +1,5 @@
+import { Prisma } from "@/generated/prisma/client";
+import { NO_FILTERS, type AttributeFacet, type CatalogFilters } from "@/lib/catalog-filters";
 import { withTenant, type TxClient } from "@/lib/prisma";
 import { slugCandidate, slugify } from "@/lib/slug";
 import { isUniqueViolation } from "@/lib/data/tenants";
@@ -69,6 +71,36 @@ export function listProducts(tenantId: string) {
   );
 }
 
+export const ADMIN_PAGE_SIZE = 25;
+
+/** The owner's product list, one page at a time (a big catalog can't all load at once). */
+export function listProductsPage(tenantId: string, requestedPage: number, search = "") {
+  const q = search.trim().slice(0, 100);
+  const where = { tenantId, ...(q ? { name: { contains: q, mode: "insensitive" as const } } : {}) };
+  return withTenant(tenantId, async (db) => {
+    const total = await db.product.count({ where });
+    const pages = Math.max(1, Math.ceil(total / ADMIN_PAGE_SIZE));
+    const page = Math.min(Math.max(1, Math.floor(requestedPage) || 1), pages);
+    const items = await db.product.findMany({
+      where,
+      orderBy: [{ createdAt: "desc" }, { id: "asc" }],
+      skip: (page - 1) * ADMIN_PAGE_SIZE,
+      take: ADMIN_PAGE_SIZE,
+      include: { ...withVariants, category: { select: { name: true } } },
+    });
+    return { items, total, page, pages };
+  });
+}
+
+// Runs on a transaction the caller already opened (see lib/sitemap.ts).
+/** Lean projection for the sitemap: just enough to build a URL and a lastmod date. */
+export function productSitemapQuery(db: TxClient, tenantId: string) {
+  return db.product.findMany({
+    where: { tenantId },
+    select: { slug: true, updatedAt: true },
+  });
+}
+
 export function getProduct(tenantId: string, id: string) {
   return withTenant(tenantId, (db) =>
     db.product.findFirst({ where: { id, tenantId }, include: withVariants }),
@@ -83,24 +115,27 @@ export function countProducts(tenantId: string) {
 export async function createProduct(tenantId: string, input: ProductInput) {
   assertVariants(input.variants);
 
-  return withTenant(tenantId, async (db) => {
-    await assertCategory(db, tenantId, input.categoryId);
+  const base = slugify(input.name);
+  // The retry loop is OUTSIDE the transaction on purpose: once Postgres raises the unique
+  // violation (a concurrent create took the same slug), the transaction is aborted and every
+  // further statement in it fails, so each attempt needs a fresh transaction.
+  for (let attempt = 0; attempt < 5; attempt++) {
+    try {
+      return await withTenant(tenantId, async (db) => {
+        await assertCategory(db, tenantId, input.categoryId);
 
-    const base = slugify(input.name);
-    for (let attempt = 0; attempt < 5; attempt++) {
-      const taken = new Set(
-        (
-          await db.product.findMany({
-            where: { tenantId, slug: { startsWith: base } },
-            select: { slug: true },
-          })
-        ).map((p) => p.slug),
-      );
-      let n = 1;
-      while (taken.has(slugCandidate(base, n))) n++;
-      try {
+        const taken = new Set(
+          (
+            await db.product.findMany({
+              where: { tenantId, slug: { startsWith: base } },
+              select: { slug: true },
+            })
+          ).map((p) => p.slug),
+        );
+        let n = 1;
+        while (taken.has(slugCandidate(base, n))) n++;
         // One statement: the product and its variants are created together or not at all.
-        return await db.product.create({
+        return db.product.create({
           data: {
             tenantId,
             slug: slugCandidate(base, n),
@@ -129,12 +164,12 @@ export async function createProduct(tenantId: string, input: ProductInput) {
           },
           include: withVariants,
         });
-      } catch (e) {
-        if (!isUniqueViolation(e)) throw e;
-      }
+      });
+    } catch (e) {
+      if (!isUniqueViolation(e)) throw e;
     }
-    throw new ProductError("Could not allocate a unique product URL, please retry.");
-  });
+  }
+  throw new ProductError("Could not allocate a unique product URL, please retry.");
 }
 
 /**
@@ -233,28 +268,34 @@ export function getProductBySlug(tenantId: string, slug: string) {
   );
 }
 
+// Runs on a transaction the caller already opened (see loadStorefrontData).
+export function newArrivalsQuery(db: TxClient, tenantId: string, take = 8) {
+  return db.product.findMany({
+    where: { tenantId },
+    orderBy: { createdAt: "desc" },
+    take,
+    include: withVariants,
+  });
+}
+
 /** "New arrivals": the most recently created products. */
 export function listNewArrivals(tenantId: string, take = 8) {
-  return withTenant(tenantId, (db) =>
-    db.product.findMany({
-      where: { tenantId },
-      orderBy: { createdAt: "desc" },
-      take,
-      include: withVariants,
-    }),
-  );
+  return withTenant(tenantId, (db) => newArrivalsQuery(db, tenantId, take));
+}
+
+// Runs on a transaction the caller already opened (see loadStorefrontData).
+export function bestSellersQuery(db: TxClient, tenantId: string, take = 8) {
+  return db.product.findMany({
+    where: { tenantId, isBestSeller: true },
+    orderBy: { createdAt: "desc" },
+    take,
+    include: withVariants,
+  });
 }
 
 /** "Best sellers": products the owner flagged (no sales data yet). */
 export function listBestSellers(tenantId: string, take = 8) {
-  return withTenant(tenantId, (db) =>
-    db.product.findMany({
-      where: { tenantId, isBestSeller: true },
-      orderBy: { createdAt: "desc" },
-      take,
-      include: withVariants,
-    }),
-  );
+  return withTenant(tenantId, (db) => bestSellersQuery(db, tenantId, take));
 }
 
 export function listRelatedProducts(tenantId: string, excludeId: string, take = 4) {
@@ -270,41 +311,136 @@ export function listRelatedProducts(tenantId: string, excludeId: string, take = 
 
 export const CATALOG_PAGE_SIZE = 12;
 
+type CatalogScope = { categoryIds?: string[]; q?: string };
+
+const escapeLike = (s: string) => s.replace(/[\\%_]/g, (c) => `\\${c}`);
+
+// A variant's attributes, as a jsonb object even if a stored value is somehow not one
+// (jsonb_each_text raises on anything else).
+const ATTRS = Prisma.sql`jsonb_each_text(CASE WHEN jsonb_typeof(v."attributes") = 'object' THEN v."attributes" ELSE '{}'::jsonb END)`;
+
+/** WHERE conditions on product `p` for the page's own scope: this store, category tree, search. */
+function scopeConditions(tenantId: string, scope: CatalogScope): Prisma.Sql[] {
+  const conds = [Prisma.sql`p."tenantId" = ${tenantId}`];
+  if (scope.categoryIds) {
+    conds.push(
+      scope.categoryIds.length
+        ? Prisma.sql`p."categoryId" IN (${Prisma.join(scope.categoryIds)})`
+        : Prisma.sql`FALSE`,
+    );
+  }
+  const q = scope.q?.trim().slice(0, 100);
+  if (q) {
+    const like = `%${escapeLike(q)}%`;
+    conds.push(Prisma.sql`(p."name" ILIKE ${like} OR p."description" ILIKE ${like})`);
+  }
+  return conds;
+}
+
 /**
  * The shop, category and search pages. `categoryIds` is the category plus everything below it
  * (callers compute that from the store's own category list), `q` is a case-insensitive
- * "contains" match on name or description.
+ * "contains" match on name or description, `filters` come from the URL (lib/catalog-filters.ts).
+ *
+ * Raw SQL for the filtering and ordering, because price means each product's LOWEST variant
+ * price (an override, else the base price: what the card shows as "From ..."), which Prisma's
+ * query builder can't sort on. Stock and attribute filters must hold for ONE variant together:
+ * "size 40, black, in stock" needs a variant that is all three, not three different variants.
+ * The page of ids is then loaded through Prisma as usual.
  */
 export async function listCatalog(
   tenantId: string,
-  opts: { categoryIds?: string[]; q?: string; page?: number; pageSize?: number },
+  opts: CatalogScope & { page?: number; pageSize?: number; filters?: CatalogFilters },
 ) {
   const pageSize = opts.pageSize ?? CATALOG_PAGE_SIZE;
-  const q = opts.q?.trim().slice(0, 100);
-  const where = {
-    tenantId,
-    ...(opts.categoryIds ? { categoryId: { in: opts.categoryIds } } : {}),
-    ...(q
-      ? {
-          OR: [
-            { name: { contains: q, mode: "insensitive" as const } },
-            { description: { contains: q, mode: "insensitive" as const } },
-          ],
-        }
-      : {}),
-  };
+  const f = opts.filters ?? NO_FILTERS;
+
+  const conds = scopeConditions(tenantId, opts);
+  const variantConds: Prisma.Sql[] = [];
+  if (f.inStock) variantConds.push(Prisma.sql`v."stock" > 0`);
+  for (const [key, values] of Object.entries(f.attrs)) {
+    variantConds.push(Prisma.sql`EXISTS (
+      SELECT 1 FROM ${ATTRS} e
+      WHERE lower(trim(e.key)) = ${key} AND lower(trim(e.value)) IN (${Prisma.join(values)}))`);
+  }
+  if (variantConds.length) {
+    conds.push(Prisma.sql`EXISTS (
+      SELECT 1 FROM "ProductVariant" v
+      WHERE v."productId" = p."id" AND ${Prisma.join(variantConds, " AND ")})`);
+  }
+  if (f.minCents !== null) conds.push(Prisma.sql`mp.price >= ${f.minCents}`);
+  if (f.maxCents !== null) conds.push(Prisma.sql`mp.price <= ${f.maxCents}`);
+
+  const from = Prisma.sql`
+    FROM "Product" p
+    CROSS JOIN LATERAL (
+      SELECT COALESCE(MIN(COALESCE(v."priceCentsOverride", p."basePriceCents")), p."basePriceCents") AS price
+      FROM "ProductVariant" v WHERE v."productId" = p."id"
+    ) mp
+    WHERE ${Prisma.join(conds, " AND ")}`;
+
+  const orderBy = {
+    newest: Prisma.sql`p."createdAt" DESC, p."id" ASC`,
+    "price-asc": Prisma.sql`mp.price ASC, p."createdAt" DESC, p."id" ASC`,
+    "price-desc": Prisma.sql`mp.price DESC, p."createdAt" DESC, p."id" ASC`,
+    name: Prisma.sql`lower(p."name") ASC, p."id" ASC`,
+  }[f.sort];
+
   return withTenant(tenantId, async (db) => {
-    const total = await db.product.count({ where });
+    const [{ total }] = await db.$queryRaw<{ total: number }[]>`SELECT count(*)::int AS total ${from}`;
     const pages = Math.max(1, Math.ceil(total / pageSize));
     const page = Math.min(Math.max(1, Math.floor(opts.page ?? 1)), pages);
-    const items = await db.product.findMany({
-      where,
-      orderBy: [{ createdAt: "desc" }, { id: "asc" }],
-      skip: (page - 1) * pageSize,
-      take: pageSize,
-      include: withVariants,
-    });
+    const ids = (
+      await db.$queryRaw<{ id: string }[]>`
+        SELECT p."id" ${from} ORDER BY ${orderBy}
+        LIMIT ${pageSize} OFFSET ${(page - 1) * pageSize}`
+    ).map((r) => r.id);
+    const rows = ids.length
+      ? await db.product.findMany({ where: { tenantId, id: { in: ids } }, include: withVariants })
+      : [];
+    const byId = new Map(rows.map((r) => [r.id, r]));
+    const items = ids.flatMap((id) => byId.get(id) ?? []);
     return { items, total, page, pages, pageSize };
+  });
+}
+
+// Clothing sizes in their natural order; anything else sorts numerically, then alphabetically.
+const SIZE_ORDER = ["xxs", "xs", "s", "m", "l", "xl", "xxl", "2xl", "xxxl", "3xl", "4xl"];
+function compareValues(a: string, b: string) {
+  const [ia, ib] = [SIZE_ORDER.indexOf(a), SIZE_ORDER.indexOf(b)];
+  if (ia !== -1 || ib !== -1) return (ia === -1 ? 99 : ia) - (ib === -1 ? 99 : ib);
+  return a.localeCompare(b, undefined, { numeric: true });
+}
+
+/**
+ * Which attribute options exist among the products in scope (this category tree / search), for
+ * the filter bar: e.g. size 40/41/42, color black/white. Keys and values are grouped
+ * case-insensitively; the label is the stored spelling. Bounded, since a store could have
+ * thousands of variants.
+ */
+export function listAttributeFacets(tenantId: string, scope: CatalogScope) {
+  const conds = scopeConditions(tenantId, scope);
+  return withTenant(tenantId, async (db) => {
+    const rows = await db.$queryRaw<{ k: string; kl: string; v: string; vl: string }[]>`
+      SELECT lower(trim(e.key)) AS k, min(trim(e.key)) AS kl,
+             lower(trim(e.value)) AS v, min(trim(e.value)) AS vl
+      FROM "Product" p
+      JOIN "ProductVariant" v ON v."productId" = p."id"
+      CROSS JOIN LATERAL ${ATTRS} e
+      WHERE ${Prisma.join(conds, " AND ")} AND trim(e.key) <> '' AND trim(e.value) <> ''
+      GROUP BY 1, 3
+      ORDER BY 1, 3
+      LIMIT 400`;
+    const facets = new Map<string, AttributeFacet>();
+    for (const r of rows) {
+      const facet = facets.get(r.k) ?? { key: r.k, label: r.kl, values: [] };
+      facet.values.push({ value: r.v, label: r.vl });
+      facets.set(r.k, facet);
+    }
+    return [...facets.values()].map((facet) => ({
+      ...facet,
+      values: facet.values.sort((a, b) => compareValues(a.value, b.value)).slice(0, 50),
+    }));
   });
 }
 

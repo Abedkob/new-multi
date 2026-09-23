@@ -1,10 +1,32 @@
+import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import type { ContentKey } from "@/lib/content";
 import { loadStorefrontData, loadTenant } from "@/lib/data/storefront";
 import { isPageSlug } from "@/lib/pages";
+import { pageMeta, plainText, storeImage } from "@/lib/seo";
 import { getTemplate } from "@/templates";
 
 export const dynamic = "force-dynamic";
+
+export async function generateMetadata({
+  params,
+}: PageProps<"/store/[slug]/[page]">): Promise<Metadata> {
+  const { slug, page } = await params;
+  if (!isPageSlug(page)) return {};
+  const [tenant, data] = await Promise.all([loadTenant(slug), loadStorefrontData(slug)]);
+  if (!tenant || !data) return {};
+  const body = data.content[`${page}.body` as ContentKey]?.trim() || "";
+  if (!body) return {};
+  return pageMeta({
+    tenant,
+    path: `/${page}`,
+    title: data.content[`${page}.title` as ContentKey],
+    description: plainText(body),
+    // Only some pages have their own image (e.g. about.image); fall back to the store's.
+    images: [data.content[`${page}.image` as ContentKey] || storeImage(data.content)],
+    type: "article",
+  });
+}
 
 /**
  * About / Contact / FAQ / Shipping. A page exists only when its text is non-empty, so an

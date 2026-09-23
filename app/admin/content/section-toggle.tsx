@@ -1,7 +1,5 @@
 "use client";
 
-import { useState, useTransition } from "react";
-import { setSectionVisibilityAction } from "./actions";
 import { Switch } from "@/components/ui/switch";
 import type { OptionalSection } from "@/lib/sections";
 

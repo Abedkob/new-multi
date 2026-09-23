@@ -1,14 +1,31 @@
 "use client";
 
 import Link from "next/link";
-import { useActionState } from "react";
+import { useActionState, useState } from "react";
 import type { CategoryFormState } from "./actions";
 import { Field, FormError } from "@/components/field";
+import { ImageField } from "@/components/image-field";
 import { SubmitButton } from "@/components/submit-button";
 import { buttonVariants } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 
 export type ParentOption = { id: string; label: string; depth: number };
+
+/** Controlled so an upload can fill it; the form's remount-on-error resets it to the echoed value. */
+function CategoryImageField({ defaultValue, errors }: { defaultValue: string; errors?: string[] }) {
+  const [url, setUrl] = useState(defaultValue);
+  return (
+    <div className="grid gap-1.5">
+      <Label htmlFor="imageUrl">Image</Label>
+      <ImageField id="imageUrl" name="imageUrl" value={url} onChange={setUrl} invalid={!!errors?.length} />
+      {errors?.map((e) => (
+        <p key={e} className="text-sm text-destructive">
+          {e}
+        </p>
+      ))}
+    </div>
+  );
+}
 
 export function CategoryForm({
   action,
@@ -34,7 +51,7 @@ export function CategoryForm({
       className="grid max-w-md gap-4"
     >
       <Field label="Name" name="name" defaultValue={v.name} required errors={errors.name} />
-      <Field label="Image URL" name="imageUrl" defaultValue={v.imageUrl || ""} type="url" errors={errors.imageUrl} placeholder="https://..." />
+      <CategoryImageField defaultValue={v.imageUrl || ""} errors={errors.imageUrl} />
       <div className="grid gap-1.5">
         <Label htmlFor="parentId">Parent category</Label>
         <select

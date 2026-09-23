@@ -6,6 +6,7 @@ import { requireOwner } from "@/lib/session";
 import { parseAttributes } from "@/lib/variants";
 import { updateProductAction } from "../../actions";
 import { ProductForm } from "../../product-form";
+import { PageHeader } from "@/components/admin/page-header";
 
 export default async function EditProductPage({
   params,
@@ -25,8 +26,12 @@ export default async function EditProductPage({
   }));
 
   return (
-    <div className="grid gap-6">
-      <h1 className="text-2xl font-semibold">Edit product</h1>
+    <div className="grid">
+      <PageHeader
+        title="Edit product"
+        back={{ href: "/admin/products", label: "Products" }}
+        description="Changes show in your store as soon as you save."
+      />
       <ProductForm
         action={updateProductAction.bind(null, product.id)}
         categories={categories}

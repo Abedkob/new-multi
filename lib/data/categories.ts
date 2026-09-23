@@ -13,14 +13,23 @@ import { slugCandidate, slugify } from "@/lib/slug";
 /** A problem the owner can fix; the message is safe to show. */
 export class CategoryError extends Error {}
 
+// Runs on a transaction the caller already opened (see loadStorefrontData).
+export function categoriesQuery(db: TxClient, tenantId: string) {
+  return db.category.findMany({
+    where: { tenantId },
+    orderBy: { name: "asc" },
+    include: { _count: { select: { products: true } } },
+  });
+}
+
+// Runs on a transaction the caller already opened (see lib/sitemap.ts).
+/** Lean projection for the sitemap: just the slug (categories have no updatedAt). */
+export function categorySitemapQuery(db: TxClient, tenantId: string) {
+  return db.category.findMany({ where: { tenantId }, select: { slug: true } });
+}
+
 export function listCategories(tenantId: string) {
-  return withTenant(tenantId, (db) =>
-    db.category.findMany({
-      where: { tenantId },
-      orderBy: { name: "asc" },
-      include: { _count: { select: { products: true } } },
-    }),
-  );
+  return withTenant(tenantId, (db) => categoriesQuery(db, tenantId));
 }
 
 export function getCategory(tenantId: string, id: string) {
@@ -46,23 +55,25 @@ export async function createCategory(
   tenantId: string,
   input: { name: string; parentId: string | null; imageUrl?: string | null },
 ) {
-  return withTenant(tenantId, async (db) => {
-    await assertParent(db, tenantId, input.parentId);
+  const base = slugify(input.name);
+  // Retry OUTSIDE the transaction: a unique violation aborts the Postgres transaction, so a
+  // retry inside the same one would fail on its first statement.
+  for (let attempt = 0; attempt < 5; attempt++) {
+    try {
+      return await withTenant(tenantId, async (db) => {
+        await assertParent(db, tenantId, input.parentId);
 
-    const base = slugify(input.name);
-    for (let attempt = 0; attempt < 5; attempt++) {
-      const taken = new Set(
-        (
-          await db.category.findMany({
-            where: { tenantId, slug: { startsWith: base } },
-            select: { slug: true },
-          })
-        ).map((c) => c.slug),
-      );
-      let n = 1;
-      while (taken.has(slugCandidate(base, n))) n++;
-      try {
-        return await db.category.create({
+        const taken = new Set(
+          (
+            await db.category.findMany({
+              where: { tenantId, slug: { startsWith: base } },
+              select: { slug: true },
+            })
+          ).map((c) => c.slug),
+        );
+        let n = 1;
+        while (taken.has(slugCandidate(base, n))) n++;
+        return db.category.create({
           data: {
             tenantId,
             name: input.name,
@@ -71,12 +82,12 @@ export async function createCategory(
             slug: slugCandidate(base, n),
           },
         });
-      } catch (e) {
-        if (!isUniqueViolation(e)) throw e;
-      }
+      });
+    } catch (e) {
+      if (!isUniqueViolation(e)) throw e;
     }
-    throw new CategoryError("Could not allocate a unique category URL, please retry.");
-  });
+  }
+  throw new CategoryError("Could not allocate a unique category URL, please retry.");
 }
 
 /** The slug stays the same on rename so storefront links keep working. */
