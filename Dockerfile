@@ -3,7 +3,7 @@
 FROM node:22-alpine AS deps
 WORKDIR /app
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
-RUN npm install -g pnpm && pnpm install --frozen-lockfile
+RUN npm install -g pnpm && pnpm install --frozen-lockfile --ignore-scripts
 
 # Stage 2: Builder
 FROM node:22-alpine AS builder
@@ -12,7 +12,7 @@ COPY --from=deps /app/node_modules ./node_modules
 COPY . .
 
 # Generate Prisma client
-RUN npm install -g pnpm && pnpm run db:generate
+RUN npm install -g pnpm && DATABASE_URL="postgresql://placeholder:placeholder@localhost:5432/placeholder" pnpm run db:generate
 
 # Build Next.js app
 RUN pnpm run build
