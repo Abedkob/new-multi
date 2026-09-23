@@ -80,6 +80,10 @@ const schema = z
       .url("Must be a full origin like https://pub-xxxx.r2.dev")
       .refine((v) => !v.endsWith("/"), "Must not end with a trailing slash")
       .optional(),
+    // Redis connection string for distributed rate limiting and domain cache. Required in
+    // production when running multiple instances. Format: redis://:password@host:port or
+    // redis://host:port (if no auth). Optional in development (falls back to in-memory).
+    REDIS_URL: z.string().url("Must be a redis:// connection string").optional(),
   })
   .refine((v) => v.APP_DATABASE_URL || v.DATABASE_URL, {
     message: "Set APP_DATABASE_URL (preferred for the runtime) or DATABASE_URL",
@@ -100,6 +104,10 @@ const schema = z
   .refine((v) => v.NODE_ENV !== "production" || v.R2_BUCKET, {
     message: "R2_* is required in production (local-disk uploads don't survive a redeploy)",
     path: ["R2_BUCKET"],
+  })
+  .refine((v) => v.NODE_ENV !== "production" || v.REDIS_URL, {
+    message: "REDIS_URL is required in production (rate limiters and domain cache must be shared across instances)",
+    path: ["REDIS_URL"],
   });
 
 function load() {
@@ -115,6 +123,7 @@ function load() {
       PLATFORM_BASE_URL: raw.PLATFORM_BASE_URL || undefined,
       SERVER_PUBLIC_IP: raw.SERVER_PUBLIC_IP || undefined,
       TRUSTED_PROXY_COUNT: Number(raw.TRUSTED_PROXY_COUNT) || 1,
+      REDIS_URL: raw.REDIS_URL || undefined,
       R2_ACCOUNT_ID: raw.R2_ACCOUNT_ID || undefined,
       R2_ACCESS_KEY_ID: raw.R2_ACCESS_KEY_ID || undefined,
       R2_SECRET_ACCESS_KEY: raw.R2_SECRET_ACCESS_KEY || undefined,
@@ -136,6 +145,7 @@ function load() {
         "PLATFORM_BASE_URL",
         "SERVER_PUBLIC_IP",
         "TRUSTED_PROXY_COUNT",
+        "REDIS_URL",
         ...R2_KEYS,
       ] as const
     ).map((k) => [k, process.env[k] === "" ? undefined : process.env[k]]),

@@ -88,7 +88,7 @@ export async function importImageUrlAction(link: string): Promise<UploadImageRes
   }
   if (isOwnImageUrl(link.trim())) return { url: link.trim() };
 
-  const limit = rateLimit(`image-import:${tenantId}`, RATE_LIMITS.imageImport);
+  const limit = await rateLimit(`image-import:${tenantId}`, RATE_LIMITS.imageImport);
   if (!limit.ok) {
     return { error: `Too many imports. Try again in ${retryAfterText(limit.retryAfterMs)}.` };
   }

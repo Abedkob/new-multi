@@ -37,7 +37,7 @@ export async function placeOrderAction(
 
   // One flood of pending orders can tie up a store's stock, so cap orders per source per store.
   const ip = clientIp(await headers());
-  const limit = rateLimit(`checkout:${tenant.id}:${ip}`, RATE_LIMITS.checkout);
+  const limit = await rateLimit(`checkout:${tenant.id}:${ip}`, RATE_LIMITS.checkout);
   if (!limit.ok) {
     return {
       error: `Too many orders from here. Please try again in ${retryAfterText(limit.retryAfterMs)}.`,

@@ -1,16 +1,14 @@
 /**
- * A small in-memory rate limiter (sliding-window log) plus a client-IP helper.
+ * Rate limiter with Redis support for production (distributed across instances) and
+ * in-memory fallback for development.
  *
- * Scope: this counts per Node process, so it protects a SINGLE app instance. It is the right
- * primitive for the current single-instance deployment and stops the obvious abuse (login
- * brute-force, checkout spam, an unbounded public search endpoint). Once the app runs more than
- * one instance, back the same `rateLimit()` interface with a shared store (Redis/Upstash) so the
- * window is counted across instances — callers below won't need to change.
- *
- * Memory is bounded: each key holds at most `limit` timestamps, and stale keys are swept out.
+ * When REDIS_URL is set, rate limits are shared across all app instances. When Redis is
+ * unavailable or REDIS_URL is not set, falls back to in-memory (single-instance only).
+ * Callers don't need to know which backend is active.
  */
 
 import { env } from "@/lib/env";
+import { redisRateLimit } from "@/lib/redis";
 
 type Store = Map<string, number[]>;
 
@@ -41,11 +39,26 @@ export type RateLimitResult = {
 /**
  * Records one hit against `key` and reports whether it is allowed. A key is blocked once it has
  * `limit` hits inside the trailing `windowMs`.
+ *
+ * Uses Redis when available (production); falls back to in-memory when Redis is not configured
+ * or unavailable (development).
  */
-export function rateLimit(
+export async function rateLimit(
   key: string,
   opts: { limit: number; windowMs: number },
-): RateLimitResult {
+): Promise<RateLimitResult> {
+  // Try Redis first (production with distributed rate limiting)
+  if (env.REDIS_URL) {
+    const result = await redisRateLimit(key, opts);
+    return {
+      ok: result.allowed,
+      remaining: result.remaining,
+      limit: opts.limit,
+      retryAfterMs: result.retryAfterMs,
+    };
+  }
+
+  // Fallback to in-memory (development or Redis unavailable)
   const now = Date.now();
   const windowStart = now - opts.windowMs;
 

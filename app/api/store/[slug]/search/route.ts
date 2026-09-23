@@ -9,7 +9,7 @@ export async function GET(req: Request, { params }: { params: Promise<{ slug: st
 
   // Public, unauthenticated endpoint: bound it per source against scraping/abuse.
   const ip = clientIp(req.headers);
-  const limit = rateLimit(`search:${ip}`, RATE_LIMITS.search);
+  const limit = await rateLimit(`search:${ip}`, RATE_LIMITS.search);
   if (!limit.ok) {
     return NextResponse.json([], {
       status: 429,

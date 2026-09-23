@@ -279,7 +279,7 @@ export async function importStoreImageAction(
   if (isOwnImageUrl(link.trim())) return { url: link.trim() };
   const tenant = await getTenantBySlug(slug);
   if (!tenant) return { error: "Store not found." };
-  const limit = rateLimit(`image-import:${tenant.id}`, RATE_LIMITS.imageImport);
+  const limit = await rateLimit(`image-import:${tenant.id}`, RATE_LIMITS.imageImport);
   if (!limit.ok) {
     return { error: `Too many imports. Try again in ${retryAfterText(limit.retryAfterMs)}.` };
   }

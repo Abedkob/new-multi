@@ -1,0 +1,51 @@
+# Git
+.git
+.gitignore
+.gitattributes
+
+# Dependencies
+node_modules
+pnpm-lock.yaml
+
+# Build output
+.next
+dist
+build
+
+# Environment
+.env
+.env.local
+.env.*.local
+
+# IDE
+.vscode
+.idea
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+npm-debug.log
+pnpm-debug.log
+yarn-debug.log
+yarn-error.log
+
+# Testing
+.coverage
+.nyc_output
+
+# Misc
+README.md
+CLAUDE.md
+PRODUCTION.md
+DEPLOYMENT_CHECKLIST.md
+SETUP.md
+KNOWN_GAPS.md
+.prettierrc
+.eslintrc
+tsconfig.json
+jest.config.js
