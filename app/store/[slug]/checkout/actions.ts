@@ -6,6 +6,7 @@ import { OrderError, placeOrder } from "@/lib/data/orders";
 import { getTenantBySlug } from "@/lib/data/tenants";
 import { RATE_LIMITS, clientIp, rateLimit, retryAfterText } from "@/lib/rate-limit";
 import { cartLinesSchema, checkoutSchema } from "@/lib/validation";
+import { canServeTenant } from "@/lib/license/status";
 
 /**
  * Public on purpose (guest checkout). The store comes from the slug; prices come from the
@@ -34,6 +35,7 @@ export async function placeOrderAction(
 ): Promise<PlaceOrderResult> {
   const tenant = typeof slug === "string" ? await getTenantBySlug(slug) : null;
   if (!tenant) return { error: "This store could not be found." };
+  if (!canServeTenant(tenant)) return { error: "This store is temporarily unavailable and cannot accept orders." };
 
   // One flood of pending orders can tie up a store's stock, so cap orders per source per store.
   const ip = clientIp(await headers());

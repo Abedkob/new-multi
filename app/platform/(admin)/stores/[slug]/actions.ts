@@ -9,6 +9,7 @@ import {
   getTenantBySlug,
   isUniqueViolation,
   resetOwnerPassword,
+  setTenantPaused,
   updateTenantDomain,
   updateTenantFavicon,
   updateTenantIntegrations,
@@ -23,6 +24,7 @@ import {
 import { isValidDomainFormat, normalizeHostname, wwwTwin } from "@/lib/domain-format";
 import { env } from "@/lib/env";
 import { generateTempPassword, hashPassword } from "@/lib/passwords";
+import { activateTenantLicense } from "@/lib/license/service";
 import { RATE_LIMITS, rateLimit, retryAfterText } from "@/lib/rate-limit";
 import { requirePlatformAdmin } from "@/lib/session";
 import { importImageFromUrl, isOwnImageUrl, storeImage } from "@/lib/storage";
@@ -40,6 +42,61 @@ import {
 function revalidateStore(slug: string) {
   revalidatePath(`/platform/stores/${slug}`, "layout");
   revalidatePath("/platform/stores");
+}
+
+export async function setStorePausedAction(
+  slug: string,
+  _prev: FormState,
+  formData: FormData,
+): Promise<FormState> {
+  await requirePlatformAdmin();
+  const tenant = await getTenantBySlug(slug);
+  if (!tenant) return { error: "Store not found." };
+  if (tenant.isPaused) return { error: "This store is already paused." };
+
+  const reason = String(formData.get("reason") ?? "").trim();
+  if (reason.length < 3 || reason.length > 500) {
+    return { fieldErrors: { reason: ["Enter a reason between 3 and 500 characters."] } };
+  }
+  await setTenantPaused(tenant.id, reason);
+  revalidateStore(slug);
+  revalidatePath(`/store/${slug}`, "layout");
+  return { ok: true };
+}
+
+export async function resumeStoreAction(
+  slug: string,
+  _prev: FormState,
+  _formData: FormData,
+): Promise<FormState> {
+  await requirePlatformAdmin();
+  const tenant = await getTenantBySlug(slug);
+  if (!tenant) return { error: "Store not found." };
+  if (!tenant.isPaused) return { error: "This store is already active." };
+  await setTenantPaused(tenant.id, null);
+  revalidateStore(slug);
+  revalidatePath(`/store/${slug}`, "layout");
+  return { ok: true };
+}
+
+export async function activateStoreLicenseAction(
+  slug: string,
+  _prev: FormState,
+  formData: FormData,
+): Promise<FormState> {
+  await requirePlatformAdmin();
+  const parsed = z.object({
+    licenseKey: z.string().trim().min(10).max(500),
+  }).safeParse({ licenseKey: formData.get("licenseKey") });
+  if (!parsed.success) {
+    return { fieldErrors: { licenseKey: ["Enter a valid license key."] } };
+  }
+
+  const tenant = await getTenantBySlug(slug);
+  if (!tenant) return { error: "Store not found." };
+  const result = await activateTenantLicense(tenant.id, parsed.data.licenseKey);
+  revalidateStore(slug);
+  return result.ok ? { ok: true } : { error: result.message };
 }
 
 export async function updateStoreAction(

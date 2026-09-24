@@ -12,6 +12,8 @@ import { cn } from "@/lib/utils";
 import { loadStore, setupStatus } from "./load";
 import { ResetPasswordButton } from "./reset-password-button";
 import { UpdateStoreForm } from "./update-store-form";
+import { StorePauseControl } from "./store-pause-control";
+import { StoreLicenseControl } from "./store-license-control";
 
 export default async function StoreOverviewPage({
   params,
@@ -74,6 +76,37 @@ export default async function StoreOverviewPage({
         </CardHeader>
         <CardContent className="grid gap-4">
           <UpdateStoreForm slug={tenant.slug} initialName={tenant.name} />
+        </CardContent>
+      </Card>
+
+      <Card className={tenant.isPaused ? "border-destructive/50" : undefined}>
+        <CardHeader>
+          <CardTitle>Store availability</CardTitle>
+          <CardDescription>
+            Pausing stops the public storefront and checkout. The owner can still sign in to manage
+            the store, and you can resume it here.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <StorePauseControl
+            slug={tenant.slug}
+            isPaused={tenant.isPaused}
+            pausedAt={tenant.pausedAt}
+            pauseReason={tenant.pauseReason}
+          />
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Store license</CardTitle>
+          <CardDescription>
+            License keys and activation tokens are kept encrypted on the server. A configured
+            license must remain active, including its provider-reported offline grace period.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <StoreLicenseControl slug={tenant.slug} license={tenant.license} />
         </CardContent>
       </Card>
 

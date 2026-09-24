@@ -2,6 +2,7 @@ import { env } from "@/lib/env";
 import { withTenant } from "@/lib/prisma";
 import { canTransition, type OrderStatusValue } from "@/lib/orders";
 import { effectivePrice, parseAttributes, variantLabel } from "@/lib/variants";
+import { isLicenseActive } from "@/lib/license/status";
 
 /**
  * Orders. Every function takes a tenantId (from the storefront's slug lookup when a customer
@@ -16,7 +17,8 @@ export type OrderErrorCode =
   | "STOCK"
   | "NOT_FOUND"
   | "BAD_TRANSITION"
-  | "CHANGED";
+  | "CHANGED"
+  | "PAUSED";
 
 /** A problem the customer/owner can act on; the message is safe to show. */
 export class OrderError extends Error {
@@ -73,6 +75,25 @@ export async function placeOrder(
   const ids = [...wanted.keys()].sort();
 
   return withTenant(tenantId, async (tx) => {
+    // Lock the tenant row through this transaction. A concurrent pause waits until this order
+    // commits (or vice versa), so no order slips in after a pause has already taken effect.
+    const tenantRows = await tx.$queryRaw<{ isPaused: boolean }[]>`
+      SELECT "isPaused" FROM "Tenant" WHERE id = ${tenantId} FOR SHARE`;
+    const licenseRows = await tx.$queryRaw<{
+      status: string;
+      expiresAt: Date | null;
+      offlineGraceUntil: Date | null;
+    }[]>`
+      SELECT status, "expiresAt", "offlineGraceUntil"
+      FROM "TenantLicense" WHERE "tenantId" = ${tenantId} FOR SHARE`;
+    if (
+      !tenantRows[0] ||
+      tenantRows[0].isPaused ||
+      !isLicenseActive(licenseRows[0])
+    ) {
+      throw new OrderError("PAUSED", "This store is temporarily unavailable and cannot accept orders.");
+    }
+
     const variants = await tx.productVariant.findMany({
       where: { id: { in: ids }, product: { tenantId } },
       include: { product: true },
