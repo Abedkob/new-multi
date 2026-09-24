@@ -2,9 +2,9 @@ import Link from "next/link";
 import type { Variants } from "motion/react";
 import { ArrowRight, Search } from "lucide-react";
 import type { ContentMap } from "@/lib/content";
-import { fillTokens } from "@/lib/content";
 import { cn } from "@/lib/utils";
 import { MotionDiv, MotionH1, MotionH2, MotionLi, MotionP, MotionUl } from "../motion";
+import { StoreFooter } from "../store-footer";
 import {
   HeroPicture,
   Picture,
@@ -406,49 +406,7 @@ const Reviews: SectionComponent = ({ data: { content, reviews } }) => (
   </section>
 );
 
-const Footer: SectionComponent = ({ data: { store, content, categoryTiles, pages } }) => (
-  <footer className="bg-foreground text-background/70">
-    <div className={cn(wrap, "py-20")}>
-      <div className="grid gap-12 md:grid-cols-2 lg:grid-cols-4">
-        <div className="lg:col-span-2">
-          <StoreBrand store={store} content={content} className={cn(heading, "text-2xl text-background")} logoClassName="h-9" />
-          <p className="mt-6 max-w-sm whitespace-pre-line text-sm leading-relaxed">{content["footer.about"]}</p>
-        </div>
-        {categoryTiles.length > 0 && (
-          <div>
-            <h3 className={cn(micro, "mb-6 text-background")}>{content["featuredCategories.heading"]}</h3>
-            <ul className="space-y-3.5">
-              {categoryTiles.map((c) => (
-                <li key={c.id}>
-                  <Link href={c.href} className="text-sm transition-colors hover:text-background">
-                    {c.label}
-                  </Link>
-                </li>
-              ))}
-            </ul>
-          </div>
-        )}
-        {pages.length > 0 && (
-          <div>
-            <h3 className={cn(micro, "mb-6 text-background")}>{content["footer.linksHeading"]}</h3>
-            <ul className="space-y-3.5">
-              {pages.map((pg) => (
-                <li key={pg.slug}>
-                  <Link href={pg.href} className="text-sm transition-colors hover:text-background">
-                    {pg.label}
-                  </Link>
-                </li>
-              ))}
-            </ul>
-          </div>
-        )}
-      </div>
-      <div className={cn(micro, "mt-16 flex flex-col items-center justify-between gap-4 border-t border-background/15 pt-8 tracking-[0.15em] sm:flex-row")}>
-        <p>{fillTokens(content["footer.copyright"], store)}</p>
-      </div>
-    </div>
-  </footer>
-);
+const Footer: SectionComponent = ({ data }) => <StoreFooter data={data} look="pearl" />;
 
 const ProductPage: Template["ProductPage"] = ({ data, product, related }) => {
   const { store, content } = data;

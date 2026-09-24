@@ -1,6 +1,7 @@
 import type { ComponentType } from "react";
 import type { ContentMap } from "@/lib/content";
 import type { HomeSectionId, SectionVisibility } from "@/lib/sections";
+import type { SocialPlatform } from "@/lib/social-links";
 
 export type StoreInfo = {
   name: string;
@@ -67,6 +68,7 @@ export type PageLink = {
 };
 
 export type ReviewItem = { quote: string; author: string };
+export type SocialLink = { platform: SocialPlatform; label: string; href: string };
 
 /**
  * Everything a template needs, prepared once by lib/storefront-data.ts. Templates only
@@ -83,6 +85,8 @@ export type StorefrontData = {
   /** Only pages whose text is non-empty, so a blank page is never linked. */
   pages: PageLink[];
   reviews: ReviewItem[];
+  /** Only configured links; empty settings never produce blank footer controls. */
+  socialLinks: SocialLink[];
 };
 
 export type SectionComponent = ComponentType<{ data: StorefrontData }>;

@@ -1,9 +1,9 @@
 import Link from "next/link";
 import { buttonVariants } from "@/components/ui/button";
 import type { ContentMap } from "@/lib/content";
-import { fillTokens } from "@/lib/content";
 import { cn } from "@/lib/utils";
 import { Picture, StoreBrand, StoreMenuButton, cardPrice, productHref, searchHref, sectionHref, shopHref } from "../shared";
+import { StoreFooter } from "../store-footer";
 import { CartLink, SearchBox } from "../nav-client";
 import { ProductGallery, ProductImage, ProductPrice, ProductProvider, StockStatus, VariantPicker, AddToCart } from "../product-client";
 import { ArrowRight, Search, ShoppingCart } from "lucide-react";
@@ -345,66 +345,7 @@ const Reviews: SectionComponent = ({ data: { content, reviews } }) => (
   </section>
 );
 
-const Footer: SectionComponent = ({ data: { store, content, categoryTiles, pages } }) => (
-  <footer className="bg-background border-t border-border">
-    <div className={cn(wrap, "py-16 md:py-24")}>
-       <div className="mb-12 grid grid-cols-1 gap-10 sm:grid-cols-2 md:mb-16 md:grid-cols-4 md:gap-12">
-          <div className="md:col-span-2">
-             <StoreBrand
-               store={store}
-               content={content}
-               className="mb-6 block text-2xl font-bold tracking-tight text-foreground sm:text-3xl"
-               logoClassName="h-9"
-             />
-             <p className="text-muted-foreground text-sm leading-relaxed max-w-md">
-               {content["footer.about"]}
-             </p>
-          </div>
-          
-          {categoryTiles.length > 0 && (
-            <div>
-              <p className="text-xs font-semibold text-foreground mb-6 uppercase tracking-wider">{content["featuredCategories.heading"]}</p>
-              <ul className="grid gap-4 text-sm text-muted-foreground">
-                {categoryTiles.map((c) => (
-                  <li key={c.id}>
-                    <Link href={c.href} className="hover:text-foreground transition-colors">
-                      {c.label}
-                    </Link>
-                  </li>
-                ))}
-              </ul>
-            </div>
-          )}
-
-          {pages.length > 0 && (
-            <div>
-              <p className="text-xs font-semibold text-foreground mb-6 uppercase tracking-wider">{content["footer.linksHeading"]}</p>
-              <ul className="grid gap-4 text-sm text-muted-foreground">
-                {pages.map((pg) => (
-                  <li key={pg.slug}>
-                    <Link href={pg.href} className="hover:text-foreground transition-colors">
-                      {pg.label}
-                    </Link>
-                  </li>
-                ))}
-              </ul>
-            </div>
-          )}
-       </div>
-
-       <div className="flex flex-col md:flex-row justify-between items-center pt-8 border-t border-border">
-           <p className="text-sm text-muted-foreground">
-             {fillTokens(content["footer.copyright"], store)}
-           </p>
-           <nav className="flex flex-wrap justify-center gap-x-8 gap-y-4 mt-4 md:mt-0">
-              <Link href={shopHref(store)} className="text-sm font-medium hover:text-foreground text-muted-foreground transition-colors">
-                {content["navbar.shopLabel"]}
-              </Link>
-           </nav>
-       </div>
-    </div>
-  </footer>
-);
+const Footer: SectionComponent = ({ data }) => <StoreFooter data={data} look="tonkic" />;
 
 const ProductPage: Template["ProductPage"] = ({ data, product, related }) => {
   const { store, content } = data;

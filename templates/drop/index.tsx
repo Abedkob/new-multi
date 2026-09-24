@@ -2,9 +2,9 @@ import Link from "next/link";
 import type { Variants } from "motion/react";
 import { ArrowUpRight, Search } from "lucide-react";
 import type { ContentMap } from "@/lib/content";
-import { fillTokens } from "@/lib/content";
 import { cn } from "@/lib/utils";
 import { MotionDiv, MotionH1, MotionH2, MotionLi, MotionP, MotionUl } from "../motion";
+import { StoreFooter } from "../store-footer";
 import {
   HeroPicture,
   Picture,
@@ -299,56 +299,7 @@ const Reviews: SectionComponent = ({ data: { content, reviews } }) => (
   </section>
 );
 
-const Footer: SectionComponent = ({ data: { store, content, categoryTiles, pages } }) => (
-  <footer className="border-t border-border bg-background">
-    <div className={cn(wrap, "py-16 sm:py-24")}>
-      <div className="flex flex-col gap-14 lg:flex-row lg:items-start lg:justify-between">
-        <div className="max-w-sm">
-          <StoreBrand store={store} content={content} className={cn(display, "text-3xl sm:text-4xl")} logoClassName="h-10" />
-          <p className="mt-6 whitespace-pre-line text-sm leading-relaxed text-muted-foreground">{content["footer.about"]}</p>
-        </div>
-        <div className="grid grid-cols-2 gap-12 sm:gap-20">
-          {categoryTiles.length > 0 && (
-            <div>
-              <p className="mb-5 font-mono text-[11px] uppercase tracking-[0.2em] text-muted-foreground">
-                {content["featuredCategories.heading"]}
-              </p>
-              <ul className="space-y-3">
-                {categoryTiles.map((c) => (
-                  <li key={c.id}>
-                    <Link href={c.href} className="text-sm transition-colors hover:text-accent">
-                      {c.label}
-                    </Link>
-                  </li>
-                ))}
-              </ul>
-            </div>
-          )}
-          {pages.length > 0 && (
-            <div>
-              <p className="mb-5 font-mono text-[11px] uppercase tracking-[0.2em] text-muted-foreground">{content["footer.linksHeading"]}</p>
-              <ul className="space-y-3">
-                {pages.map((pg) => (
-                  <li key={pg.slug}>
-                    <Link href={pg.href} className="text-sm transition-colors hover:text-accent">
-                      {pg.label}
-                    </Link>
-                  </li>
-                ))}
-              </ul>
-            </div>
-          )}
-        </div>
-      </div>
-      <div className="mt-16 flex flex-col items-center justify-between gap-4 border-t border-border pt-8 text-xs text-muted-foreground sm:flex-row">
-        <p>{fillTokens(content["footer.copyright"], store)}</p>
-        <Link href={storeHref(store)} className="font-mono uppercase tracking-[0.2em] transition-colors hover:text-accent">
-          {store.name} &uarr;
-        </Link>
-      </div>
-    </div>
-  </footer>
-);
+const Footer: SectionComponent = ({ data }) => <StoreFooter data={data} look="drop" />;
 
 function ProductCard({ store, product, content }: { store: StoreInfo; product: StoreProduct; content: ContentMap }) {
   const href = productHref(store, product);

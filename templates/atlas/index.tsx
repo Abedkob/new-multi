@@ -3,9 +3,9 @@ import type { ReactNode } from "react";
 import type { Variants } from "motion/react";
 import { ArrowLeft, ArrowRight, ArrowUpRight, Search } from "lucide-react";
 import type { ContentMap } from "@/lib/content";
-import { fillTokens } from "@/lib/content";
 import { cn } from "@/lib/utils";
 import { MotionDiv, MotionH1, MotionLi, MotionP, MotionUl } from "../motion";
+import { StoreFooter } from "../store-footer";
 import {
   HeroPicture,
   Picture,
@@ -556,65 +556,7 @@ const Reviews: SectionComponent = ({ data: { content, reviews } }) => {
   );
 };
 
-const footLink = "text-sm transition-colors hover:text-primary";
-
-/** A giant wordmark row on top, then ruled columns of links. */
-const Footer: SectionComponent = ({ data: { store, content, categoryTiles, pages } }) => (
-  <footer className="border-t border-foreground bg-background">
-    <div className={wrap}>
-      <div aria-hidden className="select-none overflow-hidden border-b border-border py-6 text-[15vw] font-bold uppercase leading-[0.8] tracking-tighter lg:text-[11rem]">
-        <span className="block truncate">{content["navbar.logoText"] || store.name}</span>
-      </div>
-      <div className="grid grid-cols-2 md:grid-cols-3">
-        <div className="col-span-2 border-b border-border py-8 md:col-span-1 md:border-b-0 md:border-r md:pr-8">
-          <StoreBrand store={store} content={content} className="text-lg font-bold uppercase tracking-tighter" logoClassName="h-8" />
-          <p className="mt-4 max-w-xs whitespace-pre-line text-sm leading-relaxed text-muted-foreground">{content["footer.about"]}</p>
-        </div>
-        <div className="border-r border-border py-8 pr-4 md:px-8">
-          <h3 className={cn(mono, "mb-5 text-muted-foreground")}>{content["featuredCategories.heading"]}</h3>
-          <ul className="grid gap-2.5">
-            <li>
-              <Link href={shopHref(store)} className={footLink}>
-                {content["navbar.shopLabel"]}
-              </Link>
-            </li>
-            {categoryTiles.map((c) => (
-              <li key={c.id}>
-                <Link href={c.href} className={footLink}>
-                  {c.label}
-                </Link>
-              </li>
-            ))}
-          </ul>
-        </div>
-        <div className="py-8 pl-4 md:px-8">
-          {pages.length > 0 && (
-            <>
-              <h3 className={cn(mono, "mb-5 text-muted-foreground")}>{content["footer.linksHeading"]}</h3>
-              <ul className="grid gap-2.5">
-                {pages.map((pg) => (
-                  <li key={pg.slug}>
-                    <Link href={pg.href} className={footLink}>
-                      {pg.label}
-                    </Link>
-                  </li>
-                ))}
-              </ul>
-            </>
-          )}
-        </div>
-      </div>
-    </div>
-    <div className={cn(mono, "border-t border-border")}>
-      <div className={cn(wrap, "flex flex-col gap-2 py-4 text-muted-foreground sm:flex-row sm:items-center sm:justify-between")}>
-        <p>{fillTokens(content["footer.copyright"], store)}</p>
-        <Link href={storeHref(store)} className="hover:text-foreground">
-          &uarr; {store.name}
-        </Link>
-      </div>
-    </div>
-  </footer>
-);
+const Footer: SectionComponent = ({ data }) => <StoreFooter data={data} look="atlas" />;
 
 /** A spec sheet: the photo in a ruled frame on the left, ruled rows of details on the right. */
 const ProductPage: Template["ProductPage"] = ({ data, product, related }) => {

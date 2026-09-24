@@ -2,9 +2,9 @@ import Link from "next/link";
 import type { CSSProperties, ReactNode } from "react";
 import type { Variants } from "motion/react";
 import type { ContentMap } from "@/lib/content";
-import { fillTokens } from "@/lib/content";
 import { cn } from "@/lib/utils";
 import { MotionDiv, MotionH1, MotionH2, MotionLi, MotionP, MotionUl } from "../motion";
+import { StoreFooter } from "../store-footer";
 import {
   HeroPicture,
   Picture,
@@ -613,49 +613,7 @@ const Reviews: SectionComponent = ({ data: { content, reviews } }) => (
   </section>
 );
 
-const footLink = "text-sm font-light text-muted-foreground transition-colors hover:text-accent";
-
-/** A quiet sky: a faint dusting of stars and the thin rim of a planet rising from the bottom edge. */
-const Footer: SectionComponent = ({ data: { store, content, categoryTiles, pages } }) => (
-  <footer className="relative isolate overflow-hidden border-t border-border/60 bg-secondary/40">
-    <Stars tone="light" count={30} />
-    <div
-      aria-hidden
-      className="absolute left-1/2 top-[70%] -z-10 aspect-square w-[160vw] -translate-x-1/2 rounded-full border border-accent/30 bg-background/60 lg:w-[110vw]"
-    />
-    <div className={cn(wrap, "relative pb-10 pt-24 text-center lg:pt-28")}>
-      <Constellation className="mx-auto" />
-      <StoreBrand
-        store={store}
-        content={content}
-        className={cn(serif, "mt-8 inline-flex text-5xl sm:text-6xl")}
-        logoClassName="h-14"
-      />
-      <p className="mx-auto mt-6 max-w-md whitespace-pre-line text-sm font-light leading-relaxed text-muted-foreground">{content["footer.about"]}</p>
-
-      <nav className="mx-auto mt-14 flex max-w-3xl flex-wrap justify-center gap-x-10 gap-y-4">
-        <Link href={shopHref(store)} className={footLink}>
-          {content["navbar.shopLabel"]}
-        </Link>
-        {categoryTiles.slice(0, 4).map((c) => (
-          <Link key={c.id} href={c.href} className={footLink}>
-            {c.label}
-          </Link>
-        ))}
-        {pages.map((pg) => (
-          <Link key={pg.slug} href={pg.href} className={footLink}>
-            {pg.label}
-          </Link>
-        ))}
-      </nav>
-
-      <div className="mt-28 flex flex-col items-center gap-3 lg:mt-40">
-        <span aria-hidden className="text-accent">&#10022;</span>
-        <p className={cn(eyebrow, "text-muted-foreground")}>{fillTokens(content["footer.copyright"], store)}</p>
-      </div>
-    </div>
-  </footer>
-);
+const Footer: SectionComponent = ({ data }) => <StoreFooter data={data} look="luxury" />;
 
 const ProductPage: Template["ProductPage"] = ({ data, product, related }) => {
   const { store, content } = data;

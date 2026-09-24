@@ -10,9 +10,10 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
-import { fillTokens, type ContentMap } from "@/lib/content";
+import type { ContentMap } from "@/lib/content";
 import { cn } from "@/lib/utils";
 import { MotionDiv, MotionH1, MotionH2, MotionLi, MotionP, MotionUl } from "../motion";
+import { StoreFooter } from "../store-footer";
 import { HeroPicture, Picture, StoreBrand, StoreMenuButton, cardPrice, productHref, sectionHref, shopHref, storeHref } from "../shared";
 import { CartLink, SearchBox } from "../nav-client";
 import { ProductGallery, ProductImage, ProductPrice, ProductProvider, StockStatus, VariantPicker, AddToCart } from "../product-client";
@@ -381,50 +382,7 @@ const Reviews: SectionComponent = ({ data: { content, reviews } }) => (
 );
 
 
-const Footer: SectionComponent = ({ data: { store, content, categoryTiles, pages } }) => (
-  <footer className="mt-14 border-t border-border bg-secondary text-secondary-foreground">
-    <div className={cn(wrap, "grid gap-10 py-12 md:grid-cols-4")}>
-      <div className="md:col-span-2">
-        <p className={cn(serif, "text-xl font-bold")}>{store.name}</p>
-        <p className="mt-3 max-w-lg whitespace-pre-line text-sm leading-relaxed opacity-80">
-          {content["footer.about"]}
-        </p>
-      </div>
-      {categoryTiles.length > 0 && (
-        <div>
-          <p className="text-sm font-semibold">{content["featuredCategories.heading"]}</p>
-          <ul className="mt-3 grid gap-1.5 text-sm opacity-80">
-            {categoryTiles.map((c) => (
-              <li key={c.id}>
-                <Link href={c.href} className="hover:underline">
-                  {c.label}
-                </Link>
-              </li>
-            ))}
-          </ul>
-        </div>
-      )}
-      {pages.length > 0 && (
-        <div>
-          <p className="text-sm font-semibold">{store.name}</p>
-          <ul className="mt-3 grid gap-1.5 text-sm opacity-80">
-            {pages.map((pg) => (
-              <li key={pg.slug}>
-                <Link href={pg.href} className="hover:underline">
-                  {pg.label}
-                </Link>
-              </li>
-            ))}
-          </ul>
-        </div>
-      )}
-    </div>
-    <Separator />
-    <p className="px-5 py-4 text-center text-xs opacity-70">
-      {fillTokens(content["footer.copyright"], store)}
-    </p>
-  </footer>
-);
+const Footer: SectionComponent = ({ data }) => <StoreFooter data={data} look="classic" />;
 
 const ProductPage: Template["ProductPage"] = ({ data, product, related }) => {
   const { store, content } = data;

@@ -2,9 +2,9 @@ import Link from "next/link";
 import type { Variants } from "motion/react";
 import { buttonVariants } from "@/components/ui/button";
 import type { ContentMap } from "@/lib/content";
-import { fillTokens } from "@/lib/content";
 import { cn } from "@/lib/utils";
 import { MotionDiv, MotionH1, MotionH2, MotionLi, MotionP, MotionSection, MotionUl } from "../motion";
+import { StoreFooter } from "../store-footer";
 import { Picture, StoreBrand, StoreMenuButton, cardPrice, productHref, sectionHref, shopHref, storeHref } from "../shared";
 import { CartLink, SearchBox } from "../nav-client";
 import { ProductGallery, ProductImage, ProductPrice, ProductProvider, StockStatus, VariantPicker, AddToCart } from "../product-client";
@@ -410,47 +410,7 @@ const Reviews: SectionComponent = ({ data: { content, reviews } }) => (
   </section>
 );
 
-const Footer: SectionComponent = ({ data: { store, content, pages } }) => (
-  <footer className="bg-foreground text-background/70">
-    <div className={cn(wrap, "py-20")}>
-      <div className="grid gap-12 md:grid-cols-2 lg:grid-cols-4">
-        <div className="lg:col-span-2">
-          <StoreBrand
-            store={store}
-            content={content}
-            className="text-3xl font-serif text-background tracking-tight"
-            logoClassName="h-10"
-          />
-          <p className="mt-6 max-w-sm whitespace-pre-line text-sm leading-relaxed">
-            {content["footer.about"]}
-          </p>
-        </div>
-        {pages.length > 0 && (
-          <div>
-            <h3 className="mb-6 text-sm font-semibold uppercase tracking-wider text-background">
-              {content["footer.linksHeading"]}
-            </h3>
-            <ul className="space-y-4">
-              {pages.map((pg) => (
-                <li key={pg.slug}>
-                  <Link href={pg.href} className="text-sm hover:text-background transition-colors">
-                    {pg.label}
-                  </Link>
-                </li>
-              ))}
-            </ul>
-          </div>
-        )}
-      </div>
-      <div className="mt-20 flex flex-col items-center justify-between border-t border-background/15 pt-8 sm:flex-row">
-        <p className="text-sm">{fillTokens(content["footer.copyright"], store)}</p>
-      </div>
-      <div className="mt-10 overflow-hidden opacity-5 pointer-events-none select-none">
-         <span className="text-[15rem] font-serif font-bold tracking-tighter leading-none whitespace-nowrap -ml-4">{store.name}</span>
-      </div>
-    </div>
-  </footer>
-);
+const Footer: SectionComponent = ({ data }) => <StoreFooter data={data} look="fashion" />;
 
 const ProductPage: Template["ProductPage"] = ({ data, product, related }) => {
   const { store, content } = data;

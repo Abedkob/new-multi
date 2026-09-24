@@ -51,6 +51,7 @@ export default async function OwnerPreviewPage() {
       bestSellers={bestSellers.map(toStoreProduct)}
       categories={categories.map((c) => ({ id: c.id, name: c.name, slug: c.slug, parentId: c.parentId, imageUrl: c.imageUrl }))}
       categoryProductImages={categoryProductImages}
+      socialLinks={tenant}
     />
   );
 }

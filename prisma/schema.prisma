@@ -54,6 +54,12 @@ model Tenant {
   // Browser-tab icon for this store's storefront, set by the platform admin only (Branding
   // section). An image URL in our storage (lib/storage.ts). Null = a generated letter icon.
   faviconUrl             String?
+  // Optional public profile/location links managed by the store owner. Null means the link is
+  // not shown anywhere on the storefront.
+  facebookUrl            String?
+  instagramUrl           String?
+  tiktokUrl              String?
+  googleMapsUrl          String?
   templateId             String         @default("minimal")
   themeOverrides         Json           @default("{}")
   // Owner-controlled on/off switches for the optional storefront sections.

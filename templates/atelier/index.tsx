@@ -3,9 +3,9 @@ import type { ReactNode } from "react";
 import type { Variants } from "motion/react";
 import { ArrowRight, ArrowUpRight, Plus } from "lucide-react";
 import type { ContentMap } from "@/lib/content";
-import { fillTokens } from "@/lib/content";
 import { cn } from "@/lib/utils";
 import { MotionDiv, MotionH1, MotionH2, MotionLi, MotionP, MotionUl } from "../motion";
+import { StoreFooter } from "../store-footer";
 import {
   HeroPicture,
   Picture,
@@ -536,47 +536,7 @@ const Reviews: SectionComponent = ({ data: { content, reviews } }) => (
   </section>
 );
 
-const Footer: SectionComponent = ({ data: { store, content, pages } }) => (
-  <footer className="overflow-hidden bg-foreground text-background">
-    <div className={cn(wrap, "pt-20")}>
-      <div className="grid gap-12 sm:grid-cols-2">
-        <div>
-          <StoreBrand
-            store={store}
-            content={content}
-            className="font-serif text-3xl italic tracking-tight"
-            logoClassName="h-10"
-          />
-          <p className="mt-6 max-w-sm whitespace-pre-line text-sm leading-relaxed text-background/70">{content["footer.about"]}</p>
-        </div>
-        <div>
-          <h3 className={cn(eyebrow, "mb-6 text-background/50")}>{content["footer.linksHeading"]}</h3>
-          <ul className="space-y-3">
-            <li>
-              <Link href={shopHref(store)} className="font-serif text-lg italic transition-colors hover:text-accent">
-                {content["navbar.shopLabel"]}
-              </Link>
-            </li>
-            {pages.map((pg) => (
-              <li key={pg.slug}>
-                <Link href={pg.href} className="font-serif text-lg italic transition-colors hover:text-accent">
-                  {pg.label}
-                </Link>
-              </li>
-            ))}
-          </ul>
-        </div>
-      </div>
-      <div className="mt-16 flex flex-col gap-2 border-t border-background/15 py-6 text-xs text-background/50 sm:flex-row sm:justify-between">
-        <p>{fillTokens(content["footer.copyright"], store)}</p>
-      </div>
-    </div>
-    {/* The store name as a giant wordmark, bleeding off the bottom edge. */}
-    <div aria-hidden className="-mb-[4vw] select-none whitespace-nowrap px-4 text-center font-serif text-[18vw] italic leading-none tracking-tighter text-background/10">
-      {store.name}
-    </div>
-  </footer>
-);
+const Footer: SectionComponent = ({ data }) => <StoreFooter data={data} look="atelier" />;
 
 const ProductPage: Template["ProductPage"] = ({ data, product, related }) => {
   const { store, content } = data;

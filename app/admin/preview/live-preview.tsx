@@ -10,6 +10,7 @@ import {
   resolveContent,
 } from "@/lib/content";
 import { parseSectionVisibility, type SectionVisibility } from "@/lib/sections";
+import type { StoreSocialLinks } from "@/lib/social-links";
 import { buildStorefrontData } from "@/lib/storefront-data";
 import type { ThemeColors } from "@/lib/theme";
 import { isImageUrl } from "@/lib/validation";
@@ -40,6 +41,7 @@ export function LivePreview({
   bestSellers,
   categories,
   categoryProductImages,
+  socialLinks,
 }: {
   store: StoreInfo;
   templateId: string;
@@ -51,6 +53,7 @@ export function LivePreview({
   bestSellers: StoreProduct[];
   categories: CategoryNode[];
   categoryProductImages: { categoryId: string | null; imageUrl: string }[];
+  socialLinks: StoreSocialLinks;
 }) {
   const [draft, setDraft] = useState<Draft>({ values: storedValues, visibility, view: "home" });
 
@@ -122,8 +125,9 @@ export function LivePreview({
       bestSellers,
       categories,
       categoryProductImages,
+      socialLinks,
     });
-  }, [draft, store, newArrivals, bestSellers, categories, categoryProductImages]);
+  }, [draft, store, newArrivals, bestSellers, categories, categoryProductImages, socialLinks]);
 
   const template = getTemplate(templateId);
   const product = newArrivals[0];

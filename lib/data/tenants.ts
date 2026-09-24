@@ -5,6 +5,7 @@ import type { IntegrationKey } from "@/lib/integrations";
 import { parseSectionVisibility } from "@/lib/sections";
 import { slugCandidate, slugify } from "@/lib/slug";
 import { parseThemeOverrides } from "@/lib/theme";
+import type { StoreSocialLinks } from "@/lib/social-links";
 
 export class EmailTakenError extends Error {
   constructor() {
@@ -109,6 +110,20 @@ export function updateTenantFavicon(id: string, faviconUrl: string | null) {
   return withBypass((db) =>
     db.tenant.update({ where: { id }, data: { faviconUrl }, select: { id: true } }),
   );
+}
+
+/** Owner-managed public profile/location links. Null hides a link from the storefront. */
+export function updateTenantSocialLinks(id: string, socialLinks: StoreSocialLinks) {
+  return prisma.tenant.update({
+    where: { id },
+    data: socialLinks,
+    select: {
+      facebookUrl: true,
+      instagramUrl: true,
+      tiktokUrl: true,
+      googleMapsUrl: true,
+    },
+  });
 }
 
 /**
@@ -241,7 +256,7 @@ export async function createStoreWithOwner(input: {
  * owner account. Category and product slugs are copied as-is: both are unique per tenant, not
  * globally, so there's no collision with the source.
  *
- * Deliberately NOT copied: the domain (must stay unique to one store), marketing integration ids
+ * Deliberately NOT copied: the domain (must stay unique to one store), social links and marketing integration ids
  * (GA4/Meta/Ads — these identify the ORIGINAL business; copying them would send the new store's
  * traffic into someone else's accounts), the license, the pause state, automatic discounts
  * (a copied store must not unexpectedly launch on sale), and orders (transactional history

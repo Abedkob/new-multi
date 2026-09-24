@@ -70,5 +70,6 @@ export const loadStorefrontData = cache(async (slug: string) => {
     bestSellers: bestSellers.map(toStoreProduct),
     categories,
     categoryProductImages,
+    socialLinks: tenant,
   });
 });

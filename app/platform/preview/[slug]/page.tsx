@@ -61,6 +61,7 @@ export default async function StorePreviewPage({
     bestSellers: bestSellers.map(toStoreProduct),
     categories,
     categoryProductImages,
+    socialLinks: tenant,
   });
   const product = data.newArrivals[0];
   const related = product

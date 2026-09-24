@@ -11,6 +11,7 @@ import {
   LogOut,
   Package,
   Paintbrush,
+  Share2,
   ShoppingBag,
 } from "lucide-react";
 import { logoutAction } from "@/app/actions/auth";
@@ -23,6 +24,7 @@ const LINKS = [
   { href: "/admin/discounts", label: "Discounts", icon: BadgePercent },
   { href: "/admin/categories", label: "Categories", icon: FolderTree },
   { href: "/admin/content", label: "Store content", icon: Paintbrush },
+  { href: "/admin/social-links", label: "Social links", icon: Share2 },
 ];
 
 function isActive(pathname: string, href: string) {

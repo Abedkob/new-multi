@@ -122,7 +122,7 @@ async function main() {
   try {
     console.log("Anonymous visitor:");
     const anon = new Session();
-    for (const p of ["/admin/content", "/admin/products", "/admin/categories", "/admin/orders", "/admin/preview", themePath, previewPath]) {
+    for (const p of ["/admin/content", "/admin/social-links", "/admin/products", "/admin/categories", "/admin/orders", "/admin/preview", themePath, previewPath]) {
       assert.ok(isLoginRedirect(await anon.get(p)), `${p} should redirect to /login`);
     }
     ok("admin and platform pages redirect to /login");
@@ -135,6 +135,12 @@ async function main() {
       assert.ok(content.body.includes(`toggle-${s}`), `content page is missing the ${s} switch`);
     }
     ok("can open Content, which has the 4 section switches");
+    const socialLinks = await owner.get("/admin/social-links");
+    assert.equal(socialLinks.status, 200);
+    for (const name of ["instagramUrl", "facebookUrl", "tiktokUrl", "googleMapsUrl"]) {
+      assert.ok(socialLinks.body.includes(`name="${name}"`), `social links page is missing ${name}`);
+    }
+    ok("can open Social links, with four optional URL fields");
     const ownerPreview = await owner.get("/admin/preview");
     assert.equal(ownerPreview.status, 200);
     assert.ok(ownerPreview.body.includes("Perm Test"), "owner preview should show the owner's own store");
@@ -174,6 +180,7 @@ async function main() {
     assert.equal((await admin.get("/platform/templates")).status, 404);
     ok("the old /platform/templates gallery is gone (404)");
     assert.ok(isLoginRedirect(await admin.get("/admin/content")), "admin should not be able to use owner pages");
+    assert.ok(isLoginRedirect(await admin.get("/admin/social-links")), "admin should not reach social links");
     assert.ok(isLoginRedirect(await admin.get("/admin/preview")), "admin should not reach the owner preview");
     for (const p of ["/admin/orders", "/admin/categories", "/admin/products"]) {
       assert.ok(isLoginRedirect(await admin.get(p)), `platform admin should not reach ${p}`);

@@ -101,7 +101,7 @@ export function StorefrontShell({
     // reducedMotion="user" makes every motion.* component below skip straight to its end
     // state for shoppers with prefers-reduced-motion, with no per-animation opt-in needed.
     <MotionConfig reducedMotion="user">
-      <div className="flex min-h-screen flex-col">
+      <div id="top" className="flex min-h-screen flex-col">
         <Section id="announcement" data={data} template={template} />
         <Section id="navbar" data={data} template={template} />
         <main className="flex-1">{children}</main>

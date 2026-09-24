@@ -2,6 +2,7 @@ import type { ContentKey, ContentMap } from "@/lib/content";
 import { descendantIds, type CategoryNode } from "@/lib/categories";
 import { PAGE_SLUGS } from "@/lib/pages";
 import { parseSectionVisibility } from "@/lib/sections";
+import { publicSocialLinks, type StoreSocialLinks } from "@/lib/social-links";
 import type {
   CategoryTile,
   PageLink,
@@ -27,6 +28,7 @@ export function buildStorefrontData(input: {
   categories: CategoryNode[];
   /** Newest first. Used to pick a photo for each category tile. */
   categoryProductImages: { categoryId: string | null; imageUrl: string }[];
+  socialLinks?: Partial<StoreSocialLinks>;
 }): StorefrontData {
   const { store, content, newArrivals, bestSellers, categories, categoryProductImages } = input;
 
@@ -79,5 +81,6 @@ export function buildStorefrontData(input: {
     categoryTiles,
     pages,
     reviews,
+    socialLinks: publicSocialLinks(input.socialLinks ?? {}),
   };
 }

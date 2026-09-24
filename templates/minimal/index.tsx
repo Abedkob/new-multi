@@ -2,9 +2,9 @@ import Link from "next/link";
 import type { Variants } from "motion/react";
 import { buttonVariants } from "@/components/ui/button";
 import type { ContentMap } from "@/lib/content";
-import { fillTokens } from "@/lib/content";
 import { cn } from "@/lib/utils";
 import { MotionDiv, MotionH1, MotionH2, MotionLi, MotionP, MotionSection, MotionUl } from "../motion";
+import { StoreFooter } from "../store-footer";
 import { HeroPicture, Picture, StoreBrand, StoreMenuButton, cardPrice, productHref, sectionHref, shopHref, storeHref } from "../shared";
 import { CartLink, SearchBox } from "../nav-client";
 import { ProductGallery, ProductImage, ProductPrice, ProductProvider, StockStatus, VariantPicker, AddToCart } from "../product-client";
@@ -328,25 +328,7 @@ const Reviews: SectionComponent = ({ data: { content, reviews } }) => (
   </section>
 );
 
-const Footer: SectionComponent = ({ data: { store, content, pages } }) => (
-  <footer className="border-t border-border">
-    <div className={cn(wrap, "py-14 text-center")}>
-      <p className="mx-auto max-w-md whitespace-pre-line text-sm leading-relaxed text-muted-foreground">
-        {content["footer.about"]}
-      </p>
-      {pages.length > 0 && (
-        <nav className="mt-6 flex flex-wrap justify-center gap-x-6 gap-y-2">
-          {pages.map((pg) => (
-            <Link key={pg.slug} href={pg.href} className={cn(eyebrow, "hover:text-foreground")}>
-              {pg.label}
-            </Link>
-          ))}
-        </nav>
-      )}
-      <p className={cn(eyebrow, "mt-8")}>{fillTokens(content["footer.copyright"], store)}</p>
-    </div>
-  </footer>
-);
+const Footer: SectionComponent = ({ data }) => <StoreFooter data={data} look="minimal" />;
 
 const ProductPage: Template["ProductPage"] = ({ data, product, related }) => {
   const { store, content } = data;
