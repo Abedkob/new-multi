@@ -1,14 +1,13 @@
 import Link from "next/link";
-import type { Variants } from "motion/react";
 import { buttonVariants } from "@/components/ui/button";
 import type { ContentMap } from "@/lib/content";
 import { fillTokens } from "@/lib/content";
 import { cn } from "@/lib/utils";
-import { MotionDiv } from "../motion";
-import { HeroPicture, Picture, StoreBrand, StoreMenuButton, cardPrice, productHref, searchHref, sectionHref, shopHref } from "../shared";
+import { Picture, StoreBrand, StoreMenuButton, cardPrice, productHref, searchHref, sectionHref, shopHref } from "../shared";
 import { CartLink, SearchBox } from "../nav-client";
 import { ProductGallery, ProductImage, ProductPrice, ProductProvider, StockStatus, VariantPicker, AddToCart } from "../product-client";
 import { ArrowRight, Search, ShoppingCart } from "lucide-react";
+import { HeroSlider, type HeroSlideContent } from "./hero-slider-client";
 import type {
   SectionComponent,
   StoreInfo,
@@ -21,19 +20,6 @@ const blackCta = cn(
   buttonVariants({ variant: "default", size: "lg" }),
   "rounded-full bg-primary text-primary-foreground hover:bg-primary/90 px-8 h-12 text-sm font-medium transition-all"
 );
-
-/**
- * "Tonkic"'s animation language: a soft blur-to-focus "materialize", matching its rounded,
- * soft-shadow, modern-product-photography look — distinct from a plain fade or slide.
- */
-const materialize: Variants = {
-  hidden: { opacity: 0, scale: 0.94, filter: "blur(8px)" },
-  visible: { opacity: 1, scale: 1, filter: "blur(0px)", transition: { duration: 0.7, ease: [0.22, 1, 0.36, 1] } },
-};
-const bgFade: Variants = {
-  hidden: { opacity: 0 },
-  visible: { opacity: 1, transition: { duration: 1.2, ease: "easeOut" } },
-};
 
 const Announcement: SectionComponent = ({ data }) => (
   <div className="bg-primary px-6 py-2 text-center text-xs text-primary-foreground">
@@ -53,7 +39,7 @@ const Navbar: SectionComponent = ({ data }) => {
         className="min-w-0 truncate text-lg font-bold tracking-tight text-foreground sm:text-2xl"
         logoClassName="h-8 sm:h-9"
       />
-      
+
       <nav className="hidden md:flex items-center gap-8 text-sm font-medium text-foreground">
         <Link href={shopHref(store)} className="hover:opacity-70 transition">
           {content["navbar.shopLabel"]}
@@ -93,44 +79,45 @@ const Navbar: SectionComponent = ({ data }) => {
   </header>
   );
 };
+/** Slide 1 is always shown (it's the plain hero.* content every template uses); slides 2-3 are
+ * optional extras that turn Tonkic's hero into an autoplaying slider once either has content. */
+const Hero: SectionComponent = ({ data: { store, content, visibility } }) => {
+  const slide1: HeroSlideContent = {
+    headline: content["hero.headline"],
+    subtext: content["hero.subtext"],
+    ctaLabel: content["hero.ctaLabel"],
+    image: content["hero.image"],
+    imageMobile: content["hero.imageMobile"],
+  };
+  const slide2: HeroSlideContent = {
+    headline: content["hero.item2.headline"],
+    subtext: content["hero.item2.subtext"],
+    ctaLabel: content["hero.item2.ctaLabel"],
+    image: content["hero.item2.image"],
+    imageMobile: content["hero.item2.imageMobile"],
+  };
+  const slide3: HeroSlideContent = {
+    headline: content["hero.item3.headline"],
+    subtext: content["hero.item3.subtext"],
+    ctaLabel: content["hero.item3.ctaLabel"],
+    image: content["hero.item3.image"],
+    imageMobile: content["hero.item3.imageMobile"],
+  };
+  const slides = [slide1, slide2, slide3].filter(
+    (s, i) => i === 0 || s.headline || s.image || s.imageMobile,
+  );
 
-const Hero: SectionComponent = ({ data: { store, content, visibility } }) => (
-  <section className="relative flex min-h-[520px] items-center overflow-hidden bg-background py-16 md:min-h-[640px] md:py-20">
-    {content["hero.image"] || content["hero.imageMobile"] ? (
-      <MotionDiv initial="hidden" animate="visible" variants={bgFade} className="absolute inset-0 z-0">
-        <HeroPicture content={content} alt={store.name} className="h-full w-full" />
-      </MotionDiv>
-    ) : (
-      <div className="absolute inset-0 z-0 bg-gradient-to-b from-secondary/50 via-secondary/20 to-background" />
-    )}
-
-    {visibility.heroText && (
-      <div className={cn(wrap, "relative z-10 w-full")}>
-        <MotionDiv
-          initial="hidden"
-          animate="visible"
-          variants={materialize}
-          className="max-w-xl rounded-[2rem] border border-border/40 bg-background/60 p-6 shadow-2xl backdrop-blur-md sm:p-8 md:p-10"
-        >
-          <h1 className="mb-5 text-4xl leading-[1.1] font-semibold tracking-tight text-foreground sm:text-5xl md:text-[64px]">
-            {content["hero.headline"]}
-          </h1>
-          {content["hero.subtext"] && (
-            <p className="mb-8 whitespace-pre-line text-base leading-relaxed font-medium text-foreground/90 sm:text-lg">
-              {content["hero.subtext"]}
-            </p>
-          )}
-          {content["hero.ctaLabel"] && (
-            <Link href={sectionHref(store, "new-arrivals")} className={blackCta}>
-              {content["hero.ctaLabel"]} <ArrowRight className="ml-2 w-4 h-4 inline" />
-            </Link>
-          )}
-        </MotionDiv>
-      </div>
-    )}
-  </section>
-);
-
+  return (
+    <HeroSlider
+      store={store}
+      slides={slides}
+      showText={visibility.heroText}
+      wrapClassName={wrap}
+      ctaClassName={blackCta}
+      newArrivalsHref={sectionHref(store, "new-arrivals")}
+    />
+  );
+};
 const BrandStory: SectionComponent = ({ data: { store, content, pages } }) => {
   const image = content["brandStory.image"];
   const about = pages.find((pg) => pg.slug === "about");

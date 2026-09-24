@@ -27,7 +27,14 @@ export const CONTENT_SECTIONS = [
       "Add a logo for the header. Without one, your store name is shown as text; add text beside " +
       "the logo if you want both. Other links reuse section headings.",
   },
-  { id: "hero", title: "Hero", description: "The first thing visitors see.", optional: "heroText" },
+  {
+    id: "hero",
+    title: "Hero",
+    description:
+      "The first thing visitors see. Slides 2 and 3 are optional — fill either in to turn the hero into a " +
+      "rotating slider (only templates that support a slider use them).",
+    optional: "heroText",
+  },
   {
     id: "featuredCategories",
     title: "Featured categories",
@@ -139,6 +146,17 @@ export const CONTENT_KEYS = [
   { section: "hero", key: "hero.ctaLabel", label: "Button text", kind: "text", default: "Shop now" },
   { section: "hero", key: "hero.image", label: "Hero image (Desktop & Tablet)", kind: "image", default: "" },
   { section: "hero", key: "hero.imageMobile", label: "Hero image (Mobile)", kind: "image", default: "" },
+  // Extra slides: optional, blank by default. A template that supports a hero slider (e.g.
+  // Tonkic) shows them as additional slides once given a headline or image; others ignore them.
+  ...[2, 3].flatMap((n) =>
+    item("hero", "hero", n, [
+      { name: "headline", label: "Headline", kind: "text" },
+      { name: "subtext", label: "Subtext", kind: "textarea" },
+      { name: "ctaLabel", label: "Button text", kind: "text" },
+      { name: "image", label: "Image (Desktop & Tablet)", kind: "image" },
+      { name: "imageMobile", label: "Image (Mobile)", kind: "image" },
+    ]),
+  ),
 
   // 4. Featured categories
   // Tiles are your real top-level categories (manage them under Categories).
