@@ -57,6 +57,11 @@ export default async function StoresPage() {
                 >
                   {t.name}
                 </Link>
+                {t.isPaused && (
+                  <Badge variant="destructive" className="ml-2 text-[10px]">
+                    Paused
+                  </Badge>
+                )}
               </TableCell>
               <TableCell>
                 <div className="flex items-center gap-2">

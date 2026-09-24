@@ -84,6 +84,17 @@ const schema = z
     // production when running multiple instances. Format: redis://:password@host:port or
     // redis://host:port (if no auth). Optional in development (falls back to in-memory).
     REDIS_URL: z.string().url("Must be a redis:// connection string").optional(),
+    LICENSE_API_BASE_URL: z.string().url().default("https://rlcphqlmnacxhzrffhjg.supabase.co/functions/v1/license-api"),
+    LICENSE_PRODUCT_CODE: z.string().trim().min(1).default("idevelopit-ecom-subscription"),
+    LICENSE_APPLICATION_VERSION: z.string().trim().min(1).default("0.1.0"),
+    LICENSE_PLATFORM: z.string().trim().min(1).default("linux"),
+    LICENSE_API_TIMEOUT_MS: z.coerce.number().int().positive().max(120_000).default(10_000),
+    LICENSE_ENCRYPTION_KEY: z.string().optional().refine((value) => {
+      if (value === undefined || value === "") return true;
+      const decoded = Buffer.from(value, "base64");
+      return decoded.length === 32 && decoded.toString("base64") === value;
+    }, "Must be a Base64-encoded 32-byte key"),
+    LICENSE_HEARTBEAT_SECRET: z.string().min(32).optional(),
   })
   .refine((v) => v.APP_DATABASE_URL || v.DATABASE_URL, {
     message: "Set APP_DATABASE_URL (preferred for the runtime) or DATABASE_URL",
@@ -108,6 +119,14 @@ const schema = z
   .refine((v) => v.NODE_ENV !== "production" || v.REDIS_URL, {
     message: "REDIS_URL is required in production (rate limiters and domain cache must be shared across instances)",
     path: ["REDIS_URL"],
+  })
+  .refine((v) => v.NODE_ENV !== "production" || v.LICENSE_ENCRYPTION_KEY, {
+    message: "LICENSE_ENCRYPTION_KEY is required in production to protect store license secrets",
+    path: ["LICENSE_ENCRYPTION_KEY"],
+  })
+  .refine((v) => v.NODE_ENV !== "production" || v.LICENSE_HEARTBEAT_SECRET, {
+    message: "LICENSE_HEARTBEAT_SECRET is required in production to secure provider heartbeat checks",
+    path: ["LICENSE_HEARTBEAT_SECRET"],
   });
 
 function load() {
@@ -129,6 +148,13 @@ function load() {
       R2_SECRET_ACCESS_KEY: raw.R2_SECRET_ACCESS_KEY || undefined,
       R2_BUCKET: raw.R2_BUCKET || undefined,
       R2_PUBLIC_URL: raw.R2_PUBLIC_URL || undefined,
+      LICENSE_API_BASE_URL: raw.LICENSE_API_BASE_URL || "https://rlcphqlmnacxhzrffhjg.supabase.co/functions/v1/license-api",
+      LICENSE_PRODUCT_CODE: raw.LICENSE_PRODUCT_CODE || "idevelopit-ecom-subscription",
+      LICENSE_APPLICATION_VERSION: raw.LICENSE_APPLICATION_VERSION || "0.1.0",
+      LICENSE_PLATFORM: raw.LICENSE_PLATFORM || "linux",
+      LICENSE_API_TIMEOUT_MS: Number(raw.LICENSE_API_TIMEOUT_MS) || 10_000,
+      LICENSE_ENCRYPTION_KEY: raw.LICENSE_ENCRYPTION_KEY || undefined,
+      LICENSE_HEARTBEAT_SECRET: raw.LICENSE_HEARTBEAT_SECRET || undefined,
     };
   }
 
@@ -147,6 +173,13 @@ function load() {
         "TRUSTED_PROXY_COUNT",
         "REDIS_URL",
         ...R2_KEYS,
+        "LICENSE_API_BASE_URL",
+        "LICENSE_PRODUCT_CODE",
+        "LICENSE_APPLICATION_VERSION",
+        "LICENSE_PLATFORM",
+        "LICENSE_API_TIMEOUT_MS",
+        "LICENSE_ENCRYPTION_KEY",
+        "LICENSE_HEARTBEAT_SECRET",
       ] as const
     ).map((k) => [k, process.env[k] === "" ? undefined : process.env[k]]),
   );

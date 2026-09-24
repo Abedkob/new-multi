@@ -12,6 +12,7 @@ import { parseThemeOverrides, resolveTheme } from "@/lib/theme";
 import { StorefrontShell } from "@/templates/render";
 import { getTemplate } from "@/templates";
 import { TEMPLATE_META, normalizeTemplateId } from "@/templates/meta";
+import { canServeTenant } from "@/lib/license/status";
 
 // Plain SSR: always render per request.
 export const dynamic = "force-dynamic";
@@ -20,8 +21,16 @@ export async function generateMetadata({
   params,
 }: LayoutProps<"/store/[slug]">): Promise<Metadata> {
   const { slug } = await params;
-  const [tenant, data] = await Promise.all([loadTenant(slug), loadStorefrontData(slug)]);
-  if (!tenant || !data) return {};
+  const tenant = await loadTenant(slug);
+  if (!tenant) return {};
+  if (!canServeTenant(tenant)) {
+    return {
+      title: `${tenant.name} temporarily unavailable`,
+      robots: { index: false, follow: false },
+    };
+  }
+  const data = await loadStorefrontData(slug);
+  if (!data) return {};
   const { googleSiteVerification, metaDomainVerification } = storeIntegrations(tenant);
   // Set by the platform admin (Branding); otherwise a letter icon in the store's primary color.
   const favicon =
@@ -60,11 +69,22 @@ export default async function StoreLayout({
   params,
 }: LayoutProps<"/store/[slug]">) {
   const { slug } = await params;
-  const [tenant, data] = await Promise.all([
-    loadTenant(slug),
-    loadStorefrontData(slug),
-  ]);
-  if (!tenant || !data) notFound();
+  const tenant = await loadTenant(slug);
+  if (!tenant) notFound();
+
+  if (!canServeTenant(tenant)) {
+    return (
+      <main className="grid min-h-screen place-items-center bg-background px-6 py-16 text-center">
+        <div className="grid max-w-lg gap-3">
+          <h1 className="text-2xl font-semibold">This store is temporarily unavailable</h1>
+          <p className="text-muted-foreground">Please check back later.</p>
+        </div>
+      </main>
+    );
+  }
+
+  const data = await loadStorefrontData(slug);
+  if (!data) notFound();
 
   const templateId = normalizeTemplateId(tenant.templateId);
   const colors = resolveTheme(

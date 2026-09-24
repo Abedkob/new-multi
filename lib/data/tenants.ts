@@ -17,7 +17,12 @@ export function isUniqueViolation(e: unknown) {
 }
 
 export function getTenantBySlug(slug: string) {
-  return prisma.tenant.findUnique({ where: { slug } });
+  return prisma.tenant.findUnique({
+    where: { slug },
+    include: {
+      license: { select: { status: true, expiresAt: true, offlineGraceUntil: true } },
+    },
+  });
 }
 
 /** Tenant.domain is stored normalized (lib/domain-format.ts), so pass a normalized hostname. */
@@ -36,7 +41,7 @@ export function getTenantById(id: string) {
  * Tenant itself isn't RLS-guarded (see withTenant's docstring), so this is a bare query.
  */
 export function listTenantSlugsWithoutDomain() {
-  return prisma.tenant.findMany({ where: { domain: null }, select: { slug: true } });
+  return prisma.tenant.findMany({ where: { domain: null, isPaused: false }, select: { slug: true } });
 }
 
 // Platform admin's store detail page: owner contact info plus counts that live on
@@ -47,6 +52,19 @@ export function getTenantForAdmin(slug: string) {
       where: { slug },
       include: {
         owner: { select: { id: true, name: true, email: true } },
+        license: {
+          select: {
+            status: true,
+            productCode: true,
+            keyHint: true,
+            licenseType: true,
+            expiresAt: true,
+            checkAfter: true,
+            offlineGraceUntil: true,
+            lastCheckedAt: true,
+            lastError: true,
+          },
+        },
         _count: { select: { products: true, orders: true } },
       },
     }),
@@ -55,6 +73,19 @@ export function getTenantForAdmin(slug: string) {
 
 export function updateTenantName(id: string, name: string) {
   return withBypass((db) => db.tenant.update({ where: { id }, data: { name } }));
+}
+
+/** Platform-admin pause controls public access while preserving owner dashboard access. */
+export function setTenantPaused(id: string, reason: string | null) {
+  return withBypass((db) =>
+    db.tenant.update({
+      where: { id },
+      data: reason === null
+        ? { isPaused: false, pausedAt: null, pauseReason: null }
+        : { isPaused: true, pausedAt: new Date(), pauseReason: reason },
+      select: { id: true },
+    }),
+  );
 }
 
 /** null disconnects the domain (the store falls back to /store/[slug]). The caller is

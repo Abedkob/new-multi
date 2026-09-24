@@ -59,12 +59,45 @@ model Tenant {
   // Owner-controlled on/off switches for the optional storefront sections.
   // Missing keys fall back to defaults (see lib/sections.ts).
   sectionVisibility      Json     @default("{}")
+  // Platform-admin pause state. Owners retain dashboard access; public storefront and checkout
+  // are blocked while paused. Keep operator pause separate from provider license status.
+  isPaused               Boolean  @default(false)
+  pausedAt               DateTime?
+  pauseReason            String?
+  license                TenantLicense?
   createdAt              DateTime @default(now())
 
   contents   TenantContent[]
   products   Product[]
   categories Category[]
   orders     Order[]
+}
+
+// Provider secrets stay encrypted at rest and are never selected into browser-facing props.
+// One license activation belongs to exactly one store installation.
+model TenantLicense {
+  id                       String   @id @default(cuid())
+  tenantId                 String   @unique
+  tenant                   Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  installationId           String   @unique @default(uuid())
+  productCode              String
+  licenseKeyCiphertext     String
+  keyHint                  String?
+  activationTokenCiphertext String?
+  status                   String   @default("PENDING")
+  providerRequestId        String?
+  activationId             String?
+  licenseType              String?
+  expiresAt                DateTime?
+  entitlements             Json?
+  checkAfter               DateTime?
+  offlineGraceUntil        DateTime?
+  lastCheckedAt            DateTime?
+  lastError                String?
+  createdAt                DateTime @default(now())
+  updatedAt                DateTime @updatedAt
+
+  @@index([status, checkAfter])
 }
 
 // A tree of any depth (Men -> Shoes -> Nike). Slugs are unique per store because the

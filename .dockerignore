@@ -5,7 +5,6 @@
 
 # Dependencies
 node_modules
-pnpm-lock.yaml
 
 # Build output
 .next
@@ -47,5 +46,4 @@ SETUP.md
 KNOWN_GAPS.md
 .prettierrc
 .eslintrc
-tsconfig.json
 jest.config.js

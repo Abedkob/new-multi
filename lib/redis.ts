@@ -1,9 +1,9 @@
 "use server";
 
-import { createClient } from "redis";
+import { createClient, type RedisClientType } from "redis";
 import { env } from "@/lib/env";
 
-type RedisClient = ReturnType<typeof createClient>;
+type RedisClient = RedisClientType;
 
 let redisClient: RedisClient | null = null;
 let redisConnecting: Promise<RedisClient | null> | null = null;
