@@ -236,22 +236,25 @@ function ProductCard({ store, product, content }: { store: StoreInfo; product: S
               src={product.imageUrl}
               alt={product.name}
               className="absolute inset-0"
-              imgClassName="object-contain p-6 sm:p-8 transition-transform duration-700 group-hover:scale-105"
+              imgClassName="object-contain p-3 sm:p-8 transition-transform duration-700 group-hover:scale-105"
             />
           </div>
         </Link>
-        <div className="flex flex-1 flex-col p-5">
+        <div className="flex flex-1 flex-col p-3.5 sm:p-5">
           <Link href={href}>
-            <h3 className="line-clamp-1 text-base font-semibold text-foreground transition-colors hover:text-primary">
+            <h3 className="line-clamp-1 text-sm font-semibold text-foreground transition-colors hover:text-primary sm:text-base">
               {product.name}
             </h3>
           </Link>
           {/* min-h reserves 2 lines even when empty, so a short description doesn't shrink this
               card relative to its row-mates — every card in a row ends up the same height. */}
-          <p className="mt-1.5 line-clamp-2 min-h-10 text-sm text-muted-foreground">{product.description}</p>
-          <div className="mt-auto flex items-center justify-between gap-3 pt-4">
-            <span className="text-lg font-bold text-foreground">{cardPrice(product, content)}</span>
-            <Link href={href} className={cn(buttonVariants({ size: "sm" }), "rounded-full px-5")}>
+          <p className="mt-1.5 line-clamp-2 min-h-10 text-xs text-muted-foreground sm:text-sm">{product.description}</p>
+          <div className="mt-auto flex flex-wrap items-center justify-between gap-x-2 gap-y-2 pt-3 sm:gap-x-3 sm:pt-4">
+            <span className="text-base font-bold text-foreground sm:text-lg">{cardPrice(product, content)}</span>
+            <Link
+              href={href}
+              className={cn(buttonVariants({ size: "sm" }), "shrink-0 rounded-full px-3 text-xs sm:px-5 sm:text-sm")}
+            >
               {content["product.viewLabel"]}
             </Link>
           </div>
