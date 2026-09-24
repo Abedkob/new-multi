@@ -3,30 +3,15 @@ import { BadgePercent, Plus } from "lucide-react";
 import { AdminPagination } from "@/components/admin-pagination";
 import { EmptyState } from "@/components/admin/empty-state";
 import { PageHeader } from "@/components/admin/page-header";
-import { Badge } from "@/components/ui/badge";
 import { buttonVariants } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { listDiscountsPage } from "@/lib/data/discounts";
-import { formatPrice } from "@/lib/format";
-import { discountStatus } from "@/lib/pricing";
 import { requireOwner } from "@/lib/session";
-import { archiveDiscountAction, restoreDiscountAction } from "./actions";
-import { ArchiveDiscountButton } from "./archive-button";
+import { DiscountCampaignActions } from "./discount-actions";
+import { DiscountScheduleLabel, DiscountStatusBadge, DiscountValueLabel } from "./discount-summary";
 
 const first = (value: string | string[] | undefined) => Array.isArray(value) ? value[0] : value;
-
-const STATUS_LABELS = {
-  ACTIVE: "Active",
-  SCHEDULED: "Scheduled",
-  ENDED: "Ended",
-  DISABLED: "Disabled",
-  ARCHIVED: "Archived",
-} as const;
-
-const dateLabel = (value: Date | null) => value
-  ? new Intl.DateTimeFormat("en", { dateStyle: "medium", timeStyle: "short" }).format(value)
-  : null;
 
 export default async function DiscountsPage({
   searchParams,
@@ -52,62 +37,93 @@ export default async function DiscountsPage({
         description="Run automatic product discounts. Shoppers always receive the best eligible price."
         actions={newButton}
       />
-      <div className="flex gap-2 text-sm">
-        <Link href="/admin/discounts" className={!includeArchived ? "font-medium text-foreground" : "text-muted-foreground hover:text-foreground"}>Current</Link>
-        <span className="text-border">/</span>
-        <Link href="/admin/discounts?archived=1" className={includeArchived ? "font-medium text-foreground" : "text-muted-foreground hover:text-foreground"}>Include archived</Link>
-      </div>
+      <nav aria-label="Discount views" className="flex w-fit rounded-lg border bg-muted/30 p-1">
+        <Link
+          href="/admin/discounts"
+          aria-current={!includeArchived ? "page" : undefined}
+          className={buttonVariants({ variant: !includeArchived ? "secondary" : "ghost", size: "sm" })}
+        >
+          Current
+        </Link>
+        <Link
+          href="/admin/discounts?archived=1"
+          aria-current={includeArchived ? "page" : undefined}
+          className={buttonVariants({ variant: includeArchived ? "secondary" : "ghost", size: "sm" })}
+        >
+          All discounts
+        </Link>
+      </nav>
       <Card className="gap-0 overflow-hidden py-0">
         {items.length === 0 ? (
           <EmptyState icon={BadgePercent} title={includeArchived ? "No discounts found." : "No discounts yet."} action={includeArchived ? undefined : newButton}>
             Create a percentage or fixed-amount discount, then choose which products receive it.
           </EmptyState>
         ) : (
-          <Table>
-            <TableHeader>
-              <TableRow className="bg-muted/50">
-                <TableHead className="pl-4">Discount</TableHead>
-                <TableHead>Status</TableHead>
-                <TableHead>Schedule</TableHead>
-                <TableHead className="text-right">Products</TableHead>
-                <TableHead className="pr-4 text-right"><span className="sr-only">Actions</span></TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {items.map((discount) => {
-                const status = discountStatus(discount, now);
-                return (
+          <>
+            <div className="divide-y md:hidden">
+              {items.map((discount) => (
+                <article key={discount.id} className="grid gap-4 p-4">
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      {discount.archivedAt ? (
+                        <h2 className="truncate font-medium">{discount.name}</h2>
+                      ) : (
+                        <h2><Link href={`/admin/discounts/${discount.id}/edit`} className="font-medium hover:underline">{discount.name}</Link></h2>
+                      )}
+                      <p className="mt-0.5 text-sm text-muted-foreground"><DiscountValueLabel type={discount.type} value={discount.value} /></p>
+                    </div>
+                    <DiscountStatusBadge discount={discount} at={now} />
+                  </div>
+                  <dl className="grid grid-cols-2 gap-3 text-sm">
+                    <div className="col-span-2">
+                      <dt className="text-xs text-muted-foreground">Schedule</dt>
+                      <dd className="mt-0.5"><DiscountScheduleLabel startsAt={discount.startsAt} endsAt={discount.endsAt} /></dd>
+                    </div>
+                    <div>
+                      <dt className="text-xs text-muted-foreground">Products</dt>
+                      <dd className="mt-0.5 tabular-nums">{discount._count.products}</dd>
+                    </div>
+                  </dl>
+                  <div className="flex justify-end border-t pt-3">
+                    <DiscountCampaignActions id={discount.id} name={discount.name} archived={discount.archivedAt !== null} />
+                  </div>
+                </article>
+              ))}
+            </div>
+            <div className="hidden md:block">
+              <Table>
+                <TableHeader>
+                  <TableRow className="bg-muted/50">
+                    <TableHead className="pl-4">Discount</TableHead>
+                    <TableHead>Status</TableHead>
+                    <TableHead>Schedule</TableHead>
+                    <TableHead className="text-right">Products</TableHead>
+                    <TableHead className="pr-4 text-right"><span className="sr-only">Actions</span></TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {items.map((discount) => (
                   <TableRow key={discount.id}>
                     <TableCell className="pl-4">
                       {discount.archivedAt ? <span className="font-medium">{discount.name}</span> : <Link href={`/admin/discounts/${discount.id}/edit`} className="font-medium hover:underline">{discount.name}</Link>}
                       <p className="text-xs text-muted-foreground">
-                        {discount.type === "PERCENTAGE" ? `${discount.value}% off` : `${formatPrice(discount.value)} off each unit`}
+                        <DiscountValueLabel type={discount.type} value={discount.value} />
                       </p>
                     </TableCell>
-                    <TableCell><Badge variant={status === "ACTIVE" ? "default" : status === "ENDED" || status === "ARCHIVED" ? "outline" : "secondary"}>{STATUS_LABELS[status]}</Badge></TableCell>
+                    <TableCell><DiscountStatusBadge discount={discount} at={now} /></TableCell>
                     <TableCell className="text-sm text-muted-foreground">
-                      {discount.startsAt || discount.endsAt ? (
-                        <span>{dateLabel(discount.startsAt) ?? "Immediately"} → {dateLabel(discount.endsAt) ?? "No end"}</span>
-                      ) : "Always"}
+                      <DiscountScheduleLabel startsAt={discount.startsAt} endsAt={discount.endsAt} />
                     </TableCell>
                     <TableCell className="text-right tabular-nums">{discount._count.products}</TableCell>
                     <TableCell className="pr-4">
-                      <div className="flex justify-end gap-2">
-                        {discount.archivedAt ? (
-                          <form action={restoreDiscountAction.bind(null, discount.id)}><button type="submit" className={buttonVariants({ variant: "outline", size: "sm" })}>Restore</button></form>
-                        ) : (
-                          <>
-                            <Link href={`/admin/discounts/${discount.id}/edit`} className={buttonVariants({ variant: "outline", size: "sm" })}>Edit</Link>
-                            <form action={archiveDiscountAction.bind(null, discount.id)}><ArchiveDiscountButton name={discount.name} /></form>
-                          </>
-                        )}
-                      </div>
+                      <DiscountCampaignActions id={discount.id} name={discount.name} archived={discount.archivedAt !== null} />
                     </TableCell>
                   </TableRow>
-                );
-              })}
-            </TableBody>
-          </Table>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
+          </>
         )}
       </Card>
       <AdminPagination basePath="/admin/discounts" page={page} pages={pages} total={total} noun="discounts" params={includeArchived ? { archived: "1" } : {}} />

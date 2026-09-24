@@ -167,7 +167,7 @@ export function DiscountForm({
         </CardContent>
       </Card>
 
-      <div className="sticky bottom-0 z-10 -mx-1 flex flex-wrap items-center gap-3 rounded-xl border bg-background/95 px-4 py-3 shadow-lg backdrop-blur">
+      <div className="flex flex-wrap items-center gap-3 rounded-xl border bg-background px-4 py-3 sm:sticky sm:bottom-3 sm:z-10 sm:-mx-1 sm:bg-background/95 sm:shadow-lg sm:backdrop-blur">
         <Button type="submit" disabled={pending}>{pending ? "Saving…" : submitLabel}</Button>
         <Link href="/admin/discounts" className={buttonVariants({ variant: "ghost" })}>Cancel</Link>
         {state.error && <p role="alert" className="text-sm text-destructive">{state.error}</p>}

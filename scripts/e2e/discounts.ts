@@ -56,8 +56,9 @@ async function main() {
     ok("owner creates and enables a percentage discount");
 
     const saleRow = page.locator("label", { hasText: "Sale Tee" });
-    assert.match((await saleRow.innerText()).replace(/\s+/g, " "), /\$100\.00 \$80\.00/);
+    assert.match((await saleRow.innerText()).replace(/\s+/g, " "), /\$100\.00 Select to apply discount/);
     await saleRow.locator('input[type="checkbox"]').check();
+    assert.match((await saleRow.innerText()).replace(/\s+/g, " "), /\$100\.00 \$80\.00/);
     await page.getByRole("button", { name: "Save product selection" }).click();
     await page.waitForLoadState("domcontentloaded");
     assert.equal(await saleRow.locator('input[type="checkbox"]').isChecked(), true);
@@ -94,18 +95,25 @@ async function main() {
       scrollWidth: document.documentElement.scrollWidth,
     }));
     assert.ok(fit.scrollWidth <= fit.width, `mobile page overflows horizontally: ${JSON.stringify(fit)}`);
-    assert.ok(await mobilePage.getByRole("button", { name: "Save changes" }).isVisible());
+    const mobileSave = mobilePage.getByRole("button", { name: "Save changes" });
+    await mobileSave.scrollIntoViewIfNeeded();
+    assert.ok(await mobileSave.isVisible());
     if (process.env.DISCOUNT_SCREENSHOT) {
       await mobilePage.screenshot({ path: process.env.DISCOUNT_SCREENSHOT, fullPage: true });
     }
+    await mobilePage.goto(`${BASE}/admin/discounts`);
+    assert.ok(await mobilePage.getByRole("article").filter({ hasText: "Launch offer" }).isVisible());
+    if (process.env.DISCOUNT_LIST_SCREENSHOT) {
+      await mobilePage.screenshot({ path: process.env.DISCOUNT_LIST_SCREENSHOT, fullPage: true });
+    }
     await mobile.close();
-    ok("discount editor fits a 390px mobile viewport with its primary action visible");
+    ok("discount editor and campaign list fit a 390px mobile viewport");
 
     await page.goto(`${BASE}/admin/discounts`);
     page.once("dialog", (dialog) => dialog.accept());
     await page.getByRole("button", { name: "Archive" }).click();
-    await page.getByRole("link", { name: "Include archived" }).click();
-    await page.getByText("Archived", { exact: true }).waitFor();
+    await page.getByRole("link", { name: "All discounts" }).click();
+    await page.locator('[data-slot="badge"]:visible', { hasText: "Archived" }).waitFor();
     await page.getByRole("button", { name: "Restore" }).click();
     await page.waitForURL(/\/edit$/);
     assert.equal(await page.getByRole("switch", { name: "Enable discount" }).getAttribute("data-checked"), null);
