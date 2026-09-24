@@ -118,12 +118,12 @@ function staticChecks() {
     const src = readFileSync(`templates/${id}/index.tsx`, "utf8");
     for (const s of [
       "Announcement", "Navbar", "Hero", "FeaturedCategories", "NewArrivals", "BestSellers",
-      "PromoBanner", "BrandStory", "Reviews", "Instagram", "Footer", "ProductPage",
+      "PromoBanner", "BrandStory", "Reviews", "Footer", "ProductPage",
     ]) {
       assert.ok(new RegExp(`const ${s}\\b`).test(src), `${id} does not implement ${s}`);
     }
   }
-  ok("every template implements all 11 sections + the product page");
+  ok("every template implements all 10 sections + the product page");
 }
 
 async function main() {
@@ -175,18 +175,17 @@ async function main() {
       const home = await page(`/store/${SLUG}`);
 
       assert.deepEqual(sectionsIn(home), [...SECTION_ORDER], `${id}: sections missing or out of order`);
-      ok("all 11 sections render in the canonical order");
+      ok("all 10 sections render in the canonical order");
 
       for (const key of [
         "navbar.shopLabel", "announcement.text", "hero.headline", "hero.subtext", "hero.ctaLabel",
         "featuredCategories.heading", "newArrivals.heading", "bestSellers.heading",
         "promoBanner.heading", "promoBanner.subtext", "promoBanner.ctaLabel", "brandStory.heading",
         "brandStory.body", "reviews.heading", "reviews.item1.quote", "reviews.item1.author",
-        "reviews.item2.quote", "reviews.item3.quote", "instagram.heading", "footer.about",
+        "reviews.item2.quote", "reviews.item3.quote", "footer.about",
       ] as const) {
         assertShows(home, c[key], `${id} home (${key})`);
       }
-      assert.ok(home.includes(c["instagram.handle"].replace(/^@/, "")), "instagram handle missing");
       assertShows(home, fillTokens(c["footer.copyright"], { name: "Demo Boutique" }), `${id} footer`);
       // Featured categories are the store's real top-level categories, linking to real pages.
       const topLevel = await prisma.category.findMany({ where: { tenantId: tenant.id, parentId: null } });
@@ -277,8 +276,7 @@ async function main() {
       for (const id of TEMPLATE_IDS) {
         await setTenantTemplate(fresh.tenant.id, id);
         const html = await page(`/store/${fresh.tenant.slug}`);
-        // Optional sections need content, Featured categories needs categories, and Instagram
-        // needs a handle or photos.
+        // Optional sections need content, and Featured categories needs categories.
         assert.deepEqual(
           sectionsIn(html),
           ["navbar", "hero", "newArrivals", "bestSellers", "footer"],
@@ -286,7 +284,7 @@ async function main() {
         );
         assert.ok(html.includes("No products yet"), `${id}: empty new-arrivals message missing`);
       }
-      ok("new store renders sanely in every template (no empty optional sections, no blank Instagram strip)");
+      ok("new store renders sanely in every template (no empty optional sections)");
     } finally {
       await prisma.tenant.deleteMany({ where: { id: fresh.tenant.id } });
       await prisma.user.deleteMany({ where: { id: fresh.user.id } });

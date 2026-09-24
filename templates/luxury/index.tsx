@@ -352,16 +352,21 @@ const FeaturedCategories: SectionComponent = ({ data: { content, categoryTiles }
 function ProductCard({ store, product, content }: { store: StoreInfo; product: StoreProduct; content: ContentMap }) {
   const second = product.images.find((im) => im.url && im.url !== product.imageUrl)?.url ?? "";
   return (
-    <Link href={productHref(store, product)} className="group block">
+    <Link href={productHref(store, product)} className="group flex h-full flex-col">
       <div className="relative aspect-[3/4] overflow-hidden bg-secondary">
         <Picture
           src={product.imageUrl}
           alt={product.name}
           className="absolute inset-0"
-          imgClassName={cn("transition duration-[1.4s] ease-out group-hover:scale-105", second && "group-hover:opacity-0")}
+          imgClassName={cn("object-contain transition duration-[1.4s] ease-out group-hover:scale-105", second && "group-hover:opacity-0")}
         />
         {second && (
-          <Picture src={second} alt="" className="absolute inset-0 opacity-0 transition-opacity duration-1000 group-hover:opacity-100" />
+          <Picture
+            src={second}
+            alt=""
+            className="absolute inset-0 opacity-0 transition-opacity duration-1000 group-hover:opacity-100"
+            imgClassName="object-contain"
+          />
         )}
         <div className="pointer-events-none absolute inset-3 border border-background/0 transition-colors duration-700 group-hover:border-background/70" />
         <span aria-hidden className="absolute right-5 top-4 text-background opacity-0 transition duration-700 group-hover:rotate-90 group-hover:opacity-100">
@@ -373,8 +378,8 @@ function ProductCard({ store, product, content }: { store: StoreInfo; product: S
           </span>
         )}
       </div>
-      <div className="mt-6 text-center">
-        <h3 className={cn(serif, "text-lg leading-snug sm:text-xl")}>{product.name}</h3>
+      <div className="mt-6 flex flex-1 flex-col justify-between text-center">
+        <h3 className={cn(serif, "line-clamp-1 text-lg leading-snug sm:text-xl")}>{product.name}</h3>
         <p className="mt-2 flex items-center justify-center gap-3 text-sm font-light tracking-wide text-muted-foreground">
           <span aria-hidden className="h-px w-4 bg-accent" />
           {cardPrice(product, content)}
@@ -437,7 +442,7 @@ const BestSellers: SectionComponent = ({ data: { store, content, bestSellers } }
                       src={lead.imageUrl}
                       alt={lead.name}
                       className="absolute inset-0"
-                      imgClassName="transition-transform duration-[1.5s] ease-out group-hover:scale-105"
+                      imgClassName="object-contain transition-transform duration-[1.5s] ease-out group-hover:scale-105"
                       sizes="(max-width: 1024px) 100vw, 50vw"
                     />
                   </div>
@@ -456,9 +461,9 @@ const BestSellers: SectionComponent = ({ data: { store, content, bestSellers } }
                     <Link href={productHref(store, p)} className="group flex flex-col items-center text-center">
                       <span className={cn(serif, "mb-3 text-2xl italic text-accent")}>{roman(i + 2)}</span>
                       <div className="relative aspect-square w-full max-w-52 overflow-hidden rounded-full bg-secondary ring-1 ring-border transition duration-700 group-hover:ring-accent">
-                        <Picture src={p.imageUrl} alt={p.name} className="absolute inset-0" sizes="210px" imgClassName="transition-transform duration-[1.5s] group-hover:scale-110" />
+                        <Picture src={p.imageUrl} alt={p.name} className="absolute inset-0" sizes="210px" imgClassName="object-contain transition-transform duration-[1.5s] group-hover:scale-110" />
                       </div>
-                      <h3 className={cn(serif, "mt-5 text-lg leading-snug")}>{p.name}</h3>
+                      <h3 className={cn(serif, "line-clamp-1 mt-5 text-lg leading-snug")}>{p.name}</h3>
                       <span className="mt-1 text-xs font-light tracking-widest text-muted-foreground">{cardPrice(p, content)}</span>
                     </Link>
                   </MotionLi>
@@ -608,71 +613,10 @@ const Reviews: SectionComponent = ({ data: { content, reviews } }) => (
   </section>
 );
 
-/** Photos as a row of overlapping moons. */
-const Instagram: SectionComponent = ({ data: { store, content, instagram } }) => (
-  <section className="overflow-hidden py-24 lg:py-32">
-    <Heading
-      title={content["instagram.heading"]}
-      className="mb-14 lg:mb-16"
-      sub={
-        instagram.handle &&
-        (instagram.url ? (
-          <a
-            href={instagram.url}
-            target="_blank"
-            rel="noopener noreferrer"
-            className={cn(eyebrow, "mt-5 text-muted-foreground transition-colors hover:text-accent")}
-          >
-            @{instagram.handle}
-          </a>
-        ) : (
-          <p className={cn(eyebrow, "mt-5 text-muted-foreground")}>@{instagram.handle}</p>
-        ))
-      }
-    />
-    {instagram.tiles.length > 0 && (
-      <MotionUl
-        initial="hidden"
-        whileInView="visible"
-        viewport={viewport}
-        variants={stagger}
-        className="flex justify-center px-5"
-      >
-        {instagram.tiles.map((t, i) => {
-          const moon = (
-            <div className="relative aspect-square overflow-hidden rounded-full bg-secondary ring-4 ring-background transition duration-700 hover:z-10 hover:scale-110 hover:ring-accent">
-              <Picture src={t.image} alt={store.name} className="absolute inset-0" sizes="(max-width: 640px) 30vw, 220px" />
-            </div>
-          );
-          return (
-            <MotionLi
-              key={i}
-              variants={emerge}
-              className={cn(
-                "relative w-[20vw] shrink-0 hover:z-10 sm:w-40 lg:w-52",
-                i > 0 && "-ml-[5vw] sm:-ml-10 lg:-ml-12",
-                i % 2 === 1 && "translate-y-6",
-              )}
-            >
-              {instagram.url ? (
-                <a href={instagram.url} target="_blank" rel="noopener noreferrer" aria-label={`@${instagram.handle}`}>
-                  {moon}
-                </a>
-              ) : (
-                moon
-              )}
-            </MotionLi>
-          );
-        })}
-      </MotionUl>
-    )}
-  </section>
-);
-
 const footLink = "text-sm font-light text-muted-foreground transition-colors hover:text-accent";
 
 /** A quiet sky: a faint dusting of stars and the thin rim of a planet rising from the bottom edge. */
-const Footer: SectionComponent = ({ data: { store, content, categoryTiles, pages, instagram } }) => (
+const Footer: SectionComponent = ({ data: { store, content, categoryTiles, pages } }) => (
   <footer className="relative isolate overflow-hidden border-t border-border/60 bg-secondary/40">
     <Stars tone="light" count={30} />
     <div
@@ -703,11 +647,6 @@ const Footer: SectionComponent = ({ data: { store, content, categoryTiles, pages
             {pg.label}
           </Link>
         ))}
-        {instagram.url && (
-          <a href={instagram.url} target="_blank" rel="noopener noreferrer" className={footLink}>
-            @{instagram.handle}
-          </a>
-        )}
       </nav>
 
       <div className="mt-28 flex flex-col items-center gap-3 lg:mt-40">
@@ -825,7 +764,6 @@ export const luxuryTemplate: Template = {
   PromoBanner,
   BrandStory,
   Reviews,
-  Instagram,
   Footer,
   ProductPage,
 };

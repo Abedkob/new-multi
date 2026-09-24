@@ -61,11 +61,6 @@ const CONTENT: Record<string, string> = {
   "reviews.item3.quote": "Sturdy, handsome and it smells like a proper workshop.",
   "reviews.item3.author": "Sample customer, Bristol",
 
-  "instagram.heading": "Follow along",
-  "instagram.handle": "@yourstore.demo",
-  "instagram.image1": "/demo/lamp.svg",
-  "instagram.image2": "/demo/blanket.svg",
-
   "footer.about":
     "Demo Boutique is a sample store used to preview storefront templates. Everything here is placeholder content.",
   "footer.copyright": "© {year} {store}. All rights reserved.",

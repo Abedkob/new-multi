@@ -6,7 +6,7 @@ import { env } from "@/lib/env";
 // bundle) and node:dns/promises (a Node built-in Turbopack can't bundle for the browser at all).
 // An earlier version of this file didn't separate these, and lib/validation.ts imported it for
 // isValidDomainFormat/isPlatformOwnHostname — since lib/validation.ts is also imported by a
-// client component (app/admin/preview/live-preview.tsx, for isImageUrl/isInstagramHandle), that
+// client component (app/admin/preview/live-preview.tsx, for isImageUrl), that
 // pulled this whole module into the client bundle and broke the build. The pure format check now
 // lives in lib/domain-format.ts instead, which has no Node/env imports and is safe to share with
 // client code; keep every future export here (anything using env or a Node built-in) out of

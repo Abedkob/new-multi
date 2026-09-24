@@ -295,10 +295,15 @@ function ProductCard({
           src={product.imageUrl}
           alt={product.name}
           className="absolute inset-0"
-          imgClassName={cn("transition duration-500", second && "group-hover:opacity-0")}
+          imgClassName={cn("object-contain transition duration-500", second && "group-hover:opacity-0")}
         />
         {second && (
-          <Picture src={second} alt="" className="absolute inset-0 opacity-0 transition-opacity duration-500 group-hover:opacity-100" />
+          <Picture
+            src={second}
+            alt=""
+            className="absolute inset-0 opacity-0 transition-opacity duration-500 group-hover:opacity-100"
+            imgClassName="object-contain"
+          />
         )}
       </div>
       <div className="mt-3 flex flex-1 items-start justify-between gap-3 border-t border-border px-3 py-3 transition-colors group-hover:bg-secondary">
@@ -373,7 +378,7 @@ const BestSellers: SectionComponent = ({ data: { store, content, bestSellers } }
                 >
                   <span className="font-mono text-2xl font-light tabular-nums opacity-50 sm:text-3xl">{pad(i + 1)}</span>
                   <div className="relative aspect-square overflow-hidden bg-background">
-                    <Picture src={p.imageUrl} alt={p.name} className="absolute inset-0" sizes="80px" />
+                    <Picture src={p.imageUrl} alt={p.name} className="absolute inset-0" imgClassName="object-contain" sizes="80px" />
                   </div>
                   <div className="min-w-0">
                     <h3 className="truncate text-base font-semibold uppercase tracking-tight sm:text-lg">{p.name}</h3>
@@ -551,80 +556,16 @@ const Reviews: SectionComponent = ({ data: { content, reviews } }) => {
   );
 };
 
-/** A gapless contact-sheet strip, edge to edge. */
-const Instagram: SectionComponent = ({ data: { store, content, instagram } }) => (
-  <section className="py-16 lg:py-24">
-    <div className={wrap}>
-      <SectionHead
-        title={content["instagram.heading"]}
-        aside={
-          instagram.handle &&
-          (instagram.url ? (
-            <a
-              href={instagram.url}
-              target="_blank"
-              rel="noopener noreferrer"
-              className={cn(mono, "group inline-flex shrink-0 items-center gap-2 pb-1 hover:text-primary")}
-            >
-              @{instagram.handle}
-              <ArrowUpRight className="size-4 transition-transform group-hover:-translate-y-0.5 group-hover:translate-x-0.5" />
-            </a>
-          ) : (
-            <span className={cn(mono, "shrink-0 pb-1 text-muted-foreground")}>@{instagram.handle}</span>
-          ))
-        }
-      />
-    </div>
-    {instagram.tiles.length > 0 && (
-      <MotionUl
-        initial="hidden"
-        whileInView="visible"
-        viewport={viewport}
-        variants={stagger}
-        className="mt-8 grid grid-cols-3 border-y border-border md:grid-cols-6"
-      >
-        {instagram.tiles.map((t, i) => {
-          const tile = (
-            <div className="group relative aspect-square overflow-hidden bg-secondary">
-              <Picture
-                src={t.image}
-                alt={store.name}
-                className="absolute inset-0"
-                imgClassName="grayscale transition duration-500 group-hover:scale-105 group-hover:grayscale-0"
-                sizes="(max-width: 768px) 33vw, 17vw"
-              />
-              <span className={cn(mono, "absolute left-0 top-0 bg-background px-2 py-1 opacity-0 transition-opacity group-hover:opacity-100")}>
-                {pad(i + 1)}
-              </span>
-            </div>
-          );
-          return (
-            <MotionLi key={i} variants={wipe} className="border-r border-border last:border-r-0">
-              {instagram.url ? (
-                <a href={instagram.url} target="_blank" rel="noopener noreferrer" aria-label={`@${instagram.handle}`}>
-                  {tile}
-                </a>
-              ) : (
-                tile
-              )}
-            </MotionLi>
-          );
-        })}
-      </MotionUl>
-    )}
-  </section>
-);
-
 const footLink = "text-sm transition-colors hover:text-primary";
 
 /** A giant wordmark row on top, then ruled columns of links. */
-const Footer: SectionComponent = ({ data: { store, content, categoryTiles, pages, instagram } }) => (
+const Footer: SectionComponent = ({ data: { store, content, categoryTiles, pages } }) => (
   <footer className="border-t border-foreground bg-background">
     <div className={wrap}>
       <div aria-hidden className="select-none overflow-hidden border-b border-border py-6 text-[15vw] font-bold uppercase leading-[0.8] tracking-tighter lg:text-[11rem]">
         <span className="block truncate">{content["navbar.logoText"] || store.name}</span>
       </div>
-      <div className="grid grid-cols-2 md:grid-cols-4">
+      <div className="grid grid-cols-2 md:grid-cols-3">
         <div className="col-span-2 border-b border-border py-8 md:col-span-1 md:border-b-0 md:border-r md:pr-8">
           <StoreBrand store={store} content={content} className="text-lg font-bold uppercase tracking-tighter" logoClassName="h-8" />
           <p className="mt-4 max-w-xs whitespace-pre-line text-sm leading-relaxed text-muted-foreground">{content["footer.about"]}</p>
@@ -646,7 +587,7 @@ const Footer: SectionComponent = ({ data: { store, content, categoryTiles, pages
             ))}
           </ul>
         </div>
-        <div className="py-8 pl-4 md:border-r md:border-border md:px-8">
+        <div className="py-8 pl-4 md:px-8">
           {pages.length > 0 && (
             <>
               <h3 className={cn(mono, "mb-5 text-muted-foreground")}>{content["footer.linksHeading"]}</h3>
@@ -662,18 +603,6 @@ const Footer: SectionComponent = ({ data: { store, content, categoryTiles, pages
             </>
           )}
         </div>
-        {instagram.handle && (
-          <div className="col-span-2 border-t border-border py-8 md:col-span-1 md:border-t-0 md:pl-8">
-            <h3 className={cn(mono, "mb-5 text-muted-foreground")}>{content["instagram.heading"]}</h3>
-            {instagram.url ? (
-              <a href={instagram.url} target="_blank" rel="noopener noreferrer" className={cn(footLink, "inline-flex items-center gap-1.5")}>
-                @{instagram.handle} <ArrowUpRight className="size-3.5" />
-              </a>
-            ) : (
-              <p className="text-sm">@{instagram.handle}</p>
-            )}
-          </div>
-        )}
       </div>
     </div>
     <div className={cn(mono, "border-t border-border")}>
@@ -772,7 +701,6 @@ export const atlasTemplate: Template = {
   PromoBanner,
   BrandStory,
   Reviews,
-  Instagram,
   Footer,
   ProductPage,
 };

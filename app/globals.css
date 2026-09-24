@@ -133,3 +133,21 @@
 [data-theme-scope][data-heading-font] :where(h1, h2, h3, h4, h5, h6, [data-store-brand]) {
   font-family: var(--font-heading);
 }
+
+/* Indeterminate bar loader (storefront loading.tsx files) — a segment sweeping across a track.
+   No Tailwind utility covers this shape of motion, so it's defined once here and shared via
+   the .animate-loading-bar class. */
+@keyframes loading-bar {
+  0% { left: -33%; }
+  100% { left: 100%; }
+}
+.animate-loading-bar {
+  animation: loading-bar 1.1s ease-in-out infinite;
+}
+@media (prefers-reduced-motion: reduce) {
+  .animate-loading-bar {
+    animation: none;
+    left: 0;
+    width: 100%;
+  }
+}

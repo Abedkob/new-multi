@@ -94,6 +94,18 @@ function redirectToStore(tenant: { slug: string; domain: string }, pathname: str
   return NextResponse.redirect(`${getStoreUrl(tenant, pathname)}${search}`, 307);
 }
 
+/**
+ * Carries the resolved slug past the rewrite so `app/store/[slug]/loading.tsx` (a route-segment
+ * special file, which Next renders with no params at all) can still show the right store name
+ * instantly. Both routing paths set it — a custom-domain rewrite hides /store/[slug] from the
+ * client entirely, so it can't be recovered from the pathname the way it can for a path-based URL.
+ */
+function withStoreSlugHeader(req: NextRequest, slug: string, url?: URL) {
+  const headers = new Headers(req.headers);
+  headers.set("x-store-slug", slug);
+  return url ? NextResponse.rewrite(url, { request: { headers } }) : NextResponse.next({ request: { headers } });
+}
+
 function isPlatformHost(hostname: string): boolean {
   const platformHostname = new URL(env.baseUrl).hostname;
   return hostname === platformHostname || hostname === "localhost" || hostname === "127.0.0.1";
@@ -134,7 +146,7 @@ async function handleCustomDomainHost(req: NextRequest, pathname: string, hostna
 
   const url = req.nextUrl.clone();
   url.pathname = `/store/${resolved.slug}${pathname === "/" ? "" : pathname}`;
-  return NextResponse.rewrite(url);
+  return withStoreSlugHeader(req, resolved.slug, url);
 }
 
 /** A path-based /store/[slug]/... view of a store that now has its own domain redirects there
@@ -181,7 +193,10 @@ export default auth(async (req) => {
   }
 
   if (pathname === "/store" || pathname.startsWith("/store/")) {
-    return maybeRedirectToDomain(pathname, req.nextUrl.search);
+    const redirect = await maybeRedirectToDomain(pathname, req.nextUrl.search);
+    if (redirect) return redirect;
+    const match = pathname.match(/^\/store\/([^/]+)/);
+    return match ? withStoreSlugHeader(req, match[1]) : undefined;
   }
 });
 

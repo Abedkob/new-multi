@@ -6,12 +6,11 @@ import type { StorefrontData, Template } from "./types";
 /**
  * The one place that decides which sections appear and in what order, so every template
  * is structurally identical and only differs visually.
- *   1 announcement  2 navbar  [ page content ]  ... 11 footer
+ *   1 announcement  2 navbar  [ page content ]  ... 10 footer
  * Home = 3 hero, 4 featured categories, 5 new arrivals, 6 best sellers,
- *        7 promo banner, 8 brand story, 9 reviews, 10 instagram.
+ *        7 promo banner, 8 brand story, 9 reviews.
  *
  * Optional sections render only when the owner's toggle is on AND they have content.
- * Instagram is not toggleable but also needs something to show (a handle or photos).
  * Turning a toggle off hides the section; it never deletes its content.
  */
 export function isSectionShown(id: SectionId, data: StorefrontData) {
@@ -24,7 +23,8 @@ export function isSectionShown(id: SectionId, data: StorefrontData) {
     case "announcement":
       return data.visibility.announcementBar && c["announcement.text"].trim() !== "";
     case "promoBanner":
-      return data.visibility.promoBanner && c["promoBanner.heading"].trim() !== "";
+      // Same rule as Hero: an image-only banner still counts as content.
+      return data.visibility.promoBanner && (c["promoBanner.heading"].trim() !== "" || c["promoBanner.image"] !== "");
     case "brandStory":
       return (
         data.visibility.brandStory &&
@@ -34,9 +34,6 @@ export function isSectionShown(id: SectionId, data: StorefrontData) {
       return data.visibility.reviews && data.reviews.length > 0;
     case "featuredCategories":
       return data.categoryTiles.length > 0;
-    case "instagram":
-      // Always on, but a strip with no handle and no photos would just be empty boxes.
-      return data.instagram.handle !== "" || data.instagram.tiles.length > 0;
     default:
       return true;
   }
@@ -70,7 +67,6 @@ function Section({
     promoBanner: template.PromoBanner,
     brandStory: template.BrandStory,
     reviews: template.Reviews,
-    instagram: template.Instagram,
     footer: template.Footer,
   }[id];
   return (
@@ -115,7 +111,7 @@ export function StorefrontShell({
   );
 }
 
-/** Sections 3 to 10, in fixed order. */
+/** Sections 3 to 9, in fixed order. */
 export function HomeSections({
   template,
   data,
@@ -134,7 +130,6 @@ export function HomeSections({
           "promoBanner",
           "brandStory",
           "reviews",
-          "instagram",
         ] as const
       ).map((id) => (
         <Section key={id} id={id} data={data} template={template} />

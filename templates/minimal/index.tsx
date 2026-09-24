@@ -176,17 +176,17 @@ function ProductCard({
   ratio?: string;
 }) {
   return (
-    <MotionLi variants={fadeUp}>
-      <Link href={productHref(store, product)} className="group block">
+    <MotionLi variants={fadeUp} className="h-full">
+      <Link href={productHref(store, product)} className="group flex h-full flex-col">
         <Picture
           src={product.imageUrl}
           alt={product.name}
           className={ratio}
-          imgClassName="transition duration-500 group-hover:scale-[1.03]"
+          imgClassName="object-contain transition duration-500 group-hover:scale-[1.03]"
         />
         <div className="mt-4 flex items-baseline justify-between gap-4">
-          <h3 className="text-sm group-hover:text-accent">{product.name}</h3>
-          <span className="text-sm text-muted-foreground">
+          <h3 className="line-clamp-1 text-sm group-hover:text-accent">{product.name}</h3>
+          <span className="shrink-0 text-sm text-muted-foreground">
             {cardPrice(product, content)}
           </span>
         </div>
@@ -328,39 +328,6 @@ const Reviews: SectionComponent = ({ data: { content, reviews } }) => (
   </section>
 );
 
-const Instagram: SectionComponent = ({ data: { store, content, instagram } }) => (
-  <section className={cn(wrap, "py-16 sm:py-28")}>
-    <div className="mb-10 text-center">
-      <h2 className={eyebrow}>{content["instagram.heading"]}</h2>
-      {instagram.url && (
-        <a
-          href={instagram.url}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="mt-2 inline-block text-sm hover:text-accent"
-        >
-          @{instagram.handle}
-        </a>
-      )}
-    </div>
-    {instagram.tiles.length > 0 && (
-      <MotionUl
-        initial="hidden"
-        whileInView="visible"
-        viewport={viewport}
-        variants={stagger}
-        className="grid grid-cols-3 gap-2 sm:grid-cols-6"
-      >
-        {instagram.tiles.map((t, i) => (
-          <MotionLi key={i} variants={fadeUp}>
-            <Picture src={t.image} alt={store.name} className="aspect-square" />
-          </MotionLi>
-        ))}
-      </MotionUl>
-    )}
-  </section>
-);
-
 const Footer: SectionComponent = ({ data: { store, content, pages } }) => (
   <footer className="border-t border-border">
     <div className={cn(wrap, "py-14 text-center")}>
@@ -479,7 +446,6 @@ export const minimalTemplate: Template = {
   PromoBanner,
   BrandStory,
   Reviews,
-  Instagram,
   Footer,
   ProductPage,
 };

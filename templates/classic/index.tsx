@@ -198,10 +198,11 @@ function ProductCard({
             src={product.imageUrl}
             alt={product.name}
             className="aspect-square rounded-t-md"
+            imgClassName="object-contain"
           />
         </Link>
         <CardHeader className="gap-1 px-4 pt-4">
-          <CardTitle className={cn(serif, "text-base font-semibold")}>
+          <CardTitle className={cn(serif, "line-clamp-1 text-base font-semibold")}>
             <Link href={href} className="hover:text-primary hover:underline">
               {product.name}
             </Link>
@@ -262,7 +263,7 @@ const BestSellers: SectionComponent = ({ data: { store, content, bestSellers } }
           <MotionLi key={p.id} variants={settle}>
             <Card className="flex-row gap-0 overflow-hidden rounded-md py-0 shadow-sm">
               <Link href={productHref(store, p)} className="w-28 shrink-0 sm:w-36">
-                <Picture src={p.imageUrl} alt={p.name} className="aspect-square h-full w-full" />
+                <Picture src={p.imageUrl} alt={p.name} className="aspect-square h-full w-full" imgClassName="object-contain" />
               </Link>
               <div className="flex min-w-0 flex-1 flex-col justify-center gap-1 p-4">
                 <Badge className="w-fit bg-accent text-accent-foreground">#{i + 1}</Badge>
@@ -379,42 +380,6 @@ const Reviews: SectionComponent = ({ data: { content, reviews } }) => (
   </section>
 );
 
-const Instagram: SectionComponent = ({ data: { store, content, instagram } }) => (
-  <section className={cn(wrap, "pt-12")}>
-    <div className="mb-6 flex flex-wrap items-baseline justify-between gap-2 border-b border-border pb-3">
-      <h2 className={cn(serif, "text-2xl font-bold")}>{content["instagram.heading"]}</h2>
-      {instagram.url && (
-        <a
-          href={instagram.url}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="text-sm font-semibold text-primary hover:underline"
-        >
-          @{instagram.handle}
-        </a>
-      )}
-    </div>
-    {instagram.tiles.length > 0 && (
-      <MotionUl
-        initial="hidden"
-        whileInView="visible"
-        viewport={viewport}
-        variants={stagger}
-        className="grid grid-cols-3 gap-3 md:grid-cols-6"
-      >
-        {instagram.tiles.map((t, i) => (
-          <MotionLi key={i} variants={settle}>
-            <Picture
-              src={t.image}
-              alt={store.name}
-              className="aspect-square rounded-md border border-border"
-            />
-          </MotionLi>
-        ))}
-      </MotionUl>
-    )}
-  </section>
-);
 
 const Footer: SectionComponent = ({ data: { store, content, categoryTiles, pages } }) => (
   <footer className="mt-14 border-t border-border bg-secondary text-secondary-foreground">
@@ -579,7 +544,6 @@ export const classicTemplate: Template = {
   PromoBanner,
   BrandStory,
   Reviews,
-  Instagram,
   Footer,
   ProductPage,
 };

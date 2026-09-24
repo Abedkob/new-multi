@@ -130,11 +130,6 @@ export function isImageUrl(v: string) {
   }
 }
 
-/** Empty, or an Instagram username with optional leading @. */
-export function isInstagramHandle(v: string) {
-  return v === "" || /^@?[A-Za-z0-9._]{1,30}$/.test(v);
-}
-
 const priceString = z.string().transform((v, ctx) => {
   const cents = parsePriceToCents(v);
   if (cents === null || cents > 100_000_000) {
@@ -276,13 +271,6 @@ export const contentSchema = z.object({
             code: "custom",
             path: ["value"],
             message: "Must be an http(s) URL, a /path, or empty",
-          });
-        }
-        if (entry.key === "instagram.handle" && !isInstagramHandle(entry.value)) {
-          ctx.addIssue({
-            code: "custom",
-            path: ["value"],
-            message: "Use letters, numbers, . or _ (max 30), like @yourstore",
           });
         }
       }),

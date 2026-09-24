@@ -13,12 +13,16 @@ export function Picture({
   className,
   imgClassName,
   sizes = "(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 33vw",
+  quality = 90,
 }: {
   src: string;
   alt: string;
   className?: string;
   imgClassName?: string;
   sizes?: string;
+  /** Next's image optimizer quality (0-100, default 75); every storefront photo asks for a
+   * sharper 90 instead, since a slightly larger file beats visibly soft product photos. */
+  quality?: number;
 }) {
   return (
     <div className={cn("overflow-hidden relative", className)}>
@@ -28,6 +32,7 @@ export function Picture({
           alt={alt}
           fill
           sizes={sizes}
+          quality={quality}
           className={cn("object-cover", imgClassName)}
         />
       ) : (

@@ -4,7 +4,6 @@ import { PAGE_SLUGS } from "@/lib/pages";
 import { parseSectionVisibility } from "@/lib/sections";
 import type {
   CategoryTile,
-  InstagramInfo,
   PageLink,
   ReviewItem,
   StoreInfo,
@@ -71,20 +70,6 @@ export function buildStorefrontData(input: {
     if (quote) reviews.push({ quote, author: at(content, `reviews.item${n}.author`) });
   }
 
-  const handle = at(content, "instagram.handle").replace(/^@/, "");
-  const explicit = [1, 2, 3, 4]
-    .map((n) => at(content, `instagram.image${n}`))
-    .filter(Boolean);
-  const fallback = [...newArrivals, ...bestSellers]
-    .map((p) => p.imageUrl)
-    .filter(Boolean);
-  const images = [...new Set([...explicit, ...fallback])].slice(0, 6);
-  const instagram: InstagramInfo = {
-    handle,
-    url: handle ? `https://www.instagram.com/${handle}` : null,
-    tiles: images.map((image) => ({ image })),
-  };
-
   return {
     store,
     content,
@@ -94,6 +79,5 @@ export function buildStorefrontData(input: {
     categoryTiles,
     pages,
     reviews,
-    instagram,
   };
 }

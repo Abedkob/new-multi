@@ -67,9 +67,9 @@ Production: `pnpm db:deploy && pnpm build && pnpm start`.
 
 ## Storefront
 
-Every template renders the same 11 sections in the same fixed order (`SECTION_ORDER` in
+Every template renders the same 10 sections in the same fixed order (`SECTION_ORDER` in
 `lib/sections.ts`): announcement bar, navbar, hero, featured categories, new arrivals,
-best sellers, promo banner, brand story, reviews, Instagram, footer. Announcement bar, promo
+best sellers, promo banner, brand story, reviews, footer. Announcement bar, promo
 banner, brand story and reviews are optional: the owner can switch them off, and they also
 need content to appear. Templates differ only in visual treatment.
 

@@ -129,7 +129,7 @@ export function ProductImage({
         src={src}
         alt={product.name}
         className={cn("w-full h-full", zoom ? "opacity-0" : "opacity-100 transition-opacity")}
-        imgClassName={imgClassName}
+        imgClassName={cn("object-contain", imgClassName)}
       />
       {zoom && src && (
         <div 
@@ -175,7 +175,7 @@ export function ProductGallery({ className }: { className?: string }) {
             url === current ? "border-primary" : "border-transparent opacity-70 hover:opacity-100",
           )}
         >
-          <Picture src={url} alt={product.name} className="size-full" />
+          <Picture src={url} alt={product.name} className="size-full" imgClassName="object-contain" />
         </button>
       ))}
     </div>

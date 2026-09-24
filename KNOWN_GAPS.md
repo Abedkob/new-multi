@@ -155,8 +155,6 @@ Newest sections at the bottom; delete an item when it's fixed.
   old sidebar filters were dropped in the 11-section rework).
 - **Best sellers are a manual flag** (`Product.isBestSeller`), not sales data, and both
   New arrivals and Best sellers are capped at 8 products.
-- **Instagram is a static strip**, not a live feed: up to 4 photo URLs from content, topped
-  up with product photos, plus a link to the handle. It does not fetch anything from Instagram.
 - **Reviews are typed in by hand** (max 3 quotes), not a review system. The demo store's
   reviews are made-up sample text.
 - **Fixed section order** (by design for now): no reordering, and only the four optional
@@ -258,7 +256,7 @@ Newest sections at the bottom; delete an item when it's fixed.
   `env.ts` (secrets) and `node:dns/promises` (a Node built-in Turbopack can't bundle for the
   browser) — importing it from anywhere reachable by a client component breaks the build (hit
   this once: `lib/validation.ts` is imported by `app/admin/preview/live-preview.tsx` for
-  `isImageUrl`/`isInstagramHandle`, so it can only ever import the pure, dependency-free
+  `isImageUrl`, so it can only ever import the pure, dependency-free
   `domain-format.ts`, never `domain-check.ts`). Only `actions.ts` (a `"use server"` file) should
   import `domain-check.ts`.
 - **Production env checklist:** `PLATFORM_BASE_URL`, `SERVER_PUBLIC_IP` (both required — startup

@@ -50,7 +50,6 @@ export const SECTION_ORDER = [
   "promoBanner",
   "brandStory",
   "reviews",
-  "instagram",
   "footer",
 ] as const;
 export type SectionId = (typeof SECTION_ORDER)[number];

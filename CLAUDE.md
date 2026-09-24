@@ -79,8 +79,8 @@ Three layers:
 | `lib/env.ts` | Environment validation (fails fast at startup if anything's missing/invalid) |
 | `app/actions/auth.ts` | Login, logout, password change |
 | `proxy.ts` | Custom-domain host routing, path-based → domain redirect, auth role gates |
-| `templates/*` | Three templates (Atelier, Minimal, Luxury) + one more; each implements 11 sections per `templates/types.ts` contract |
-| `lib/sections.ts` | Canonical content keys for the 11 sections (announcement, navbar, hero, featured categories, new arrivals, best sellers, promo, brand story, reviews, Instagram, footer) |
+| `templates/*` | Three templates (Atelier, Minimal, Luxury) + one more; each implements 10 sections per `templates/types.ts` contract |
+| `lib/sections.ts` | Canonical content keys for the 10 sections (announcement, navbar, hero, featured categories, new arrivals, best sellers, promo, brand story, reviews, footer) |
 
 ### Common Patterns
 
@@ -120,7 +120,7 @@ const allProducts = await withBypass(async (tx) => {
 - Content lives on `TenantContent` by canonical key (defined in `lib/content.ts`, grouped by section).
 - Templates never hardcode text or colors; they read everything from `TenantContent`.
 - Section visibility is on `Tenant.sectionVisibility`; optional sections (announcement, promo, brand story, reviews) can be hidden.
-- The 11 sections are in a fixed order (`SECTION_ORDER` in `lib/sections.ts`) — no reordering yet.
+- The 10 sections are in a fixed order (`SECTION_ORDER` in `lib/sections.ts`) — no reordering yet.
 
 #### Variants & Stock
 
@@ -152,7 +152,7 @@ const allProducts = await withBypass(async (tx) => {
 ### How Templates Work
 
 - `templates/render.tsx` decides section visibility and order (so a template can't get it wrong).
-- Each template (e.g., `templates/atelier/index.tsx`) implements 11 section components + product page.
+- Each template (e.g., `templates/atelier/index.tsx`) implements 10 section components + product page.
 - `templates/types.ts` is the contract all templates follow.
 - Colors are injected as CSS variables at the root by `components/theme-scope.tsx` (from `Tenant.themeOverrides`).
 
@@ -206,7 +206,7 @@ No automated test suite yet. Four manual verification scripts + browser E2E test
 
 - `pnpm verify:isolation`: app-level tenant isolation (DB access attempts must fail).
 - `pnpm verify:commerce`: category trees, variant rules, stock deduction (concurrent), order snapshots, cancellation.
-- `pnpm verify:templates`: all 3+ templates × 11 sections, switches, live preview in admin/platform.
+- `pnpm verify:templates`: all 3+ templates × 10 sections, switches, live preview in admin/platform.
 - `pnpm verify:permissions`: role-based access via real login sessions + static check that every server action verifies role.
 - `pnpm e2e:*`: Chrome automation (categories, variants, shop/category/search/content pages, checkout flow).
 

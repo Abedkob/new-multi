@@ -47,7 +47,7 @@ export const CONTENT_SECTIONS = [
   {
     id: "promoBanner",
     title: "Promotional banner",
-    description: "A call-to-action banner. Needs a heading to appear.",
+    description: "A call-to-action banner. Needs a heading or an image to appear.",
     optional: "promoBanner",
   },
   {
@@ -61,12 +61,6 @@ export const CONTENT_SECTIONS = [
     title: "Reviews / social proof",
     description: "Up to three customer quotes. Only add real ones. Needs at least one quote to appear.",
     optional: "reviews",
-  },
-  {
-    id: "instagram",
-    title: "Instagram",
-    description:
-      "A photo strip linking to your profile. Empty image slots are filled with your product photos.",
   },
   {
     id: "footer",
@@ -179,20 +173,7 @@ export const CONTENT_KEYS = [
     ]),
   ),
 
-  // 10. Instagram
-  { section: "instagram", key: "instagram.heading", label: "Heading", kind: "text", default: "Follow along" },
-  { section: "instagram", key: "instagram.handle", label: "Instagram handle (e.g. @yourstore)", kind: "text", default: "" },
-  ...[1, 2, 3, 4].map(
-    (n): KeyDef => ({
-      section: "instagram",
-      key: `instagram.image${n}`,
-      label: `Photo ${n} URL (optional)`,
-      kind: "image",
-      default: "",
-    }),
-  ),
-
-  // 11. Footer
+  // 10. Footer
   { section: "footer", key: "footer.about", label: "About text", kind: "textarea", default: "We are a small store. Tell your customers about yourself here.", seed: true },
   { section: "footer", key: "footer.linksHeading", label: "Links heading", kind: "text", default: "Quick links" },
   { section: "footer", key: "footer.copyright", label: "Copyright line", kind: "text", default: "© {year} {store}. All rights reserved." },

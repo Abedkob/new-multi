@@ -62,14 +62,6 @@ export type PageLink = {
 
 export type ReviewItem = { quote: string; author: string };
 
-export type InstagramInfo = {
-  /** Without the leading @; empty when not configured. */
-  handle: string;
-  url: string | null;
-  /** Real images only (up to 6): content photos first, then product photos. May be empty. */
-  tiles: { image: string }[];
-};
-
 /**
  * Everything a template needs, prepared once by lib/storefront-data.ts. Templates only
  * read this: they never query, and never hardcode copy or colors.
@@ -85,13 +77,12 @@ export type StorefrontData = {
   /** Only pages whose text is non-empty, so a blank page is never linked. */
   pages: PageLink[];
   reviews: ReviewItem[];
-  instagram: InstagramInfo;
 };
 
 export type SectionComponent = ComponentType<{ data: StorefrontData }>;
 
 /**
- * Every template implements the same eleven sections. The renderer (templates/render.tsx)
+ * Every template implements the same ten sections. The renderer (templates/render.tsx)
  * decides which appear and in what order, so a template only decides how each one looks.
  */
 export type Template = {
@@ -104,7 +95,6 @@ export type Template = {
   PromoBanner: SectionComponent;
   BrandStory: SectionComponent;
   Reviews: SectionComponent;
-  Instagram: SectionComponent;
   Footer: SectionComponent;
   /** A grid of product cards, used by the shop, category and search pages. */
   ProductGrid: ComponentType<{ data: StorefrontData; products: StoreProduct[] }>;

@@ -12,7 +12,7 @@ import {
 import { parseSectionVisibility, type SectionVisibility } from "@/lib/sections";
 import { buildStorefrontData } from "@/lib/storefront-data";
 import type { ThemeColors } from "@/lib/theme";
-import { isImageUrl, isInstagramHandle } from "@/lib/validation";
+import { isImageUrl } from "@/lib/validation";
 import { getTemplate } from "@/templates";
 import { HomeSections, StorefrontShell } from "@/templates/render";
 import type { StoreInfo, StoreProduct } from "@/templates/types";
@@ -112,7 +112,6 @@ export function LivePreview({
       .filter(({ key, value }) => {
         if (value === "") return false;
         if (IMAGE_CONTENT_KEYS.includes(key)) return isImageUrl(value);
-        if (key === "instagram.handle") return isInstagramHandle(value);
         return true;
       });
     return buildStorefrontData({

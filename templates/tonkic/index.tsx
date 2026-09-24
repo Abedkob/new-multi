@@ -216,8 +216,8 @@ function ProductCard({
            <Picture
              src={product.imageUrl}
              alt={product.name}
-             className="w-full h-full object-cover relative z-10"
-             imgClassName="transition duration-[0.8s] group-hover:scale-105"
+             className="w-full h-full relative z-10"
+             imgClassName="object-contain transition duration-[0.8s] group-hover:scale-105"
            />
            
            <div className="absolute inset-0 z-20 bg-foreground/5 opacity-0 transition-opacity duration-500 group-hover:opacity-100" />
@@ -354,30 +354,6 @@ const Reviews: SectionComponent = ({ data: { content, reviews } }) => (
           </li>
         ))}
       </ul>
-    </div>
-  </section>
-);
-
-const Instagram: SectionComponent = ({ data: { store, content, instagram } }) => (
-  <section className="bg-background">
-    <div className={cn(wrap, "py-24")}>
-      <div className="mb-10 flex flex-wrap items-end justify-between gap-3 border-b border-border pb-6 md:mb-12 md:pb-8">
-        <h2 className="text-2xl font-semibold text-foreground sm:text-3xl">{content["instagram.heading"]}</h2>
-        {instagram.url && (
-          <a href={instagram.url} target="_blank" rel="noopener noreferrer" className="text-sm font-medium text-primary hover:underline">
-             @{instagram.handle}
-          </a>
-        )}
-      </div>
-      {instagram.tiles.length > 0 && (
-        <ul className="grid grid-cols-3 gap-2 sm:gap-4 md:grid-cols-6">
-          {instagram.tiles.map((t, i) => (
-            <li key={i} className="aspect-square bg-muted rounded-2xl overflow-hidden">
-              <Picture src={t.image} alt={store.name} className="w-full h-full object-cover" />
-            </li>
-          ))}
-        </ul>
-      )}
     </div>
   </section>
 );
@@ -531,7 +507,6 @@ export const tonkicTemplate: Template = {
   PromoBanner,
   BrandStory,
   Reviews,
-  Instagram,
   Footer,
   ProductPage,
 };

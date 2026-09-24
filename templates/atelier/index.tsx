@@ -290,7 +290,7 @@ function ProductCard({
 }) {
   const second = product.images.find((i) => i.url && i.url !== product.imageUrl)?.url ?? "";
   return (
-    <Link href={productHref(store, product)} className={cn("group flex flex-col", feature && "h-full")}>
+    <Link href={productHref(store, product)} className="group flex h-full flex-col">
       <div
         className={cn(
           "relative overflow-hidden bg-secondary",
@@ -301,7 +301,7 @@ function ProductCard({
           src={product.imageUrl}
           alt={product.name}
           className="absolute inset-0"
-          imgClassName={cn("transition duration-700 ease-out group-hover:scale-[1.04]", second && "group-hover:opacity-0")}
+          imgClassName={cn("object-contain transition duration-700 ease-out group-hover:scale-[1.04]", second && "group-hover:opacity-0")}
           sizes={feature ? "(max-width: 1024px) 100vw, 50vw" : undefined}
         />
         {second && (
@@ -309,6 +309,7 @@ function ProductCard({
             src={second}
             alt=""
             className="absolute inset-0 opacity-0 transition-opacity duration-700 group-hover:opacity-100"
+            imgClassName="object-contain"
             sizes={feature ? "(max-width: 1024px) 100vw, 50vw" : undefined}
           />
         )}
@@ -322,7 +323,12 @@ function ProductCard({
         </span>
       </div>
       <div className="mt-4 flex flex-col gap-1 sm:flex-row sm:items-baseline sm:justify-between sm:gap-3">
-        <h3 className={cn("min-w-0 font-serif italic leading-snug", feature ? "text-2xl sm:text-3xl" : "text-base sm:text-lg")}>
+        <h3
+          className={cn(
+            "min-w-0 font-serif italic leading-snug",
+            feature ? "line-clamp-2 text-2xl sm:text-3xl" : "line-clamp-1 text-base sm:text-lg",
+          )}
+        >
           {product.name}
         </h3>
         <span className="shrink-0 text-sm tabular-nums">{cardPrice(product, content)}</span>
@@ -530,72 +536,11 @@ const Reviews: SectionComponent = ({ data: { content, reviews } }) => (
   </section>
 );
 
-// Fixed classes (Tailwind needs to see them whole): each tile gets its own tilt and drop.
-const TILT = ["-rotate-3", "rotate-2 sm:translate-y-8", "-rotate-1", "rotate-3 sm:translate-y-6", "-rotate-2", "rotate-1 sm:translate-y-10"];
-
-/** Photos scattered like prints pinned to a mood board. */
-const Instagram: SectionComponent = ({ data: { store, content, instagram } }) => (
-  <section className="overflow-hidden py-20 lg:py-28">
-    <div className={cn(wrap, "text-center")}>
-      <h2 className="font-serif text-4xl italic tracking-tight sm:text-5xl lg:text-6xl">{content["instagram.heading"]}</h2>
-      {instagram.handle &&
-        (instagram.url ? (
-          <a
-            href={instagram.url}
-            target="_blank"
-            rel="noopener noreferrer"
-            className={cn(eyebrow, "mt-5 inline-flex items-center gap-2 hover:text-primary")}
-          >
-            @{instagram.handle}
-            <ArrowUpRight className="size-4" />
-          </a>
-        ) : (
-          <p className={cn(eyebrow, "mt-5 text-muted-foreground")}>@{instagram.handle}</p>
-        ))}
-    </div>
-    {instagram.tiles.length > 0 && (
-      <MotionUl
-        initial="hidden"
-        whileInView="visible"
-        viewport={viewport}
-        variants={stagger}
-        className={cn(wrap, "mt-14 flex flex-wrap justify-center gap-4 pb-10 sm:gap-6")}
-      >
-        {instagram.tiles.map((t, i) => {
-          const print = (
-            <div className="border border-border bg-background p-2 pb-8 shadow-md sm:p-3 sm:pb-10">
-              <Picture src={t.image} alt={store.name} className="aspect-square" sizes="(max-width: 640px) 45vw, 15vw" />
-            </div>
-          );
-          return (
-            <MotionLi
-              key={i}
-              variants={fadeUp}
-              className={cn(
-                "w-[42%] transition-transform duration-500 hover:z-10 hover:rotate-0 hover:scale-105 sm:w-44 lg:w-52",
-                TILT[i % TILT.length],
-              )}
-            >
-              {instagram.url ? (
-                <a href={instagram.url} target="_blank" rel="noopener noreferrer" aria-label={`@${instagram.handle}`}>
-                  {print}
-                </a>
-              ) : (
-                print
-              )}
-            </MotionLi>
-          );
-        })}
-      </MotionUl>
-    )}
-  </section>
-);
-
-const Footer: SectionComponent = ({ data: { store, content, pages, instagram } }) => (
+const Footer: SectionComponent = ({ data: { store, content, pages } }) => (
   <footer className="overflow-hidden bg-foreground text-background">
     <div className={cn(wrap, "pt-20")}>
-      <div className="grid gap-12 md:grid-cols-12">
-        <div className="md:col-span-5">
+      <div className="grid gap-12 sm:grid-cols-2">
+        <div>
           <StoreBrand
             store={store}
             content={content}
@@ -604,7 +549,7 @@ const Footer: SectionComponent = ({ data: { store, content, pages, instagram } }
           />
           <p className="mt-6 max-w-sm whitespace-pre-line text-sm leading-relaxed text-background/70">{content["footer.about"]}</p>
         </div>
-        <div className="md:col-span-3 md:col-start-7">
+        <div>
           <h3 className={cn(eyebrow, "mb-6 text-background/50")}>{content["footer.linksHeading"]}</h3>
           <ul className="space-y-3">
             <li>
@@ -621,24 +566,6 @@ const Footer: SectionComponent = ({ data: { store, content, pages, instagram } }
             ))}
           </ul>
         </div>
-        {instagram.handle && (
-          <div className="md:col-span-3">
-            <h3 className={cn(eyebrow, "mb-6 text-background/50")}>{content["instagram.heading"]}</h3>
-            {instagram.url ? (
-              <a
-                href={instagram.url}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="inline-flex items-center gap-2 font-serif text-lg italic transition-colors hover:text-accent"
-              >
-                @{instagram.handle}
-                <ArrowUpRight className="size-4" />
-              </a>
-            ) : (
-              <p className="font-serif text-lg italic">@{instagram.handle}</p>
-            )}
-          </div>
-        )}
       </div>
       <div className="mt-16 flex flex-col gap-2 border-t border-background/15 py-6 text-xs text-background/50 sm:flex-row sm:justify-between">
         <p>{fillTokens(content["footer.copyright"], store)}</p>
@@ -761,7 +688,6 @@ export const atelierTemplate: Template = {
   PromoBanner,
   BrandStory,
   Reviews,
-  Instagram,
   Footer,
   ProductPage,
 };

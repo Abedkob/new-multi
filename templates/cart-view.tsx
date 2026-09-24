@@ -64,7 +64,7 @@ export function CartView({
                   className="grid grid-cols-[4.5rem_minmax(0,1fr)_auto] items-start gap-x-4 gap-y-3 py-5 sm:grid-cols-[5rem_minmax(0,1fr)_auto]"
                 >
                   <Link href={`${base}/products/${item.productSlug}`} className="row-span-2">
-                    <Picture src={item.imageUrl} alt={item.productName} className="size-[4.5rem] rounded-md sm:size-20" />
+                    <Picture src={item.imageUrl} alt={item.productName} className="size-[4.5rem] rounded-md sm:size-20" imgClassName="object-contain" />
                   </Link>
                   <div className="min-w-0">
                     <Link

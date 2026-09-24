@@ -19,6 +19,9 @@ const nextConfig: NextConfig = {
         hostname: "**",
       },
     ],
+    // Storefront photos (templates/shared.tsx's Picture) ask for quality 90, not the 75
+    // default, so they need to be allow-listed here or Next warns on every render.
+    qualities: [75, 90],
   },
   async headers() {
     return [

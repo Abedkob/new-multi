@@ -17,10 +17,6 @@ import type {
 import { CarouselClient } from "./carousel-client";
 
 const wrap = "mx-auto max-w-7xl px-6";
-const outlineCta = cn(
-  buttonVariants({ variant: "outline", size: "lg" }),
-  "h-12 rounded-xl px-8 text-sm font-medium",
-);
 const solidCta = cn(
   buttonVariants({ variant: "default", size: "lg" }),
   "h-12 rounded-xl px-8 text-sm font-medium",
@@ -230,22 +226,37 @@ const FeaturedCategories: SectionComponent = ({ data: { content, categoryTiles }
 );
 
 function ProductCard({ store, product, content }: { store: StoreInfo; product: StoreProduct; content: ContentMap }) {
+  const href = productHref(store, product);
   return (
-    <MotionLi variants={fadeUp}>
-      <Link href={productHref(store, product)} className="group block">
-        <div className="overflow-hidden rounded-2xl bg-secondary/30">
-          <Picture
-            src={product.imageUrl}
-            alt={product.name}
-            className="aspect-[3/4]"
-            imgClassName="object-cover transition-transform duration-700 group-hover:scale-105"
-          />
+    <MotionLi variants={fadeUp} className="h-full">
+      <div className="flex h-full flex-col overflow-hidden rounded-3xl border border-border bg-background shadow-sm transition-shadow hover:shadow-lg">
+        <Link href={href} className="group block">
+          <div className="relative aspect-[4/5] overflow-hidden bg-secondary/30">
+            <Picture
+              src={product.imageUrl}
+              alt={product.name}
+              className="absolute inset-0"
+              imgClassName="object-contain p-6 sm:p-8 transition-transform duration-700 group-hover:scale-105"
+            />
+          </div>
+        </Link>
+        <div className="flex flex-1 flex-col p-5">
+          <Link href={href}>
+            <h3 className="line-clamp-1 text-base font-semibold text-foreground transition-colors hover:text-primary">
+              {product.name}
+            </h3>
+          </Link>
+          {/* min-h reserves 2 lines even when empty, so a short description doesn't shrink this
+              card relative to its row-mates — every card in a row ends up the same height. */}
+          <p className="mt-1.5 line-clamp-2 min-h-10 text-sm text-muted-foreground">{product.description}</p>
+          <div className="mt-auto flex items-center justify-between gap-3 pt-4">
+            <span className="text-lg font-bold text-foreground">{cardPrice(product, content)}</span>
+            <Link href={href} className={cn(buttonVariants({ size: "sm" }), "rounded-full px-5")}>
+              {content["product.viewLabel"]}
+            </Link>
+          </div>
         </div>
-        <div className="mt-5 px-1 flex justify-between items-start">
-          <h3 className="text-base font-medium text-foreground transition-colors group-hover:text-primary">{product.name}</h3>
-          <span className="text-sm font-semibold">{cardPrice(product, content)}</span>
-        </div>
-      </Link>
+      </div>
     </MotionLi>
   );
 }
@@ -294,36 +305,45 @@ const BestSellers: SectionComponent = ({ data: { store, content, bestSellers } }
   </section>
 );
 
-const PromoBanner: SectionComponent = ({ data: { store, content } }) => (
-  <section className="px-4 py-12 sm:px-6">
-    <div className="rounded-[2.5rem] bg-primary text-primary-foreground">
-      <MotionDiv
-        initial="hidden"
-        whileInView="visible"
-        viewport={viewport}
-        variants={stagger}
-        className="mx-auto max-w-3xl px-6 py-20 text-center"
-      >
-        <MotionH2 variants={fadeUp} className="text-4xl font-medium tracking-tight sm:text-5xl">
-          {content["promoBanner.heading"]}
-        </MotionH2>
-        {content["promoBanner.subtext"] && (
-          <MotionP variants={fadeUp} className="mt-6 whitespace-pre-line text-lg text-primary-foreground/80">
-            {content["promoBanner.subtext"]}
-          </MotionP>
+const PromoBanner: SectionComponent = ({ data: { store, content } }) => {
+  const image = content["promoBanner.image"];
+  return (
+    <section className="px-4 py-12 sm:px-6">
+      <div className="relative isolate overflow-hidden rounded-[2.5rem] bg-primary text-primary-foreground">
+        {image && (
+          <>
+            <Picture src={image} alt={content["promoBanner.heading"]} className="absolute inset-0 -z-10" sizes="100vw" />
+            <div className="absolute inset-0 -z-10 bg-primary/60" />
+          </>
         )}
-        <MotionDiv variants={fadeUp} className="mt-10">
-          <Link
-            href={sectionHref(store, "new-arrivals")}
-            className={cn(outlineCta, "border-primary-foreground text-primary-foreground hover:bg-primary-foreground hover:text-primary")}
-          >
-            {content["promoBanner.ctaLabel"]}
-          </Link>
+        <MotionDiv
+          initial="hidden"
+          whileInView="visible"
+          viewport={viewport}
+          variants={stagger}
+          className="mx-auto max-w-3xl px-6 py-20 text-center"
+        >
+          <MotionH2 variants={fadeUp} className="text-4xl font-medium tracking-tight sm:text-5xl">
+            {content["promoBanner.heading"]}
+          </MotionH2>
+          {content["promoBanner.subtext"] && (
+            <MotionP variants={fadeUp} className="mt-6 whitespace-pre-line text-lg text-primary-foreground/80">
+              {content["promoBanner.subtext"]}
+            </MotionP>
+          )}
+          <MotionDiv variants={fadeUp} className="mt-10">
+            <Link
+              href={sectionHref(store, "new-arrivals")}
+              className={cn(buttonVariants({ size: "lg" }), "h-12 rounded-xl px-8 text-sm font-medium bg-primary-foreground text-primary hover:bg-primary-foreground/90")}
+            >
+              {content["promoBanner.ctaLabel"]}
+            </Link>
+          </MotionDiv>
         </MotionDiv>
-      </MotionDiv>
-    </div>
-  </section>
-);
+      </div>
+    </section>
+  );
+};
 
 const BrandStory: SectionComponent = ({ data: { store, content } }) => {
   const image = content["brandStory.image"];
@@ -384,39 +404,6 @@ const Reviews: SectionComponent = ({ data: { content, reviews } }) => (
         ))}
       </MotionUl>
     </div>
-  </section>
-);
-
-const Instagram: SectionComponent = ({ data: { store, content, instagram } }) => (
-  <section className={cn(wrap, "py-24")}>
-    <div className="mb-12 text-center">
-      <h2 className="text-3xl font-semibold tracking-tight">{content["instagram.heading"]}</h2>
-      {instagram.url && (
-        <a
-          href={instagram.url}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="mt-3 inline-block font-medium text-muted-foreground hover:text-primary"
-        >
-          @{instagram.handle}
-        </a>
-      )}
-    </div>
-    {instagram.tiles.length > 0 && (
-      <MotionUl
-        initial="hidden"
-        whileInView="visible"
-        viewport={viewport}
-        variants={stagger}
-        className="grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-6"
-      >
-        {instagram.tiles.map((t, i) => (
-          <MotionLi key={i} variants={fadeUp} className="overflow-hidden rounded-2xl">
-            <Picture src={t.image} alt={store.name} className="aspect-square" imgClassName="object-cover transition-transform duration-500 hover:scale-110" />
-          </MotionLi>
-        ))}
-      </MotionUl>
-    )}
   </section>
 );
 
@@ -564,7 +551,6 @@ export const fashionTemplate: Template = {
   PromoBanner,
   BrandStory,
   Reviews,
-  Instagram,
   Footer,
   ProductPage,
 };
