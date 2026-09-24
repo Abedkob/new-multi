@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
   ExternalLink,
+  BadgePercent,
   FolderTree,
   House,
   KeyRound,
@@ -19,6 +20,7 @@ const LINKS = [
   { href: "/admin", label: "Home", icon: House },
   { href: "/admin/orders", label: "Orders", icon: ShoppingBag, badge: "pending" as const },
   { href: "/admin/products", label: "Products", icon: Package },
+  { href: "/admin/discounts", label: "Discounts", icon: BadgePercent },
   { href: "/admin/categories", label: "Categories", icon: FolderTree },
   { href: "/admin/content", label: "Store content", icon: Paintbrush },
 ];

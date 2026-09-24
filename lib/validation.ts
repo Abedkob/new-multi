@@ -256,6 +256,73 @@ export type ProductFormInput = {
   }[];
 };
 
+const optionalIsoDate = z
+  .string()
+  .trim()
+  .transform((value, ctx) => {
+    if (value === "") return null;
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) {
+      ctx.addIssue({ code: "custom", message: "Enter a valid date and time" });
+      return z.NEVER;
+    }
+    return date;
+  });
+
+export const discountFormSchema = z
+  .object({
+    name: z.string().trim().min(1, "Name is required").max(120, "At most 120 characters"),
+    type: z.enum(["PERCENTAGE", "FIXED_AMOUNT"]),
+    value: z.string().trim().min(1, "Discount value is required"),
+    isEnabled: z.boolean().default(false),
+    startsAt: optionalIsoDate,
+    endsAt: optionalIsoDate,
+  })
+  .superRefine((discount, ctx) => {
+    if (discount.type === "PERCENTAGE") {
+      if (!/^\d+$/.test(discount.value) || Number(discount.value) < 1 || Number(discount.value) > 100) {
+        ctx.addIssue({
+          code: "custom",
+          path: ["value"],
+          message: "Enter a whole percentage from 1 to 100",
+        });
+      }
+    } else {
+      const cents = parsePriceToCents(discount.value);
+      if (cents === null || cents < 1 || cents > 100_000_000) {
+        ctx.addIssue({
+          code: "custom",
+          path: ["value"],
+          message: "Enter an amount like 5.00",
+        });
+      }
+    }
+    if (discount.startsAt && discount.endsAt && discount.endsAt <= discount.startsAt) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["endsAt"],
+        message: "End time must be after the start time",
+      });
+    }
+  })
+  .transform((discount) => ({
+    ...discount,
+    value:
+      discount.type === "PERCENTAGE"
+        ? Number(discount.value)
+        : (parsePriceToCents(discount.value) ?? 0),
+  }));
+
+/** Client shape before validation converts money and timestamps. */
+export type DiscountFormInput = {
+  name: string;
+  type: "PERCENTAGE" | "FIXED_AMOUNT";
+  value: string;
+  isEnabled: boolean;
+  startsAt: string;
+  endsAt: string;
+};
+
 export const contentSchema = z.object({
   entries: z.array(
     z
@@ -333,6 +400,7 @@ export const cartLinesSchema = z
     z.object({
       variantId: z.string().min(1).max(64),
       quantity: z.number().int().min(1).max(99),
+      expectedPriceCents: z.number().int().min(0).max(100_000_000).optional(),
     }),
   )
   .min(1, "Your cart is empty")

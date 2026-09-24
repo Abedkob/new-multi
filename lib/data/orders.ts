@@ -1,7 +1,8 @@
 import { env } from "@/lib/env";
 import { withTenant } from "@/lib/prisma";
 import { canTransition, type OrderStatusValue } from "@/lib/orders";
-import { effectivePrice, parseAttributes, variantLabel } from "@/lib/variants";
+import { calculatePrice } from "@/lib/pricing";
+import { parseAttributes, variantLabel } from "@/lib/variants";
 import { isLicenseActive } from "@/lib/license/status";
 
 /**
@@ -18,6 +19,7 @@ export type OrderErrorCode =
   | "NOT_FOUND"
   | "BAD_TRANSITION"
   | "CHANGED"
+  | "PRICE_CHANGED"
   | "PAUSED";
 
 /** A problem the customer/owner can act on; the message is safe to show. */
@@ -40,7 +42,12 @@ export type CustomerInput = {
   notes: string;
 };
 
-export type OrderLineInput = { variantId: string; quantity: number };
+export type OrderLineInput = {
+  variantId: string;
+  quantity: number;
+  /** Displayed unit price; comparison-only. The server always calculates the charged price. */
+  expectedPriceCents?: number;
+};
 
 const MAX_LINES = 50;
 const MAX_QTY = 99;
@@ -59,11 +66,24 @@ export async function placeOrder(
 ) {
   // Merge duplicate variant ids and sanity-check quantities.
   const wanted = new Map<string, number>();
+  const expected = new Map<string, number>();
   for (const l of lines) {
     if (!Number.isInteger(l.quantity) || l.quantity < 1 || l.quantity > MAX_QTY) {
       throw new OrderError("INVALID", "Invalid quantity in your cart.");
     }
+    if (
+      l.expectedPriceCents !== undefined &&
+      (!Number.isInteger(l.expectedPriceCents) || l.expectedPriceCents < 0)
+    ) {
+      throw new OrderError("INVALID", "Invalid displayed price in your cart.");
+    }
     wanted.set(l.variantId, (wanted.get(l.variantId) ?? 0) + l.quantity);
+    if (l.expectedPriceCents !== undefined) {
+      expected.set(
+        l.variantId,
+        Math.min(expected.get(l.variantId) ?? l.expectedPriceCents, l.expectedPriceCents),
+      );
+    }
   }
   if (wanted.size === 0) throw new OrderError("EMPTY", "Your cart is empty.");
   if (wanted.size > MAX_LINES) throw new OrderError("INVALID", "Too many different items in one order.");
@@ -94,15 +114,38 @@ export async function placeOrder(
       throw new OrderError("PAUSED", "This store is temporarily unavailable and cannot accept orders.");
     }
 
+    const pricedAt = new Date();
     const variants = await tx.productVariant.findMany({
       where: { id: { in: ids }, product: { tenantId } },
-      include: { product: true },
+      include: { product: { include: { discounts: { include: { discount: true } } } } },
     });
     // Covers deleted variants and ids that belong to another store.
     if (variants.length !== ids.length) {
       throw new OrderError("UNAVAILABLE", "Some items in your cart are no longer available.");
     }
     const byId = new Map(variants.map((v) => [v.id, v]));
+    const prices = new Map(
+      variants.map((v) => [
+        v.id,
+        calculatePrice(
+          v.product.basePriceCents,
+          v.priceCentsOverride,
+          v.product.discounts.map((assignment) => assignment.discount),
+          pricedAt,
+        ),
+      ]),
+    );
+
+    for (const id of ids) {
+      const displayed = expected.get(id);
+      const current = prices.get(id)!;
+      if (displayed !== undefined && current.finalPriceCents > displayed) {
+        throw new OrderError(
+          "PRICE_CHANGED",
+          "One or more prices increased. Review your updated total and place the order again.",
+        );
+      }
+    }
 
     for (const id of ids) {
       const qty = wanted.get(id)!;
@@ -136,12 +179,17 @@ export async function placeOrder(
         items: {
           create: ids.map((id) => {
             const v = byId.get(id)!;
+            const price = prices.get(id)!;
             return {
               variantId: id,
               productNameSnapshot: v.product.name,
               variantAttributesSnapshot: parseAttributes(v.attributes),
               // Priced here on the server, never from anything the client sent.
-              priceCentsSnapshot: effectivePrice(v.product.basePriceCents, v.priceCentsOverride),
+              regularPriceCentsSnapshot: price.regularPriceCents,
+              discountCentsSnapshot: price.discountCents,
+              discountIdSnapshot: price.appliedDiscount?.id ?? null,
+              discountNameSnapshot: price.appliedDiscount?.name ?? null,
+              priceCentsSnapshot: price.finalPriceCents,
               quantity: wanted.get(id)!,
             };
           }),

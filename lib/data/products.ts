@@ -44,6 +44,11 @@ const withVariants = {
   images: { orderBy: [{ sortOrder: "asc" as const }, { createdAt: "asc" as const }] },
 };
 
+const withPricing = {
+  ...withVariants,
+  discounts: { include: { discount: true } },
+};
+
 async function assertCategory(db: TxClient, tenantId: string, categoryId: string | null) {
   if (categoryId === null) return;
   const found = await db.category.findFirst({
@@ -66,7 +71,7 @@ export function listProducts(tenantId: string) {
     db.product.findMany({
       where: { tenantId },
       orderBy: { createdAt: "desc" },
-      include: { ...withVariants, category: { select: { name: true } } },
+      include: { ...withPricing, category: { select: { name: true } } },
     }),
   );
 }
@@ -86,7 +91,7 @@ export function listProductsPage(tenantId: string, requestedPage: number, search
       orderBy: [{ createdAt: "desc" }, { id: "asc" }],
       skip: (page - 1) * ADMIN_PAGE_SIZE,
       take: ADMIN_PAGE_SIZE,
-      include: { ...withVariants, category: { select: { name: true } } },
+      include: { ...withPricing, category: { select: { name: true } } },
     });
     return { items, total, page, pages };
   });
@@ -103,7 +108,7 @@ export function productSitemapQuery(db: TxClient, tenantId: string) {
 
 export function getProduct(tenantId: string, id: string) {
   return withTenant(tenantId, (db) =>
-    db.product.findFirst({ where: { id, tenantId }, include: withVariants }),
+    db.product.findFirst({ where: { id, tenantId }, include: withPricing }),
   );
 }
 
@@ -263,7 +268,7 @@ export function getProductBySlug(tenantId: string, slug: string) {
   return withTenant(tenantId, (db) =>
     db.product.findUnique({
       where: { tenantId_slug: { tenantId, slug } },
-      include: withVariants,
+      include: withPricing,
     }),
   );
 }
@@ -274,7 +279,7 @@ export function newArrivalsQuery(db: TxClient, tenantId: string, take = 8) {
     where: { tenantId },
     orderBy: { createdAt: "desc" },
     take,
-    include: withVariants,
+    include: withPricing,
   });
 }
 
@@ -289,7 +294,7 @@ export function bestSellersQuery(db: TxClient, tenantId: string, take = 8) {
     where: { tenantId, isBestSeller: true },
     orderBy: { createdAt: "desc" },
     take,
-    include: withVariants,
+    include: withPricing,
   });
 }
 
@@ -304,7 +309,7 @@ export function listRelatedProducts(tenantId: string, excludeId: string, take = 
       where: { tenantId, id: { not: excludeId } },
       orderBy: { createdAt: "desc" },
       take,
-      include: withVariants,
+      include: withPricing,
     }),
   );
 }
@@ -354,6 +359,7 @@ export async function listCatalog(
 ) {
   const pageSize = opts.pageSize ?? CATALOG_PAGE_SIZE;
   const f = opts.filters ?? NO_FILTERS;
+  const at = new Date();
 
   const conds = scopeConditions(tenantId, opts);
   const variantConds: Prisma.Sql[] = [];
@@ -376,6 +382,23 @@ export async function listCatalog(
     CROSS JOIN LATERAL (
       SELECT COALESCE(MIN(COALESCE(v."priceCentsOverride", p."basePriceCents")), p."basePriceCents") AS price
       FROM "ProductVariant" v WHERE v."productId" = p."id"
+    ) rp
+    CROSS JOIN LATERAL (
+      SELECT LEAST(
+        rp.price,
+        COALESCE(MIN(CASE d.type
+          WHEN 'PERCENTAGE' THEN GREATEST(0, rp.price - ROUND((rp.price::numeric * d.value) / 100)::int)
+          WHEN 'FIXED_AMOUNT' THEN GREATEST(0, rp.price - d.value)
+        END), rp.price)
+      ) AS price
+      FROM "DiscountProduct" dp
+      JOIN "DiscountCampaign" d ON d.id = dp."discountId" AND d."tenantId" = dp."tenantId"
+      WHERE dp."productId" = p.id
+        AND dp."tenantId" = ${tenantId}
+        AND d."isEnabled" = true
+        AND d."archivedAt" IS NULL
+        AND (d."startsAt" IS NULL OR d."startsAt" <= ${at})
+        AND (d."endsAt" IS NULL OR d."endsAt" > ${at})
     ) mp
     WHERE ${Prisma.join(conds, " AND ")}`;
 
@@ -396,7 +419,7 @@ export async function listCatalog(
         LIMIT ${pageSize} OFFSET ${(page - 1) * pageSize}`
     ).map((r) => r.id);
     const rows = ids.length
-      ? await db.product.findMany({ where: { tenantId, id: { in: ids } }, include: withVariants })
+      ? await db.product.findMany({ where: { tenantId, id: { in: ids } }, include: withPricing })
       : [];
     const byId = new Map(rows.map((r) => [r.id, r]));
     const items = ids.flatMap((id) => byId.get(id) ?? []);
@@ -452,7 +475,7 @@ export function getVariantsForStore(tenantId: string, variantIds: string[]) {
   return withTenant(tenantId, (db) =>
     db.productVariant.findMany({
       where: { id: { in: variantIds }, product: { tenantId } },
-      include: { product: true },
+      include: { product: { include: { discounts: { include: { discount: true } } } } },
     }),
   );
 }

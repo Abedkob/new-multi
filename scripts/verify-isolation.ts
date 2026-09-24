@@ -17,6 +17,12 @@ import {
   updateProduct,
 } from "../lib/data/products";
 import { listContentRows, saveContent } from "../lib/data/content";
+import {
+  createDiscount,
+  getDiscount,
+  setDiscountAssignmentsForProducts,
+  updateDiscount,
+} from "../lib/data/discounts";
 import { setSectionVisible } from "../lib/data/sections";
 import { parseSectionVisibility } from "../lib/sections";
 
@@ -90,6 +96,30 @@ async function main() {
     await check("cannot flip A's best-seller flag", async () => {
       await updateProduct(B, pa.id, { name: "A widget", ...input, isBestSeller: true });
       assert.equal((await getProduct(A, pa.id))?.isBestSeller, false);
+    });
+    await check("discount campaigns and product assignments stay inside their store", async () => {
+      const discount = await createDiscount(A, {
+        name: "A only",
+        type: "PERCENTAGE",
+        value: 25,
+        isEnabled: true,
+        startsAt: null,
+        endsAt: null,
+      });
+      await setDiscountAssignmentsForProducts(A, discount.id, [pa.id], [pa.id]);
+      assert.equal(await getDiscount(B, discount.id), null);
+      assert.equal(await updateDiscount(B, discount.id, {
+        name: "Hacked",
+        type: "PERCENTAGE",
+        value: 99,
+        isEnabled: true,
+        startsAt: null,
+        endsAt: null,
+      }), false);
+      await assert.rejects(
+        setDiscountAssignmentsForProducts(B, discount.id, [pa.id], [pa.id]),
+      );
+      assert.equal((await getDiscount(A, discount.id))!.name, "A only");
     });
     await check("section visibility changes only touch the caller's tenant", async () => {
       await setSectionVisible(B, "reviews", false);

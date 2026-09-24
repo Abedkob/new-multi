@@ -189,7 +189,17 @@ export default async function OrderDetailPage({ params }: PageProps<"/admin/orde
                       <span className="font-medium">{i.productNameSnapshot}</span>
                       {label && <span className="block text-xs text-muted-foreground">{label}</span>}
                     </TableCell>
-                    <TableCell className="text-right tabular-nums">{formatPrice(i.priceCentsSnapshot)}</TableCell>
+                    <TableCell className="text-right tabular-nums">
+                      {i.discountCentsSnapshot > 0 && (
+                        <span className="block text-xs text-muted-foreground line-through">
+                          {formatPrice(i.regularPriceCentsSnapshot)}
+                        </span>
+                      )}
+                      {formatPrice(i.priceCentsSnapshot)}
+                      {i.discountNameSnapshot && (
+                        <span className="block text-xs text-destructive">{i.discountNameSnapshot}</span>
+                      )}
+                    </TableCell>
                     <TableCell className="text-right tabular-nums">{i.quantity}</TableCell>
                     <TableCell className="pr-6 text-right tabular-nums">
                       {formatPrice(i.priceCentsSnapshot * i.quantity)}

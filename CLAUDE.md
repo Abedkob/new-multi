@@ -64,7 +64,7 @@ Three layers:
 
 2. **App-level WHERE clauses** (`lib/data/*.ts`): every function takes a `tenantId` and includes it in WHERE conditions. `ProductVariant` has no `tenantId` field, so variant queries go *through* products (`where: { id, product: { tenantId } }`).
 
-3. **Database Row-Level Security** (RLS, `prisma/migrations/*_row_level_security`): when `APP_DATABASE_URL` points to a restricted role, RLS policies on 7 tenant-scoped tables (`Category`, `Product`, `ProductVariant`, `ProductImage`, `TenantContent`, `Order`, `OrderItem`) automatically filter results. Enforced via `lib/prisma.ts`'s `withTenant()` (sets session context per transaction) and `withBypass()` (for cross-tenant platform-admin queries). **Dependencies:** the restricted role must be created with `scripts/sql/rls-role.sql`, and `APP_DATABASE_URL` must be set in every environment, or RLS silently doesn't run.
+3. **Database Row-Level Security** (RLS, `prisma/migrations/*_row_level_security`): when `APP_DATABASE_URL` points to a restricted role, RLS policies on 9 tenant-scoped tables (`Category`, `Product`, `ProductVariant`, `ProductImage`, `TenantContent`, `Order`, `OrderItem`, `DiscountCampaign`, `DiscountProduct`) automatically filter results. Enforced via `lib/prisma.ts`'s `withTenant()` (sets session context per transaction) and `withBypass()` (for cross-tenant platform-admin queries). **Dependencies:** the restricted role must be created with `scripts/sql/rls-role.sql`, and `APP_DATABASE_URL` must be set in every environment, or RLS silently doesn't run.
 
 **User and Tenant tables are intentionally NOT under RLS** (v1 scope): login looks up users by email before any tenant context exists, and the storefront resolves a Tenant by slug the same way — still guarded only by application code.
 
@@ -143,6 +143,7 @@ const allProducts = await withBypass(async (tx) => {
 - **Users** have `mustChangePassword` (platform admin can force an owner to change) and `sessionVersion` (bumped when password reset to revoke live sessions).
 - **Categories** form a tree (`parentId`); a category page shows its products + everything in subcategories; can't be deleted if it has subcategories or products.
 - **Products** have a slug (never changes on rename, keeping old URLs valid), `isBestSeller` flag (manual, not sales-driven), and a `tenantId`.
+- **DiscountCampaigns** apply an automatic percentage or fixed per-unit discount to assigned products. Eligible campaigns never stack; the lowest final price wins. Campaign names are admin-only.
 - **ProductVariants** live under products (no direct `tenantId`); stock, optional price/image override, free-form attributes. One variant per product minimum.
 - **Orders** go Pending → Confirmed → Delivered (or can be Cancelled at any point); cancelling restores stock exactly once. Cancelled and Delivered are final.
 - **OrderItems** snapshot the product name, attributes, and price from the moment of purchase — editing a product doesn't affect past orders.

@@ -99,9 +99,25 @@ export const productHref = (store: StoreInfo, p: StoreProduct) =>
 export const sectionHref = (store: StoreInfo, anchor: string) =>
   `${storeHref(store)}#${anchor}`;
 
-/** Card price: "From $x" when a product's variants have different prices. */
-export const cardPrice = (product: StoreProduct, content: ContentMap) =>
-  `${product.hasPriceRange ? `${content["product.fromLabel"]} ` : ""}${formatPrice(product.priceCents)}`;
+/** Shared card price so every template renders automatic discounts consistently. */
+export const cardPrice = (product: StoreProduct, content: ContentMap) => (
+  <>
+    {product.isOnSale && (
+      <span className="mr-2 text-muted-foreground line-through decoration-1">
+        {formatPrice(product.regularPriceCents)}
+      </span>
+    )}
+    <span>
+      {product.hasPriceRange ? `${content["product.fromLabel"]} ` : ""}
+      {formatPrice(product.priceCents)}
+    </span>
+    {product.isOnSale && (
+      <span className="ml-2 inline-flex rounded-full bg-destructive/10 px-2 py-0.5 text-[0.7rem] leading-4 font-semibold text-destructive">
+        {content["product.saleBadge"]}
+      </span>
+    )}
+  </>
+);
 
 /** The store menu (hamburger + drawer) with everything filled in from the storefront data. */
 export function StoreMenuButton({

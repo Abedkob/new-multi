@@ -22,9 +22,17 @@ import {
   deleteProduct,
   getProduct,
   getVariantsForStore,
+  listCatalog,
   updateProduct,
   type ProductInput,
 } from "../lib/data/products";
+import {
+  createDiscount,
+  DiscountError,
+  getDiscount,
+  setDiscountAssignmentsForProducts,
+  updateDiscount,
+} from "../lib/data/discounts";
 import {
   OrderError,
   getOrder,
@@ -33,6 +41,7 @@ import {
   updateOrderStatus,
 } from "../lib/data/orders";
 import { orderTotal } from "../lib/orders";
+import { calculatePrice } from "../lib/pricing";
 import { createStoreWithOwner } from "../lib/data/tenants";
 import { toStoreProduct } from "../lib/store-product";
 import { cartLinesSchema, checkoutSchema, productFormSchema } from "../lib/validation";
@@ -284,6 +293,124 @@ async function main() {
       assert.equal(await prisma.productVariant.count({ where: { productId: id } }), 2);
       assert.equal(await deleteProduct(A, id), true);
       assert.equal(await prisma.productVariant.count({ where: { productId: id } }), 0);
+    });
+
+    console.log("Discounts:");
+    const saleProduct = await createProduct(A, base({
+      name: "Sale Item",
+      basePriceCents: 10000,
+      variants: [v({ size: "standard" }, 10), v({ size: "premium" }, 10, 12000)],
+    }));
+    const percentage = await createDiscount(A, {
+      name: "Twenty percent",
+      type: "PERCENTAGE",
+      value: 20,
+      isEnabled: true,
+      startsAt: null,
+      endsAt: null,
+    });
+    await setDiscountAssignmentsForProducts(A, percentage.id, [saleProduct.id], [saleProduct.id]);
+
+    await check("percentage discounts apply to base and variant override prices", async () => {
+      const stored = toStoreProduct((await getProduct(A, saleProduct.id))!);
+      assert.equal(stored.priceCents, 8000);
+      assert.equal(stored.regularPriceCents, 10000);
+      assert.equal(stored.isOnSale, true);
+      assert.equal(stored.variants.find((row) => row.label === "size: premium")!.priceCents, 9600);
+    });
+
+    const fixed = await createDiscount(A, {
+      name: "Thirty dollars",
+      type: "FIXED_AMOUNT",
+      value: 3000,
+      isEnabled: true,
+      startsAt: null,
+      endsAt: null,
+    });
+    await setDiscountAssignmentsForProducts(A, fixed.id, [saleProduct.id], [saleProduct.id]);
+
+    await check("overlapping discounts do not stack; the lowest price wins", async () => {
+      const stored = toStoreProduct((await getProduct(A, saleProduct.id))!);
+      assert.equal(stored.priceCents, 7000);
+      assert.equal(stored.variants.find((row) => row.label === "size: premium")!.priceCents, 9000);
+      const catalog = await listCatalog(A, { filters: { sort: "price-asc", minCents: 6900, maxCents: 7100, inStock: false, attrs: {} } });
+      assert.ok(catalog.items.some((product) => product.id === saleProduct.id), "catalog SQL did not use the discounted price");
+    });
+
+    await check("scheduling boundaries and percentage rounding are deterministic", async () => {
+      const at = new Date("2026-01-01T12:00:00.000Z");
+      const result = calculatePrice(999, null, [{
+        id: "scheduled",
+        name: "Third off",
+        type: "PERCENTAGE",
+        value: 33,
+        isEnabled: true,
+        startsAt: at,
+        endsAt: new Date("2026-01-01T13:00:00.000Z"),
+        archivedAt: null,
+        createdAt: new Date(0),
+      }], at);
+      assert.equal(result.discountCents, 330);
+      assert.equal(result.finalPriceCents, 669);
+      const ended = calculatePrice(999, null, [{
+        id: "ended",
+        name: "Ended",
+        type: "PERCENTAGE",
+        value: 50,
+        isEnabled: true,
+        startsAt: null,
+        endsAt: at,
+        archivedAt: null,
+        createdAt: new Date(0),
+      }], at);
+      assert.equal(ended.finalPriceCents, 999);
+    });
+
+    await check("another store cannot read, edit or assign this store's discount", async () => {
+      assert.equal(await getDiscount(B, fixed.id), null);
+      assert.equal(await updateDiscount(B, fixed.id, {
+        name: "Hacked",
+        type: "PERCENTAGE",
+        value: 99,
+        isEnabled: true,
+        startsAt: null,
+        endsAt: null,
+      }), false);
+      await assert.rejects(
+        setDiscountAssignmentsForProducts(B, fixed.id, [saleProduct.id], [saleProduct.id]),
+        (error) => error instanceof DiscountError,
+      );
+      assert.equal((await getDiscount(A, fixed.id))!.name, "Thirty dollars");
+    });
+
+    await check("checkout snapshots discount details and blocks only price increases", async () => {
+      const saleVariant = (await getProduct(A, saleProduct.id))!.variants[0];
+      const customer = {
+        customerName: "Discount Shopper",
+        customerPhone: "+1 555 010 0101",
+        customerAddress: "10 Sale Street",
+        deliveryLocation: "Front door",
+        notes: "",
+      };
+      const order = await placeOrder(A, customer, [{ variantId: saleVariant.id, quantity: 1, expectedPriceCents: 7000 }]);
+      assert.equal(order.items[0].regularPriceCentsSnapshot, 10000);
+      assert.equal(order.items[0].discountCentsSnapshot, 3000);
+      assert.equal(order.items[0].priceCentsSnapshot, 7000);
+      assert.equal(order.items[0].discountNameSnapshot, "Thirty dollars");
+      await updateDiscount(A, fixed.id, {
+        name: "Ten dollars",
+        type: "FIXED_AMOUNT",
+        value: 1000,
+        isEnabled: true,
+        startsAt: null,
+        endsAt: null,
+      });
+      await assert.rejects(
+        placeOrder(A, customer, [{ variantId: saleVariant.id, quantity: 1, expectedPriceCents: 7000 }]),
+        (error) => error instanceof OrderError && error.code === "PRICE_CHANGED",
+      );
+      // A lower current price is accepted rather than forcing an unnecessary second submit.
+      await placeOrder(A, customer, [{ variantId: saleVariant.id, quantity: 1, expectedPriceCents: 10000 }]);
     });
 
 

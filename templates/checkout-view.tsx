@@ -70,17 +70,21 @@ export function CheckoutView({
     startTransition(async () => {
       const res = await placeOrderAction(slug, {
         ...form,
-        lines: cart.lines.map((l) => ({ variantId: l.variantId, quantity: l.quantity })),
+        lines: items.map((item) => ({
+          variantId: item.variantId,
+          quantity: item.quantity,
+          expectedPriceCents: item.priceCents,
+        })),
       });
       if (res.ok && res.orderId) {
         cart.clear();
         router.push(`${base}/order-confirmation/${res.orderId}`);
         return;
       }
-      setError(res.error);
+      setError(res.priceChanged ? content["cart.priceChanged"] : res.error);
       setFieldErrors(res.fieldErrors ?? {});
       // Someone else may have bought the last unit: show the shopper current stock.
-      if (res.stockChanged) await refresh();
+      if (res.stockChanged || res.priceChanged) await refresh();
     });
   };
 
@@ -170,7 +174,14 @@ export function CheckoutView({
                   {i.quantity} &times; {i.productName}
                   {i.label && <span className="block text-muted-foreground">{i.label}</span>}
                 </span>
-                <span className="tabular-nums">{formatPrice(i.priceCents * i.quantity)}</span>
+                <span className="text-right tabular-nums">
+                  {i.discountCents > 0 && (
+                    <span className="block text-xs text-muted-foreground line-through">
+                      {formatPrice(i.regularPriceCents * i.quantity)}
+                    </span>
+                  )}
+                  {formatPrice(i.priceCents * i.quantity)}
+                </span>
               </li>
             ))}
           </ul>

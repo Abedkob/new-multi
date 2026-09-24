@@ -74,7 +74,21 @@ export function CartView({
                       {item.productName}
                     </Link>
                     {item.label && <p className="text-sm text-muted-foreground">{item.label}</p>}
-                    <p className="text-sm text-muted-foreground">{formatPrice(item.priceCents)}</p>
+                    <p className="flex flex-wrap items-center gap-2 text-sm">
+                      {item.discountCents > 0 && (
+                        <span className="text-muted-foreground line-through">
+                          {formatPrice(item.regularPriceCents)}
+                        </span>
+                      )}
+                      <span className={item.discountCents > 0 ? "font-medium text-foreground" : "text-muted-foreground"}>
+                        {formatPrice(item.priceCents)}
+                      </span>
+                      {item.discountCents > 0 && (
+                        <span className="rounded-full bg-destructive/10 px-2 py-0.5 text-xs font-semibold text-destructive">
+                          {content["product.saleBadge"]}
+                        </span>
+                      )}
+                    </p>
                     {atMax && (
                       <p className="mt-1 text-xs text-destructive" data-testid="cart-low-stock">
                         {fillVars(content["cart.lowStock"], { stock: item.stock })}

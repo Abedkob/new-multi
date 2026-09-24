@@ -243,8 +243,9 @@ export async function createStoreWithOwner(input: {
  *
  * Deliberately NOT copied: the domain (must stay unique to one store), marketing integration ids
  * (GA4/Meta/Ads — these identify the ORIGINAL business; copying them would send the new store's
- * traffic into someone else's accounts), the license, the pause state, and orders (transactional
- * history belongs only to the store that took them).
+ * traffic into someone else's accounts), the license, the pause state, automatic discounts
+ * (a copied store must not unexpectedly launch on sale), and orders (transactional history
+ * belongs only to the store that took them).
  *
  * Runs as several small bypass transactions rather than one big one (withBypass's callback should
  * stay small — see lib/prisma.ts), so a large catalog can't hold a pooled connection for the whole

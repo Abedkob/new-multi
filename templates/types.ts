@@ -19,8 +19,11 @@ export type StoreVariant = {
   /** "size: 40, color: white", or "Default" for a product without real variation. */
   label: string;
   stock: number;
-  /** Effective price: the variant's override, else the product's base price. */
+  /** Price before an automatic discount: variant override, else product base price. */
+  regularPriceCents: number;
+  /** Final price after the best eligible automatic discount. */
   priceCents: number;
+  discountCents: number;
   /** Effective image: the variant's override, else the product's image ("" if none). */
   imageUrl: string;
 };
@@ -34,9 +37,12 @@ export type StoreProduct = {
   imageUrl: string;
   /** Extra gallery photos, in display order (may be empty). */
   images: { url: string; altText: string }[];
-  /** Lowest variant price; shown with a "From" prefix when `hasPriceRange`. */
+  /** Regular price corresponding to the variant represented by `priceCents`. */
+  regularPriceCents: number;
+  /** Lowest final variant price; shown with a "From" prefix when `hasPriceRange`. */
   priceCents: number;
   hasPriceRange: boolean;
+  isOnSale: boolean;
   /** True when any variant has stock. Stock itself is per variant, never per product. */
   inStock: boolean;
   isBestSeller: boolean;

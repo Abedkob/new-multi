@@ -29,18 +29,18 @@ model User {
 }
 
 model Tenant {
-  id                     String   @id @default(cuid())
-  slug                   String   @unique
+  id                     String         @id @default(cuid())
+  slug                   String         @unique
   name                   String
-  ownerId                String   @unique
-  owner                  User     @relation(fields: [ownerId], references: [id])
+  ownerId                String         @unique
+  owner                  User           @relation(fields: [ownerId], references: [id])
   // Custom storefront domain (e.g. "acme.com") — set ONLY once it's verified and DNS actually
   // points here. Every URL-emitting surface (SEO helpers, sitemap, robots.txt, canonicals, and
   // the domain-routing proxy) trusts this field unconditionally and starts sending traffic and
   // search engines there the moment it's non-null. An unverified or mistyped value here sends
   // real traffic to a domain that doesn't serve this store. Null means the store is only
   // reachable at the platform's own /store/[slug] path. See lib/store-url.ts.
-  domain                 String?  @unique
+  domain                 String?        @unique
   // Per-store marketing integrations, set by the platform admin (/platform/stores/[slug]/...)
   // and injected into this store's storefront only. All nullable = off. Every value is
   // format-validated on save AND again before it is rendered into a <script> or <meta>
@@ -54,48 +54,49 @@ model Tenant {
   // Browser-tab icon for this store's storefront, set by the platform admin only (Branding
   // section). An image URL in our storage (lib/storage.ts). Null = a generated letter icon.
   faviconUrl             String?
-  templateId             String   @default("minimal")
-  themeOverrides         Json     @default("{}")
+  templateId             String         @default("minimal")
+  themeOverrides         Json           @default("{}")
   // Owner-controlled on/off switches for the optional storefront sections.
   // Missing keys fall back to defaults (see lib/sections.ts).
-  sectionVisibility      Json     @default("{}")
+  sectionVisibility      Json           @default("{}")
   // Platform-admin pause state. Owners retain dashboard access; public storefront and checkout
   // are blocked while paused. Keep operator pause separate from provider license status.
-  isPaused               Boolean  @default(false)
+  isPaused               Boolean        @default(false)
   pausedAt               DateTime?
   pauseReason            String?
   license                TenantLicense?
-  createdAt              DateTime @default(now())
+  createdAt              DateTime       @default(now())
 
   contents   TenantContent[]
   products   Product[]
   categories Category[]
   orders     Order[]
+  discounts  DiscountCampaign[]
 }
 
 // Provider secrets stay encrypted at rest and are never selected into browser-facing props.
 // One license activation belongs to exactly one store installation.
 model TenantLicense {
-  id                       String   @id @default(cuid())
-  tenantId                 String   @unique
-  tenant                   Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  installationId           String   @unique @default(uuid())
-  productCode              String
-  licenseKeyCiphertext     String
-  keyHint                  String?
+  id                        String    @id @default(cuid())
+  tenantId                  String    @unique
+  tenant                    Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  installationId            String    @unique @default(uuid())
+  productCode               String
+  licenseKeyCiphertext      String
+  keyHint                   String?
   activationTokenCiphertext String?
-  status                   String   @default("PENDING")
-  providerRequestId        String?
-  activationId             String?
-  licenseType              String?
-  expiresAt                DateTime?
-  entitlements             Json?
-  checkAfter               DateTime?
-  offlineGraceUntil        DateTime?
-  lastCheckedAt            DateTime?
-  lastError                String?
-  createdAt                DateTime @default(now())
-  updatedAt                DateTime @updatedAt
+  status                    String    @default("PENDING")
+  providerRequestId         String?
+  activationId              String?
+  licenseType               String?
+  expiresAt                 DateTime?
+  entitlements              Json?
+  checkAfter                DateTime?
+  offlineGraceUntil         DateTime?
+  lastCheckedAt             DateTime?
+  lastError                 String?
+  createdAt                 DateTime  @default(now())
+  updatedAt                 DateTime  @updatedAt
 
   @@index([status, checkAfter])
 }
@@ -152,28 +153,74 @@ model ProductVariant {
 }
 
 model Product {
-  id             String           @id @default(cuid())
+  id             String            @id @default(cuid())
   tenantId       String
-  tenant         Tenant           @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  tenant         Tenant            @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   name           String
-  description    String           @default("")
+  description    String            @default("")
   // Used when a variant has no price override of its own.
   basePriceCents Int
-  imageUrl       String           @default("")
+  imageUrl       String            @default("")
   slug           String
   categoryId     String?
-  category       Category?        @relation(fields: [categoryId], references: [id], onDelete: NoAction)
+  category       Category?         @relation(fields: [categoryId], references: [id], onDelete: NoAction)
   // Manually flagged for the "Best sellers" section (no sales data yet).
-  isBestSeller   Boolean          @default(false)
+  isBestSeller   Boolean           @default(false)
   variants       ProductVariant[]
   images         ProductImage[]
-  createdAt      DateTime         @default(now())
-  updatedAt      DateTime         @updatedAt
+  discounts      DiscountProduct[]
+  createdAt      DateTime          @default(now())
+  updatedAt      DateTime          @updatedAt
 
   // Product slugs only need to be unique within a store.
   @@unique([tenantId, slug])
+  // Supports the composite DiscountProduct FK that guarantees both rows share a tenant.
+  @@unique([id, tenantId])
   @@index([tenantId])
   @@index([categoryId])
+}
+
+enum DiscountType {
+  PERCENTAGE
+  FIXED_AMOUNT
+}
+
+// Reusable automatic product discounts. Status is derived at read time from these fields:
+// archived, disabled, scheduled, active or ended. No scheduler is required for activation.
+model DiscountCampaign {
+  id         String            @id @default(cuid())
+  tenantId   String
+  tenant     Tenant            @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  name       String
+  type       DiscountType
+  // Whole percentage points for PERCENTAGE; integer cents for FIXED_AMOUNT.
+  value      Int
+  isEnabled  Boolean           @default(false)
+  startsAt   DateTime?
+  endsAt     DateTime?
+  archivedAt DateTime?
+  createdAt  DateTime          @default(now())
+  updatedAt  DateTime          @updatedAt
+  products   DiscountProduct[]
+
+  @@unique([id, tenantId])
+  @@index([tenantId, archivedAt, isEnabled])
+  @@index([tenantId, startsAt, endsAt])
+}
+
+// tenantId participates in both composite foreign keys. PostgreSQL therefore rejects an
+// assignment unless the campaign and product belong to exactly the same tenant.
+model DiscountProduct {
+  tenantId   String
+  discountId String
+  productId  String
+  discount   DiscountCampaign @relation(fields: [discountId, tenantId], references: [id, tenantId], onDelete: Cascade)
+  product    Product          @relation(fields: [productId, tenantId], references: [id, tenantId], onDelete: Cascade)
+  createdAt  DateTime         @default(now())
+
+  @@id([discountId, productId])
+  @@index([tenantId, productId])
+  @@index([tenantId, discountId])
 }
 
 model ProductImage {
@@ -224,6 +271,11 @@ model OrderItem {
   variant                   ProductVariant? @relation(fields: [variantId], references: [id], onDelete: SetNull)
   productNameSnapshot       String
   variantAttributesSnapshot Json            @default("{}")
+  regularPriceCentsSnapshot Int
+  discountCentsSnapshot     Int             @default(0)
+  discountIdSnapshot        String?
+  discountNameSnapshot      String?
+  // The final unit price actually charged.
   priceCentsSnapshot        Int
   quantity                  Int
 

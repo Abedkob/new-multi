@@ -17,8 +17,8 @@ import {
 } from "@/components/ui/table";
 import { listProductsPage } from "@/lib/data/products";
 import { formatPrice } from "@/lib/format";
+import { calculatePrice } from "@/lib/pricing";
 import { requireOwner } from "@/lib/session";
-import { effectivePrice } from "@/lib/variants";
 import { deleteProductAction } from "./actions";
 import { DeleteButton } from "./delete-button";
 
@@ -30,6 +30,7 @@ export default async function ProductsPage({ searchParams }: PageProps<"/admin/p
   const q = (first(sp.q) ?? "").trim().slice(0, 100);
   const requested = Number.parseInt(first(sp.page) ?? "1", 10) || 1;
   const { items: products, total, page, pages } = await listProductsPage(tenantId, requested, q);
+  const pricedAt = new Date();
 
   const addButton = (
     <Link href="/admin/products/new" className={buttonVariants()}>
@@ -88,9 +89,16 @@ export default async function ProductsPage({ searchParams }: PageProps<"/admin/p
             </TableHeader>
             <TableBody>
               {products.map((p) => {
-                const prices = p.variants.map((v) => effectivePrice(p.basePriceCents, v.priceCentsOverride));
-                const min = Math.min(...(prices.length ? prices : [p.basePriceCents]));
-                const max = Math.max(...(prices.length ? prices : [p.basePriceCents]));
+                const discounts = p.discounts.map((assignment) => assignment.discount);
+                const prices = p.variants.map((v) =>
+                  calculatePrice(p.basePriceCents, v.priceCentsOverride, discounts, pricedAt),
+                );
+                const fallback = calculatePrice(p.basePriceCents, null, discounts, pricedAt);
+                const shown = prices.length ? prices : [fallback];
+                const min = Math.min(...shown.map((price) => price.finalPriceCents));
+                const max = Math.max(...shown.map((price) => price.finalPriceCents));
+                const minRegular = Math.min(...shown.map((price) => price.regularPriceCents));
+                const onSale = shown.some((price) => price.discountCents > 0);
                 const totalStock = p.variants.reduce((sum, v) => sum + v.stock, 0);
                 const soldOut = p.variants.filter((v) => v.stock <= 0).length;
                 return (
@@ -115,8 +123,14 @@ export default async function ProductsPage({ searchParams }: PageProps<"/admin/p
                     </TableCell>
                     <TableCell className="text-muted-foreground">{p.category?.name ?? "—"}</TableCell>
                     <TableCell className="text-right tabular-nums">
+                      {onSale && (
+                        <span className="mr-2 text-xs text-muted-foreground line-through">
+                          {formatPrice(minRegular)}
+                        </span>
+                      )}
                       {formatPrice(min)}
                       {max !== min && <span className="text-muted-foreground"> - {formatPrice(max)}</span>}
+                      {onSale && <span className="ml-2 text-xs font-medium text-destructive">Discounted</span>}
                     </TableCell>
                     <TableCell>
                       <div className="grid justify-items-start gap-1">

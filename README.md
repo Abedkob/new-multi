@@ -63,6 +63,7 @@ Production: `pnpm db:deploy && pnpm build && pnpm start`.
 | Content text, per section, with live preview (`/admin/content`) | no | yes |
 | Show/hide the 4 optional sections (`/admin/content`) | no | yes |
 | Products with variants, categories and the Best seller flag (`/admin/products`, `/admin/categories`) | no | yes |
+| Automatic percentage or fixed-amount product discounts (`/admin/discounts`) | no | yes |
 | Orders: view, confirm, deliver, cancel (`/admin/orders`) | no | yes |
 
 ## Storefront
@@ -101,6 +102,11 @@ need content to appear. Templates differ only in visual treatment.
   key/values. Rules: with several variants they share the same attribute names and are all
   different. The storefront picker is built from the union of attribute values, and "out of stock"
   is per variant.
+- **Discounts** are reusable product campaigns with an optional UTC schedule, percentage or fixed
+  amount, and explicit enable/archive controls. Campaigns never stack: when schedules overlap, the
+  lowest shopper price wins, with creation time and id as deterministic tie-breakers. Checkout
+  recalculates the price and asks the shopper to review only when the payable price has increased;
+  order items snapshot the regular price, discount, campaign, and final charged price.
 - **Storefront pages:** `/store/<slug>/shop`, `/category/<slug>`, `/search?q=`, `/cart`,
   `/checkout`, `/order-confirmation/<id>`, and `/about`, `/contact`, `/faq`, `/shipping` (a content
   page exists, and is linked, only once its text is filled in under Content > Pages).

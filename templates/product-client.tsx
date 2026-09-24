@@ -185,12 +185,25 @@ export function ProductGallery({ className }: { className?: string }) {
 /** The selected variant's price, else "From ..." (when prices differ) or the single price. */
 export function ProductPrice({ className }: { className?: string }) {
   const { product, variant, content } = useProduct();
-  const text = variant
-    ? formatPrice(variant.priceCents)
-    : `${product.hasPriceRange ? `${content["product.fromLabel"]} ` : ""}${formatPrice(product.priceCents)}`;
+  const regularPrice = variant?.regularPriceCents ?? product.regularPriceCents;
+  const finalPrice = variant?.priceCents ?? product.priceCents;
+  const onSale = finalPrice < regularPrice;
   return (
-    <span data-testid="product-price" className={className}>
-      {text}
+    <span data-testid="product-price" className={cn("inline-flex flex-wrap items-center gap-x-2 gap-y-1", className)}>
+      {onSale && (
+        <span className="text-muted-foreground line-through decoration-1">
+          {formatPrice(regularPrice)}
+        </span>
+      )}
+      <span>
+        {!variant && product.hasPriceRange ? `${content["product.fromLabel"]} ` : ""}
+        {formatPrice(finalPrice)}
+      </span>
+      {onSale && (
+        <span className="rounded-full bg-destructive/10 px-2 py-0.5 text-xs font-semibold text-destructive">
+          {content["product.saleBadge"]}
+        </span>
+      )}
     </span>
   );
 }

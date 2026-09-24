@@ -208,8 +208,10 @@ Newest sections at the bottom; delete an item when it's fixed.
     explicit opt-in is probably fine, but revisit against local privacy rules before launch; at
     minimum note it in the store's terms. localStorage prefill needs no consent.
   - Interacts with the bearer-link/privacy point above and with any future customer-accounts work.
-- **Money is simple:** USD only, no shipping fees, tax, discounts or coupons. The cart doesn't
-  warn if a price changed; the order is priced when placed and the summary shows current prices.
+- **Money is simple:** USD only, with no shipping fees, tax, or coupon codes. Automatic product
+  discounts support percentage and fixed-amount campaigns, but not cart-wide rules, minimum spend,
+  customer segments, usage limits, or promo-code entry. Checkout reprices the cart and asks the
+  shopper to review when the payable price has increased; a lower price is accepted automatically.
 - **Cart is per browser tab and lost on a full reload** (by requirement). A shopper who reloads
   the checkout page, or opens it directly, sees an empty cart.
 - **Categories:** an optional cover image, but no descriptions or manual ordering (siblings sort by name), slugs don't

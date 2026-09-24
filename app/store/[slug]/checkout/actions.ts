@@ -20,6 +20,8 @@ export type PlaceOrderResult = {
   fieldErrors?: Record<string, string[] | undefined>;
   /** Set when stock ran short so the page can refresh what it shows. */
   stockChanged?: boolean;
+  /** Set when checkout blocked a price increase so the summary can refresh before retrying. */
+  priceChanged?: boolean;
 };
 
 export async function placeOrderAction(
@@ -30,7 +32,7 @@ export async function placeOrderAction(
     customerAddress: string;
     deliveryLocation: string;
     notes: string;
-    lines: { variantId: string; quantity: number }[];
+    lines: { variantId: string; quantity: number; expectedPriceCents?: number }[];
   },
 ): Promise<PlaceOrderResult> {
   const tenant = typeof slug === "string" ? await getTenantBySlug(slug) : null;
@@ -60,7 +62,11 @@ export async function placeOrderAction(
     return { ok: true, orderId: order.id };
   } catch (e) {
     if (e instanceof OrderError) {
-      return { error: e.message, stockChanged: e.code === "STOCK" || e.code === "UNAVAILABLE" };
+      return {
+        error: e.message,
+        stockChanged: e.code === "STOCK" || e.code === "UNAVAILABLE",
+        priceChanged: e.code === "PRICE_CHANGED",
+      };
     }
     console.error("placeOrder failed:", e instanceof Error ? e.message : e);
     return { error: "Something went wrong placing your order. Please try again." };

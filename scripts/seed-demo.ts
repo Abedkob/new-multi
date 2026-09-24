@@ -13,6 +13,7 @@ import { prisma } from "../lib/prisma";
 import { CONTENT_KEY_NAMES } from "../lib/content";
 import { createCategory } from "../lib/data/categories";
 import { saveContent } from "../lib/data/content";
+import { createDiscount } from "../lib/data/discounts";
 import { placeOrder, updateOrderStatus } from "../lib/data/orders";
 import { createProduct, updateProduct, type VariantInput } from "../lib/data/products";
 import { createStoreWithOwner } from "../lib/data/tenants";
@@ -275,6 +276,28 @@ async function main() {
     else await createProduct(tenantId, input);
   }
 
+  // One live campaign exercises sale prices across product cards, variants, cart and checkout.
+  await prisma.discountCampaign.deleteMany({ where: { tenantId } });
+  const autumn = await createDiscount(tenantId, {
+    name: "Autumn edit",
+    type: "PERCENTAGE",
+    value: 15,
+    isEnabled: true,
+    startsAt: null,
+    endsAt: null,
+  });
+  const discountedProducts = await prisma.product.findMany({
+    where: { tenantId, name: { in: ["Linen Overshirt", "Wool Throw Blanket"] } },
+    select: { id: true },
+  });
+  await prisma.discountProduct.createMany({
+    data: discountedProducts.map((product) => ({
+      tenantId,
+      discountId: autumn.id,
+      productId: product.id,
+    })),
+  });
+
   // Sample orders. Stock was just reset by the product updates above, so clear old orders and
   // place fresh ones through the real checkout logic (which deducts stock).
   await prisma.order.deleteMany({ where: { tenantId } });
@@ -316,7 +339,7 @@ async function main() {
   console.log(
     `Seeded ${Object.keys(CONTENT).length} content keys, ${CATEGORIES.length} categories, ` +
       `${PRODUCTS.length} products with ${PRODUCTS.reduce((n, p) => n + p.variants.length, 0)} variants, ` +
-      `2 sample orders, all optional sections on` +
+      `1 active discount, 2 sample orders, all optional sections on` +
       (removed.count ? `, removed ${removed.count} obsolete keys.` : "."),
   );
 }

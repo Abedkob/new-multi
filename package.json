@@ -21,6 +21,7 @@
     "uploads:migrate": "tsx scripts/migrate-uploads-to-r2.ts",
     "e2e:categories": "tsx scripts/e2e/categories.ts",
     "e2e:variants": "tsx scripts/e2e/variants.ts",
+    "e2e:discounts": "tsx scripts/e2e/discounts.ts",
     "e2e:pages": "tsx scripts/e2e/storefront-pages.ts",
     "e2e:checkout": "tsx scripts/e2e/checkout.ts"
   },
