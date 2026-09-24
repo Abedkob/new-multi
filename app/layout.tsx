@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
+import Script from "next/script";
 import "./globals.css";
 
 const geistSans = Geist({
@@ -27,7 +28,20 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
       lang="en"
       className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
     >
-      <body className="min-h-full flex flex-col">{children}</body>
+      <body className="min-h-full flex flex-col">
+        {children}
+        {/* Platform owner's own analytics (this deployment, not a per-store GA id) — every
+         * route, including /platform and /admin. Per-store tracking is separate: lib/analytics.tsx. */}
+        <Script async src="https://www.googletagmanager.com/gtag/js?id=G-E98428QNRW" strategy="afterInteractive" />
+        <Script id="platform-gtag-init" strategy="afterInteractive">
+          {`
+            window.dataLayer = window.dataLayer || [];
+            function gtag(){dataLayer.push(arguments);}
+            gtag('js', new Date());
+            gtag('config', 'G-E98428QNRW');
+          `}
+        </Script>
+      </body>
     </html>
   );
 }
