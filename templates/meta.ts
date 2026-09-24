@@ -2,7 +2,7 @@ import type { ThemeColors } from "@/lib/theme";
 
 // Metadata only (no React components), so client code and Zod can import it.
 
-export const TEMPLATE_IDS = ["minimal", "classic", "tonkic", "fashion", "luxury", "atelier"] as const;
+export const TEMPLATE_IDS = ["minimal", "classic", "tonkic", "fashion", "luxury", "atelier", "atlas"] as const;
 export type TemplateId = (typeof TEMPLATE_IDS)[number];
 
 export const DEFAULT_TEMPLATE_ID: TemplateId = "minimal";
@@ -11,6 +11,17 @@ export const TEMPLATE_META: Record<
   TemplateId,
   { label: string; description: string; defaults: ThemeColors }
 > = {
+  atlas: {
+    label: "Atlas",
+    description:
+      "Swiss index: hairline grid cells, heavy uppercase type, monospace numbering, a bento category mosaic and a ranked best-seller ledger.",
+    defaults: {
+      primaryColor: "#111827",
+      secondaryColor: "#f3f4f6",
+      accentColor: "#2563eb",
+      backgroundColor: "#ffffff",
+    },
+  },
   atelier: {
     label: "Atelier",
     description:
@@ -24,7 +35,8 @@ export const TEMPLATE_META: Record<
   },
   luxury: {
     label: "Luxury",
-    description: "High-end luxury with generous whitespace, clean lines, and serif typography.",
+    description:
+      "Celestial couture: starfield bands, a planet hero ringed by turning orbits, categories set like planets and an eclipse promo.",
     defaults: {
       primaryColor: "#171717", // near black
       secondaryColor: "#fdfbf7", // warm off-white

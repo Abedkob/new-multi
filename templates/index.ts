@@ -4,6 +4,7 @@ import { tonkicTemplate } from "./tonkic";
 import { fashionTemplate } from "./fashion";
 import { luxuryTemplate } from "./luxury";
 import { atelierTemplate } from "./atelier";
+import { atlasTemplate } from "./atlas";
 import { normalizeTemplateId, type TemplateId } from "./meta";
 import type { Template } from "./types";
 
@@ -14,6 +15,7 @@ const templates: Record<TemplateId, Template> = {
   fashion: fashionTemplate,
   luxury: luxuryTemplate,
   atelier: atelierTemplate,
+  atlas: atlasTemplate,
 };
 
 /** Unknown/legacy template ids fall back to the default template. */

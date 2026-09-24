@@ -245,6 +245,14 @@ const STYLES = {
     group: "gap-2",
     option: "min-w-12 px-4 py-2.5 text-xs uppercase tracking-[0.15em]",
   },
+  luxury: {
+    group: "gap-2.5",
+    option: "min-w-14 rounded-full px-5 py-2.5 text-[11px] uppercase tracking-[0.2em]",
+  },
+  atlas: {
+    group: "gap-1.5",
+    option: "min-w-11 rounded-none px-3 py-2 font-mono text-xs uppercase",
+  },
 } as const;
 
 /**
@@ -336,6 +344,8 @@ const ADD_STYLES = {
   tonkic: "h-14 w-full rounded-full text-base font-semibold",
   solid: "h-12 w-full rounded-xl text-sm font-medium",
   atelier: "h-14 w-full rounded-none text-[11px] font-medium uppercase tracking-[0.25em]",
+  atlas: "h-12 w-full rounded-none font-mono text-xs uppercase tracking-[0.14em]",
+  luxury: "h-14 w-full rounded-full text-[11px] font-medium uppercase tracking-[0.3em]",
   default: "",
 } as const;
 
@@ -346,6 +356,8 @@ const QTY_STYLES = {
   tonkic: "h-14 rounded-full",
   solid: "h-12 rounded-xl",
   atelier: "h-14 rounded-none",
+  atlas: "h-12 rounded-none",
+  luxury: "h-14 rounded-full",
   default: "h-10 rounded-md",
 } as const;
 
