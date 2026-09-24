@@ -89,6 +89,9 @@ for (const look of looks) {
   assert.ok(html.includes('href="https://instagram.com/store"'), `${look} is missing Instagram`);
   assert.ok(html.includes('target="_blank"'), `${look} social links should open separately`);
   assert.ok(html.includes('rel="noopener noreferrer"'), `${look} external link rel is unsafe`);
+  for (const platform of ["instagram", "googleMaps"]) {
+    assert.ok(html.includes(`data-platform-icon="${platform}"`), `${look} is missing the ${platform} icon`);
+  }
   assert.ok(!/#[0-9a-f]{3,8}/i.test(html), `${look} emitted a hardcoded color`);
 }
 ok("all nine footer looks render safe, theme-token social links");

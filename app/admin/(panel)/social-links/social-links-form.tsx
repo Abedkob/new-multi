@@ -1,20 +1,13 @@
 "use client";
 
 import { useActionState } from "react";
-import { AtSign, MapPin, Music2, Users } from "lucide-react";
 import { saveSocialLinksAction } from "./actions";
+import { SocialPlatformIcon } from "@/components/social-platform-icon";
 import { SubmitButton } from "@/components/submit-button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { SOCIAL_LINK_FIELDS, type SocialLinkKey } from "@/lib/social-links";
-
-const ICONS = {
-  instagram: AtSign,
-  facebook: Users,
-  tiktok: Music2,
-  googleMaps: MapPin,
-};
 
 export function SocialLinksForm({
   defaults,
@@ -32,12 +25,11 @@ export function SocialLinksForm({
         </CardHeader>
         <CardContent className="grid gap-5">
           {SOCIAL_LINK_FIELDS.map(({ key, platform, label, placeholder }) => {
-            const Icon = ICONS[platform];
             const errors = state.fieldErrors?.[key];
             return (
               <div key={key} className="grid gap-1.5">
                 <Label htmlFor={key} className="inline-flex items-center gap-2">
-                  <Icon className="size-4 text-muted-foreground" aria-hidden />
+                  <SocialPlatformIcon platform={platform} className="text-muted-foreground" />
                   {label}
                 </Label>
                 <Input

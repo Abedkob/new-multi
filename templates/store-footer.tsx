@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { AtSign, MapPin, Music2, Users } from "lucide-react";
+import { SocialPlatformIcon } from "@/components/social-platform-icon";
 import { fillTokens } from "@/lib/content";
 import { cn } from "@/lib/utils";
 import { shopHref, StoreBrand } from "./shared";
@@ -104,20 +104,12 @@ const STYLES: Record<FooterLook, FooterStyle> = {
   },
 };
 
-const SOCIAL_ICONS = {
-  instagram: AtSign,
-  facebook: Users,
-  tiktok: Music2,
-  googleMaps: MapPin,
-};
-
 function SocialLinks({ links, linkClass }: { links: SocialLink[]; linkClass: string }) {
   if (links.length === 0) return null;
   return (
     <nav aria-label="Social links">
       <ul className="grid gap-3">
         {links.map((link) => {
-          const Icon = SOCIAL_ICONS[link.platform];
           return (
             <li key={link.platform}>
               <a
@@ -126,7 +118,7 @@ function SocialLinks({ links, linkClass }: { links: SocialLink[]; linkClass: str
                 rel="noopener noreferrer"
                 className={cn("inline-flex min-h-10 items-center gap-2 text-sm transition-colors", linkClass)}
               >
-                <Icon className="size-4 shrink-0" aria-hidden />
+                <SocialPlatformIcon platform={link.platform} />
                 {link.label}
               </a>
             </li>
