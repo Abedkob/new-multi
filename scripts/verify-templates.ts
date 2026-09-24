@@ -25,8 +25,9 @@ import { hashPassword } from "../lib/passwords";
 import { setSectionVisible } from "../lib/data/sections";
 import { toStoreProduct } from "../lib/store-product";
 import { saveThemeOverrides, setTenantTemplate } from "../lib/data/theme";
-import { OPTIONAL_SECTIONS, SECTION_ORDER, type OptionalSection } from "../lib/sections";
+import { HOME_SECTION_ORDER, OPTIONAL_SECTIONS, type OptionalSection, type SectionId } from "../lib/sections";
 import { TEMPLATE_IDS, TEMPLATE_META, normalizeTemplateId } from "../templates/meta";
+import { getTemplate } from "../templates";
 
 const BASE = process.env.BASE_URL ?? "http://localhost:3000";
 const SLUG = process.env.STORE_SLUG ?? "demo-boutique";
@@ -80,6 +81,14 @@ async function fingerprint(tenantId: string) {
 
 const money = (cents: number) =>
   new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(cents / 100);
+
+/** A template's full section order (announcement..footer), honoring its own homeSectionOrder. */
+const orderFor = (id: string): SectionId[] => [
+  "announcement",
+  "navbar",
+  ...(getTemplate(id).homeSectionOrder ?? HOME_SECTION_ORDER),
+  "footer",
+];
 
 let checks = 0;
 const ok = (name: string) => {
@@ -174,7 +183,7 @@ async function main() {
       await setTenantTemplate(tenant.id, id);
       const home = await page(`/store/${SLUG}`);
 
-      assert.deepEqual(sectionsIn(home), [...SECTION_ORDER], `${id}: sections missing or out of order`);
+      assert.deepEqual(sectionsIn(home), orderFor(id), `${id}: sections missing or out of order`);
       ok("all 10 sections render in the canonical order");
 
       for (const key of [
@@ -237,7 +246,7 @@ async function main() {
         assert.ok(!off.includes(probe), `${id}: ${section} content leaked while off`);
         assert.deepEqual(
           sectionsIn(off),
-          stays ? [...SECTION_ORDER] : SECTION_ORDER.filter((s) => s !== section),
+          stays ? orderFor(id) : orderFor(id).filter((s) => s !== section),
           `${id}: other sections changed when ${section} was switched off`,
         );
         assert.equal(

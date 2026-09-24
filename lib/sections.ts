@@ -53,3 +53,20 @@ export const SECTION_ORDER = [
   "footer",
 ] as const;
 export type SectionId = (typeof SECTION_ORDER)[number];
+
+/**
+ * The 7 "home" sections (everything between navbar and footer) — the ones whose relative order
+ * a template may override (templates/types.ts's Template.homeSectionOrder), e.g. to put new
+ * arrivals right after the hero instead of after featured categories. Announcement, navbar and
+ * footer always stay fixed at the top/bottom, so they're excluded here.
+ */
+export const HOME_SECTION_ORDER = [
+  "hero",
+  "featuredCategories",
+  "newArrivals",
+  "bestSellers",
+  "promoBanner",
+  "brandStory",
+  "reviews",
+] as const;
+export type HomeSectionId = (typeof HOME_SECTION_ORDER)[number];

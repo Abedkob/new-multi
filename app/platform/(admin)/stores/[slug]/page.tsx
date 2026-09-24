@@ -9,6 +9,7 @@ import {
 } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
 import { cn } from "@/lib/utils";
+import { DuplicateStoreForm } from "./duplicate-store-form";
 import { loadStore, setupStatus } from "./load";
 import { ResetPasswordButton } from "./reset-password-button";
 import { UpdateStoreForm } from "./update-store-form";
@@ -167,6 +168,20 @@ export default async function StoreOverviewPage({
           Open template &amp; theme editor ↗
         </Link>
       </div>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Duplicate this store</CardTitle>
+          <CardDescription>
+            Copies the template, theme, content, {tenant._count.products} products and every
+            category into a brand-new store with its own owner. Orders, the domain, license and
+            analytics/ads ids never carry over.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <DuplicateStoreForm slug={tenant.slug} storeName={tenant.name} />
+        </CardContent>
+      </Card>
     </>
   );
 }

@@ -4,7 +4,9 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { z } from "zod";
 import {
+  EmailTakenError,
   deleteTenant,
+  duplicateTenant,
   getTenantByDomain,
   getTenantBySlug,
   isUniqueViolation,
@@ -30,6 +32,7 @@ import { requirePlatformAdmin } from "@/lib/session";
 import { importImageFromUrl, isOwnImageUrl, storeImage } from "@/lib/storage";
 import {
   analyticsSettingsSchema,
+  createStoreSchema,
   domainFormSchema,
   isImageUrl,
   searchSettingsSchema,
@@ -119,6 +122,60 @@ export async function updateStoreAction(
   await updateTenantName(tenant.id, parsed.data.storeName);
   revalidateStore(slug);
   return { ok: true };
+}
+
+export type DuplicateStoreState = FormState & {
+  // Returned once in this action's response; never persisted or logged, same as store creation.
+  credentials?: {
+    storeName: string;
+    slug: string;
+    ownerEmail: string;
+    tempPassword: string;
+  };
+};
+
+export async function duplicateStoreAction(
+  slug: string,
+  _prev: DuplicateStoreState,
+  formData: FormData,
+): Promise<DuplicateStoreState> {
+  await requirePlatformAdmin();
+
+  const parsed = createStoreSchema.safeParse({
+    storeName: formData.get("storeName"),
+    ownerName: formData.get("ownerName"),
+    ownerEmail: formData.get("ownerEmail"),
+  });
+  if (!parsed.success) {
+    return { fieldErrors: z.flattenError(parsed.error).fieldErrors };
+  }
+
+  const source = await getTenantBySlug(slug);
+  if (!source) return { error: "Store not found." };
+
+  const tempPassword = generateTempPassword();
+  try {
+    const { tenant, user } = await duplicateTenant(source.id, {
+      ...parsed.data,
+      passwordHash: await hashPassword(tempPassword),
+    });
+    revalidatePath("/platform/stores");
+    return {
+      ok: true,
+      credentials: {
+        storeName: tenant.name,
+        slug: tenant.slug,
+        ownerEmail: user.email,
+        tempPassword,
+      },
+    };
+  } catch (e) {
+    if (e instanceof EmailTakenError) {
+      return { fieldErrors: { ownerEmail: [e.message] } };
+    }
+    console.error("duplicateStore failed:", e instanceof Error ? e.message : e);
+    return { error: "Could not duplicate the store. Please try again." };
+  }
 }
 
 export type ResetPasswordState = FormState & {

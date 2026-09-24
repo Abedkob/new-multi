@@ -151,3 +151,23 @@
     width: 100%;
   }
 }
+
+/* Infinite horizontal ticker (the Drop template's promo banner). Two copies of the same track
+   sit side by side and slide left by exactly one copy's width, so the loop has no visible seam.
+   No Tailwind utility covers this, so it's defined once here and shared via .animate-marquee. */
+@keyframes marquee {
+  from { transform: translateX(0); }
+  to { transform: translateX(-50%); }
+}
+.animate-marquee {
+  animation: marquee 24s linear infinite;
+}
+@media (prefers-reduced-motion: reduce) {
+  .animate-marquee {
+    animation: none;
+    transform: translateX(0);
+  }
+  .animate-marquee .marquee-clone {
+    display: none;
+  }
+}

@@ -1,6 +1,6 @@
 import { MotionConfig } from "motion/react";
 import { cn } from "@/lib/utils";
-import type { SectionId } from "@/lib/sections";
+import { HOME_SECTION_ORDER, type SectionId } from "@/lib/sections";
 import type { StorefrontData, Template } from "./types";
 
 /**
@@ -111,7 +111,7 @@ export function StorefrontShell({
   );
 }
 
-/** Sections 3 to 9, in fixed order. */
+/** Sections 3 to 9. Fixed order by default; a template may reorder them (Template.homeSectionOrder). */
 export function HomeSections({
   template,
   data,
@@ -121,17 +121,7 @@ export function HomeSections({
 }) {
   return (
     <>
-      {(
-        [
-          "hero",
-          "featuredCategories",
-          "newArrivals",
-          "bestSellers",
-          "promoBanner",
-          "brandStory",
-          "reviews",
-        ] as const
-      ).map((id) => (
+      {(template.homeSectionOrder ?? HOME_SECTION_ORDER).map((id) => (
         <Section key={id} id={id} data={data} template={template} />
       ))}
     </>

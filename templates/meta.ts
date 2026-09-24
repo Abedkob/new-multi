@@ -2,7 +2,7 @@ import type { ThemeColors } from "@/lib/theme";
 
 // Metadata only (no React components), so client code and Zod can import it.
 
-export const TEMPLATE_IDS = ["minimal", "classic", "tonkic", "fashion", "luxury", "atelier", "atlas"] as const;
+export const TEMPLATE_IDS = ["minimal", "classic", "tonkic", "fashion", "luxury", "atelier", "atlas", "pearl", "drop"] as const;
 export type TemplateId = (typeof TEMPLATE_IDS)[number];
 
 export const DEFAULT_TEMPLATE_ID: TemplateId = "minimal";
@@ -20,6 +20,28 @@ export const TEMPLATE_META: Record<
       secondaryColor: "#f3f4f6",
       accentColor: "#2563eb",
       backgroundColor: "#ffffff",
+    },
+  },
+  pearl: {
+    label: "Pearl",
+    description:
+      "Multi-brand department store: full-bleed hero, horizontal product rails, a two-up editorial category mosaic and a dark promo band.",
+    defaults: {
+      primaryColor: "#141414",
+      secondaryColor: "#f4f2ee",
+      accentColor: "#a13d2c",
+      backgroundColor: "#ffffff",
+    },
+  },
+  drop: {
+    label: "Drop",
+    description:
+      "Chaptered hype drop in daylight: a hover-swapped category directory, a lookbook spotlight instead of a grid, a watermarked best-seller list and a marquee promo band. No product grids up top.",
+    defaults: {
+      primaryColor: "#0a0a0a", // near black, solid CTA blocks
+      secondaryColor: "#eeece4", // warm light gray, alternate sections
+      accentColor: "#c8e600", // neon lime, the one pop of color
+      backgroundColor: "#f7f7f2", // soft off-white, not stark white
     },
   },
   atelier: {

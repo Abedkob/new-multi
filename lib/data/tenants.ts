@@ -2,7 +2,9 @@ import { Prisma } from "@/generated/prisma/client";
 import { prisma, withBypass } from "@/lib/prisma";
 import { SEED_CONTENT } from "@/lib/content";
 import type { IntegrationKey } from "@/lib/integrations";
+import { parseSectionVisibility } from "@/lib/sections";
 import { slugCandidate, slugify } from "@/lib/slug";
+import { parseThemeOverrides } from "@/lib/theme";
 
 export class EmailTakenError extends Error {
   constructor() {
@@ -225,6 +227,177 @@ export async function createStoreWithOwner(input: {
         });
         return { tenant, user };
       });
+    } catch (e) {
+      if (isUniqueViolation(e)) continue;
+      throw e;
+    }
+  }
+  throw new Error("Could not allocate a unique store slug, please retry");
+}
+
+/**
+ * Copies a store's storefront — template, theme, section visibility, content, categories (with
+ * their tree) and products (with variants and images) — into a brand-new tenant with its own
+ * owner account. Category and product slugs are copied as-is: both are unique per tenant, not
+ * globally, so there's no collision with the source.
+ *
+ * Deliberately NOT copied: the domain (must stay unique to one store), marketing integration ids
+ * (GA4/Meta/Ads — these identify the ORIGINAL business; copying them would send the new store's
+ * traffic into someone else's accounts), the license, the pause state, and orders (transactional
+ * history belongs only to the store that took them).
+ *
+ * Runs as several small bypass transactions rather than one big one (withBypass's callback should
+ * stay small — see lib/prisma.ts), so a large catalog can't hold a pooled connection for the whole
+ * copy. The tenant/owner/categories/content step is one transaction (a failure there rolls back
+ * cleanly on its own); products are copied afterwards in batches — if a batch fails, the
+ * already-created tenant is torn down rather than left behind half-populated.
+ */
+export async function duplicateTenant(
+  sourceId: string,
+  input: { storeName: string; ownerName: string; ownerEmail: string; passwordHash: string },
+) {
+  const base = slugify(input.storeName);
+
+  // Cross-tenant read (tenant A's data, about to be written into new tenant B), so bypass —
+  // there is no single tenant context that covers both sides of a copy.
+  const source = await withBypass((db) =>
+    db.tenant.findUniqueOrThrow({
+      where: { id: sourceId },
+      select: {
+        templateId: true,
+        themeOverrides: true,
+        sectionVisibility: true,
+        faviconUrl: true,
+        contents: { select: { key: true, value: true } },
+        categories: {
+          select: { id: true, name: true, slug: true, parentId: true, imageUrl: true },
+        },
+      },
+    }),
+  );
+
+  // A concurrent create can grab the slug (or the owner email) between our check and insert;
+  // retry with a fresh slug, same as createStoreWithOwner.
+  for (let attempt = 0; attempt < 5; attempt++) {
+    try {
+      const { tenant, user, categoryMap } = await withBypass(async (tx) => {
+        if (
+          await tx.user.findUnique({ where: { email: input.ownerEmail }, select: { id: true } })
+        ) {
+          throw new EmailTakenError();
+        }
+
+        const taken = new Set(
+          (
+            await tx.tenant.findMany({
+              where: { slug: { startsWith: base } },
+              select: { slug: true },
+            })
+          ).map((t) => t.slug),
+        );
+        let n = 1;
+        while (taken.has(slugCandidate(base, n))) n++;
+        const slug = slugCandidate(base, n);
+
+        const user = await tx.user.create({
+          data: {
+            email: input.ownerEmail,
+            name: input.ownerName,
+            passwordHash: input.passwordHash,
+            role: "STORE_OWNER",
+            mustChangePassword: true,
+          },
+        });
+        const tenant = await tx.tenant.create({
+          data: {
+            slug,
+            name: input.storeName,
+            ownerId: user.id,
+            templateId: source.templateId,
+            themeOverrides: { ...parseThemeOverrides(source.themeOverrides) },
+            sectionVisibility: { ...parseSectionVisibility(source.sectionVisibility) },
+            faviconUrl: source.faviconUrl,
+            contents: { create: source.contents },
+          },
+        });
+
+        // Categories can nest arbitrarily: create every category whose parent is already
+        // created (roots first, since their parentId is null), repeating until none are left.
+        // A category whose parent never turns up (shouldn't happen — parentId is FK-enforced)
+        // is simply left out rather than looping forever.
+        const categoryMap = new Map<string, string>();
+        let remaining = source.categories;
+        while (remaining.length > 0) {
+          const ready = remaining.filter((c) => c.parentId === null || categoryMap.has(c.parentId));
+          if (ready.length === 0) break;
+          for (const c of ready) {
+            const created = await tx.category.create({
+              data: {
+                tenantId: tenant.id,
+                name: c.name,
+                slug: c.slug,
+                imageUrl: c.imageUrl,
+                parentId: c.parentId ? categoryMap.get(c.parentId) : null,
+              },
+            });
+            categoryMap.set(c.id, created.id);
+          }
+          remaining = remaining.filter((c) => !categoryMap.has(c.id));
+        }
+
+        return { tenant, user, categoryMap };
+      });
+
+      try {
+        const products = await withBypass((db) =>
+          db.product.findMany({
+            where: { tenantId: sourceId },
+            include: { variants: true, images: true },
+            orderBy: { createdAt: "asc" },
+          }),
+        );
+        const BATCH = 25;
+        for (let i = 0; i < products.length; i += BATCH) {
+          const batch = products.slice(i, i + BATCH);
+          await withBypass(async (tx) => {
+            for (const p of batch) {
+              await tx.product.create({
+                data: {
+                  tenantId: tenant.id,
+                  name: p.name,
+                  description: p.description,
+                  basePriceCents: p.basePriceCents,
+                  imageUrl: p.imageUrl,
+                  slug: p.slug,
+                  isBestSeller: p.isBestSeller,
+                  categoryId: p.categoryId ? (categoryMap.get(p.categoryId) ?? null) : null,
+                  variants: {
+                    create: p.variants.map((v) => ({
+                      attributes: (v.attributes ?? {}) as Prisma.InputJsonValue,
+                      stock: v.stock,
+                      priceCentsOverride: v.priceCentsOverride,
+                      imageUrl: v.imageUrl,
+                      sortOrder: v.sortOrder,
+                    })),
+                  },
+                  images: {
+                    create: p.images.map((img) => ({
+                      url: img.url,
+                      altText: img.altText,
+                      sortOrder: img.sortOrder,
+                    })),
+                  },
+                },
+              });
+            }
+          });
+        }
+      } catch (e) {
+        await deleteTenant(tenant.id);
+        throw e;
+      }
+
+      return { tenant, user };
     } catch (e) {
       if (isUniqueViolation(e)) continue;
       throw e;

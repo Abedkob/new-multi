@@ -1,6 +1,6 @@
 import type { ComponentType } from "react";
 import type { ContentMap } from "@/lib/content";
-import type { SectionVisibility } from "@/lib/sections";
+import type { HomeSectionId, SectionVisibility } from "@/lib/sections";
 
 export type StoreInfo = {
   name: string;
@@ -96,6 +96,12 @@ export type Template = {
   BrandStory: SectionComponent;
   Reviews: SectionComponent;
   Footer: SectionComponent;
+  /** Order of the 7 home sections (between navbar and footer). Defaults to lib/sections.ts's
+   * HOME_SECTION_ORDER (hero, featuredCategories, newArrivals, bestSellers, promoBanner,
+   * brandStory, reviews) when omitted. Set this only when the template's layout genuinely calls
+   * for a different flow, e.g. new arrivals right after the hero. Visibility rules (an empty
+   * optional section still disappears) are unaffected — this only changes relative order. */
+  homeSectionOrder?: readonly HomeSectionId[];
   /** A grid of product cards, used by the shop, category and search pages. */
   ProductGrid: ComponentType<{ data: StorefrontData; products: StoreProduct[] }>;
   /** Where the catalog sort + filters go: above the grid (default) or in a column on its left

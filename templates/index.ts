@@ -5,6 +5,8 @@ import { fashionTemplate } from "./fashion";
 import { luxuryTemplate } from "./luxury";
 import { atelierTemplate } from "./atelier";
 import { atlasTemplate } from "./atlas";
+import { pearlTemplate } from "./pearl";
+import { dropTemplate } from "./drop";
 import { normalizeTemplateId, type TemplateId } from "./meta";
 import type { Template } from "./types";
 
@@ -16,6 +18,8 @@ const templates: Record<TemplateId, Template> = {
   luxury: luxuryTemplate,
   atelier: atelierTemplate,
   atlas: atlasTemplate,
+  pearl: pearlTemplate,
+  drop: dropTemplate,
 };
 
 /** Unknown/legacy template ids fall back to the default template. */
