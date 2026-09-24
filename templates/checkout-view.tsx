@@ -21,6 +21,8 @@ export function CheckoutView({
   slug,
   basePath,
   content,
+  deliveryFeeCents,
+  deliveryNote,
   style,
 }: {
   /** Used only for useCartDetails/placeOrderAction, which are always addressed by the real
@@ -29,6 +31,8 @@ export function CheckoutView({
   /** "" once the store has its own domain, else "/store/[slug]" — see templates/types.ts. */
   basePath: string;
   content: ContentMap;
+  deliveryFeeCents: number;
+  deliveryNote: string;
   style: Template["pageStyle"];
 }) {
   const router = useRouter();
@@ -47,6 +51,7 @@ export function CheckoutView({
         priceCents: i.priceCents,
         quantity: i.quantity,
       })),
+      deliveryFeeCents,
     ),
   );
 
@@ -70,6 +75,7 @@ export function CheckoutView({
     startTransition(async () => {
       const res = await placeOrderAction(slug, {
         ...form,
+        expectedDeliveryFeeCents: deliveryFeeCents,
         lines: items.map((item) => ({
           variantId: item.variantId,
           quantity: item.quantity,
@@ -85,6 +91,7 @@ export function CheckoutView({
       setFieldErrors(res.fieldErrors ?? {});
       // Someone else may have bought the last unit: show the shopper current stock.
       if (res.stockChanged || res.priceChanged) await refresh();
+      if (res.deliveryChanged) router.refresh();
     });
   };
 
@@ -185,12 +192,27 @@ export function CheckoutView({
               </li>
             ))}
           </ul>
-          <div className="mt-4 flex justify-between border-t border-border pt-4 font-semibold">
-            <span>{content["confirmation.total"]}</span>
-            <span className="tabular-nums" data-testid="checkout-total">
-              {formatPrice(subtotal)}
-            </span>
-          </div>
+          <dl className="mt-4 grid gap-2 border-t border-border pt-4 text-sm">
+            <div className="flex justify-between gap-3">
+              <dt>{content["cart.subtotal"]}</dt>
+              <dd className="tabular-nums">{formatPrice(subtotal)}</dd>
+            </div>
+            <div className="flex justify-between gap-3">
+              <dt>Delivery</dt>
+              <dd className="tabular-nums" data-testid="checkout-delivery-fee">
+                {deliveryFeeCents === 0 ? "Free" : formatPrice(deliveryFeeCents)}
+              </dd>
+            </div>
+            <div className="flex justify-between gap-3 pt-2 text-base font-semibold">
+              <dt>{content["confirmation.total"]}</dt>
+              <dd className="tabular-nums" data-testid="checkout-total">
+                {formatPrice(subtotal + deliveryFeeCents)}
+              </dd>
+            </div>
+          </dl>
+          {deliveryNote && (
+            <p className="mt-3 text-sm text-muted-foreground">{deliveryNote}</p>
+          )}
           <Link
             href={`${base}/cart`}
             className="mt-4 inline-block text-sm text-muted-foreground underline underline-offset-4"

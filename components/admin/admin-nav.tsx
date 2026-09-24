@@ -13,6 +13,7 @@ import {
   Paintbrush,
   Share2,
   ShoppingBag,
+  Truck,
 } from "lucide-react";
 import { logoutAction } from "@/app/actions/auth";
 import { cn } from "@/lib/utils";
@@ -20,6 +21,7 @@ import { cn } from "@/lib/utils";
 const LINKS = [
   { href: "/admin", label: "Home", icon: House },
   { href: "/admin/orders", label: "Orders", icon: ShoppingBag, badge: "pending" as const },
+  { href: "/admin/delivery", label: "Delivery", icon: Truck },
   { href: "/admin/products", label: "Products", icon: Package },
   { href: "/admin/discounts", label: "Discounts", icon: BadgePercent },
   { href: "/admin/categories", label: "Categories", icon: FolderTree },

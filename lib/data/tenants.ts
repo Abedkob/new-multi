@@ -6,6 +6,7 @@ import { parseSectionVisibility } from "@/lib/sections";
 import { slugCandidate, slugify } from "@/lib/slug";
 import { parseThemeOverrides } from "@/lib/theme";
 import type { StoreSocialLinks } from "@/lib/social-links";
+import type { DeliverySettings } from "@/lib/delivery";
 
 export class EmailTakenError extends Error {
   constructor() {
@@ -121,8 +122,18 @@ export function updateTenantSocialLinks(id: string, socialLinks: StoreSocialLink
       facebookUrl: true,
       instagramUrl: true,
       tiktokUrl: true,
+      whatsappNumber: true,
       googleMapsUrl: true,
     },
+  });
+}
+
+/** One store-wide delivery price and customer-facing expectation note. */
+export function updateTenantDeliverySettings(id: string, settings: DeliverySettings) {
+  return prisma.tenant.update({
+    where: { id },
+    data: settings,
+    select: { deliveryFeeCents: true, deliveryNote: true },
   });
 }
 

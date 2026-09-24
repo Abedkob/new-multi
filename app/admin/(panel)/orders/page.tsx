@@ -132,7 +132,7 @@ export default async function OrdersPage({ searchParams }: PageProps<"/admin/ord
                     {o.items.reduce((n, i) => n + i.quantity, 0)}
                   </TableCell>
                   <TableCell className="text-right font-medium tabular-nums">
-                    {formatPrice(orderTotal(o.items))}
+                    {formatPrice(orderTotal(o.items, o.deliveryFeeCentsSnapshot))}
                   </TableCell>
                   <TableCell>
                     <StatusBadge status={o.status} />

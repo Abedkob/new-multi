@@ -145,9 +145,9 @@ function makeTracker(config: AnalyticsConfig) {
         currency: CURRENCY,
       });
     },
-    beginCheckout(items: TrackItem[]) {
-      const value = dollars(sumCents(items));
-      ga("begin_checkout", { currency: CURRENCY, value, items: gaItems(items) });
+    beginCheckout(items: TrackItem[], deliveryFeeCents = 0) {
+      const value = dollars(sumCents(items) + deliveryFeeCents);
+      ga("begin_checkout", { currency: CURRENCY, value, shipping: dollars(deliveryFeeCents), items: gaItems(items) });
       meta("InitiateCheckout", {
         contents: metaContents(items),
         content_type: "product",
@@ -156,10 +156,16 @@ function makeTracker(config: AnalyticsConfig) {
         currency: CURRENCY,
       });
     },
-    purchase(orderId: string, items: TrackItem[]) {
-      const value = dollars(sumCents(items));
+    purchase(orderId: string, items: TrackItem[], deliveryFeeCents = 0) {
+      const value = dollars(sumCents(items) + deliveryFeeCents);
       // transaction_id lets GA4 and Google Ads drop a repeat of the same order.
-      ga("purchase", { transaction_id: orderId, currency: CURRENCY, value, items: gaItems(items) });
+      ga("purchase", {
+        transaction_id: orderId,
+        currency: CURRENCY,
+        value,
+        shipping: dollars(deliveryFeeCents),
+        items: gaItems(items),
+      });
       const gtag = gtagFor(config);
       if (gtag && config.adsId && config.adsPurchaseLabel) {
         gtag("event", "conversion", {
@@ -257,7 +263,15 @@ export function useTrackOnce(ready: boolean, fire: () => void) {
  * renders this for a freshly placed order, and a per-browser flag stops a reload within that
  * window. transaction_id / eventID dedupe anything that still slips through on Google's/Meta's side.
  */
-export function PurchaseTracker({ orderId, items }: { orderId: string; items: TrackItem[] }) {
+export function PurchaseTracker({
+  orderId,
+  items,
+  deliveryFeeCents = 0,
+}: {
+  orderId: string;
+  items: TrackItem[];
+  deliveryFeeCents?: number;
+}) {
   const track = useTrack();
   useTrackOnce(true, () => {
     const key = `purchase-tracked:${orderId}`;
@@ -267,7 +281,7 @@ export function PurchaseTracker({ orderId, items }: { orderId: string; items: Tr
     } catch {
       // Storage blocked: fall back to the server-side freshness window + platform dedupe.
     }
-    track.purchase(orderId, items);
+    track.purchase(orderId, items, deliveryFeeCents);
   });
   return null;
 }

@@ -20,6 +20,7 @@ export type OrderErrorCode =
   | "BAD_TRANSITION"
   | "CHANGED"
   | "PRICE_CHANGED"
+  | "DELIVERY_CHANGED"
   | "PAUSED";
 
 /** A problem the customer/owner can act on; the message is safe to show. */
@@ -63,6 +64,7 @@ export async function placeOrder(
   tenantId: string,
   customer: CustomerInput,
   lines: OrderLineInput[],
+  options: { expectedDeliveryFeeCents?: number } = {},
 ) {
   // Merge duplicate variant ids and sanity-check quantities.
   const wanted = new Map<string, number>();
@@ -97,8 +99,13 @@ export async function placeOrder(
   return withTenant(tenantId, async (tx) => {
     // Lock the tenant row through this transaction. A concurrent pause waits until this order
     // commits (or vice versa), so no order slips in after a pause has already taken effect.
-    const tenantRows = await tx.$queryRaw<{ isPaused: boolean }[]>`
-      SELECT "isPaused" FROM "Tenant" WHERE id = ${tenantId} FOR SHARE`;
+    const tenantRows = await tx.$queryRaw<{
+      isPaused: boolean;
+      deliveryFeeCents: number;
+      deliveryNote: string;
+    }[]>`
+      SELECT "isPaused", "deliveryFeeCents", "deliveryNote"
+      FROM "Tenant" WHERE id = ${tenantId} FOR SHARE`;
     const licenseRows = await tx.$queryRaw<{
       status: string;
       expiresAt: Date | null;
@@ -112,6 +119,16 @@ export async function placeOrder(
       !isLicenseActive(licenseRows[0])
     ) {
       throw new OrderError("PAUSED", "This store is temporarily unavailable and cannot accept orders.");
+    }
+    const deliveryFeeCents = tenantRows[0].deliveryFeeCents;
+    if (
+      options.expectedDeliveryFeeCents !== undefined &&
+      deliveryFeeCents > options.expectedDeliveryFeeCents
+    ) {
+      throw new OrderError(
+        "DELIVERY_CHANGED",
+        "The delivery fee increased. Review your updated total and place the order again.",
+      );
     }
 
     const pricedAt = new Date();
@@ -176,6 +193,8 @@ export async function placeOrder(
         customerAddress: customer.customerAddress,
         deliveryLocation: customer.deliveryLocation,
         notes: customer.notes,
+        deliveryFeeCentsSnapshot: deliveryFeeCents,
+        deliveryNoteSnapshot: tenantRows[0].deliveryNote,
         items: {
           create: ids.map((id) => {
             const v = byId.get(id)!;

@@ -24,6 +24,7 @@ async function main() {
       instagramUrl: "https://instagram.com/social-links-test",
       facebookUrl: "https://facebook.com/social-links-test",
       tiktokUrl: "https://tiktok.com/@social-links-test",
+      whatsappNumber: "96170123456",
       googleMapsUrl: "https://maps.app.goo.gl/example",
     });
     await saveThemeOverrides(store.tenant.id, {
@@ -37,6 +38,7 @@ async function main() {
     await page.goto(`${BASE}/admin/social-links`);
     assert.equal(await page.getByRole("button", { name: "Save social links" }).count(), 1);
     assert.equal(await page.locator('input[type="url"]').count(), 4);
+    assert.equal(await page.locator('input[type="tel"]').count(), 1);
     await page.getByLabel("Facebook").fill("");
     await page.getByLabel("Instagram").fill("https://instagram.com/updated-social-test");
     await page.getByRole("button", { name: "Save social links" }).click();
@@ -55,7 +57,7 @@ async function main() {
       await page.goto(`${BASE}/store/${store.tenant.slug}`);
       const footer = page.locator('footer');
       await footer.waitFor();
-      assert.equal(await footer.locator('nav[aria-label="Social links"] a').count(), 3, `${templateId}: wrong social count`);
+      assert.equal(await footer.locator('nav[aria-label="Social links"] a').count(), 4, `${templateId}: wrong social count`);
       for (const link of await footer.locator('nav[aria-label="Social links"] a').all()) {
         assert.equal(await link.getAttribute("target"), "_blank", `${templateId}: target`);
         assert.equal(await link.getAttribute("rel"), "noopener noreferrer", `${templateId}: rel`);

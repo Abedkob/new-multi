@@ -56,6 +56,23 @@ async function main() {
   };
 
   try {
+    // ---------------------------------------------------------------- owner delivery settings
+    await login(page, store.user.email, store.password);
+    await page.goto(`${BASE}/admin/delivery`);
+    await page.getByLabel("Delivery fee").fill("5.00");
+    await page.getByLabel(/Delivery note/).fill("Usually delivered within 2–4 business days.");
+    await page.getByRole("button", { name: "Save delivery settings" }).click();
+    await page.getByText("Delivery settings saved.").waitFor();
+    const delivery = await prisma.tenant.findUniqueOrThrow({
+      where: { id: T },
+      select: { deliveryFeeCents: true, deliveryNote: true },
+    });
+    assert.deepEqual(delivery, {
+      deliveryFeeCents: 500,
+      deliveryNote: "Usually delivered within 2–4 business days.",
+    });
+    ok("owner saves one Lebanon-wide delivery fee and note");
+
     // ---------------------------------------------------------------- browse -> add to cart
     await page.goto(store_("/shop"));
     await Promise.all([page.waitForURL(/category\/men/), page.locator('a[href$="/category/men"]').first().click()]);
@@ -117,6 +134,7 @@ async function main() {
     assert.equal(await lineFor("Sneaker").getByRole("button", { name: "Increase quantity" }).isDisabled(), true);
     assert.match(await lineFor("Sneaker").innerText(), /Only 2 available/);
     assert.equal(await page.locator('[data-testid="cart-subtotal"]').innerText(), "$220.00");
+    assert.equal(await page.locator('[data-testid="cart-delivery-fee"]').innerText(), "$5.00");
     ok("cart page: two lines, quantity capped at stock (+ disabled, 'Only 2 available'), subtotal $220.00");
 
     await lineFor("Sneaker").getByRole("button", { name: "Decrease quantity" }).click();
@@ -144,6 +162,8 @@ async function main() {
 
     // ---------------------------------------------------------------- place the order
     await fillCheckout(page, "Ada Lovelace");
+    assert.equal(await page.locator('[data-testid="checkout-delivery-fee"]').innerText(), "$5.00");
+    assert.equal(await page.locator('[data-testid="checkout-total"]').innerText(), "$105.00");
     await Promise.all([page.waitForURL(/order-confirmation\//), page.click('[data-testid="place-order"]')]);
     const confirmation = page.locator('[data-testid="confirmation-page"]');
     await confirmation.waitFor();
@@ -152,10 +172,13 @@ async function main() {
     assert.match(text, /1 × Sneaker/);
     assert.match(text, /size: 40/);
     assert.match(text, /Ada Lovelace/);
-    assert.equal(await page.locator('[data-testid="confirmation-total"]').innerText(), "$100.00");
+    assert.equal(await page.locator('[data-testid="confirmation-delivery-fee"]').innerText(), "$5.00");
+    assert.equal(await page.locator('[data-testid="confirmation-total"]').innerText(), "$105.00");
     assert.equal(await cartCount(page), "(0)");
     const order1 = await prisma.order.findFirstOrThrow({ where: { tenantId: T, customerName: "Ada Lovelace" }, include: { items: true } });
     assert.equal(order1.status, "PENDING");
+    assert.equal(order1.deliveryFeeCentsSnapshot, 500);
+    assert.equal(order1.deliveryNoteSnapshot, "Usually delivered within 2–4 business days.");
     assert.equal(order1.items[0].productNameSnapshot, "Sneaker");
     assert.equal(await stock(s40.id), 1, "stock should drop from 2 to 1");
     ok("order placed: confirmation page shows the summary, cart is emptied, order is PENDING, stock deducted (2 -> 1)");
@@ -210,7 +233,7 @@ async function main() {
     assert.match(rows[0], /Fast Buyer/); // newest first
     assert.match(rows[1], /Ada Lovelace/);
     assert.match(rows[1], /Pending/);
-    assert.match(rows[1], /\$100\.00/);
+    assert.match(rows[1], /\$105\.00/);
     ok("owner sees both orders in /admin/orders, newest first, with status and totals; dashboard shows 2 pending");
 
     await admin.locator('[data-testid="order-row"]', { hasText: "Ada Lovelace" }).getByRole("link", { name: "View" }).click();

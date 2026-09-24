@@ -22,6 +22,8 @@ export type PlaceOrderResult = {
   stockChanged?: boolean;
   /** Set when checkout blocked a price increase so the summary can refresh before retrying. */
   priceChanged?: boolean;
+  /** Set when the store changed its delivery fee after this checkout page loaded. */
+  deliveryChanged?: boolean;
 };
 
 export async function placeOrderAction(
@@ -32,6 +34,7 @@ export async function placeOrderAction(
     customerAddress: string;
     deliveryLocation: string;
     notes: string;
+    expectedDeliveryFeeCents?: number;
     lines: { variantId: string; quantity: number; expectedPriceCents?: number }[];
   },
 ): Promise<PlaceOrderResult> {
@@ -56,9 +59,19 @@ export async function placeOrderAction(
   if (!lines.success) {
     return { error: lines.error.issues[0]?.message ?? "Your cart is empty." };
   }
+  if (
+    input.expectedDeliveryFeeCents !== undefined &&
+    (!Number.isInteger(input.expectedDeliveryFeeCents) ||
+      input.expectedDeliveryFeeCents < 0 ||
+      input.expectedDeliveryFeeCents > 999_999)
+  ) {
+    return { error: "The displayed delivery fee is invalid. Refresh and try again." };
+  }
 
   try {
-    const order = await placeOrder(tenant.id, customer.data, lines.data);
+    const order = await placeOrder(tenant.id, customer.data, lines.data, {
+      expectedDeliveryFeeCents: input.expectedDeliveryFeeCents,
+    });
     return { ok: true, orderId: order.id };
   } catch (e) {
     if (e instanceof OrderError) {
@@ -66,6 +79,7 @@ export async function placeOrderAction(
         error: e.message,
         stockChanged: e.code === "STOCK" || e.code === "UNAVAILABLE",
         priceChanged: e.code === "PRICE_CHANGED",
+        deliveryChanged: e.code === "DELIVERY_CHANGED",
       };
     }
     console.error("placeOrder failed:", e instanceof Error ? e.message : e);

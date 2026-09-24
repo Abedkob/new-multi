@@ -7,7 +7,7 @@ import { privatePageMeta } from "@/lib/seo";
 import { loadStorefrontData, loadTenant } from "@/lib/data/storefront";
 import { formatPrice } from "@/lib/format";
 import { PurchaseTracker } from "@/lib/analytics";
-import { isFreshOrder, orderRef, orderTotal } from "@/lib/orders";
+import { isFreshOrder, orderRef, orderSubtotal, orderTotal } from "@/lib/orders";
 import { cn } from "@/lib/utils";
 import { getTemplate } from "@/templates";
 import { variantLabel, parseAttributes } from "@/lib/variants";
@@ -45,6 +45,7 @@ export default async function OrderConfirmationPage({
       {isFreshOrder(order.createdAt) && (
         <PurchaseTracker
           orderId={order.id}
+          deliveryFeeCents={order.deliveryFeeCentsSnapshot}
           items={order.items.map((i) => {
             const label = variantLabel(parseAttributes(i.variantAttributesSnapshot), "");
             return {
@@ -82,12 +83,27 @@ export default async function OrderConfirmationPage({
             );
           })}
         </ul>
-        <div className="mt-4 flex justify-between border-t border-border pt-4 font-semibold">
-          <span>{content["confirmation.total"]}</span>
-          <span className="tabular-nums" data-testid="confirmation-total">
-            {formatPrice(orderTotal(order.items))}
-          </span>
-        </div>
+        <dl className="mt-4 grid gap-2 border-t border-border pt-4 text-sm">
+          <div className="flex justify-between gap-3">
+            <dt>{content["cart.subtotal"]}</dt>
+            <dd className="tabular-nums">{formatPrice(orderSubtotal(order.items))}</dd>
+          </div>
+          <div className="flex justify-between gap-3">
+            <dt>Delivery</dt>
+            <dd className="tabular-nums" data-testid="confirmation-delivery-fee">
+              {order.deliveryFeeCentsSnapshot === 0 ? "Free" : formatPrice(order.deliveryFeeCentsSnapshot)}
+            </dd>
+          </div>
+          <div className="flex justify-between gap-3 pt-2 text-base font-semibold">
+            <dt>{content["confirmation.total"]}</dt>
+            <dd className="tabular-nums" data-testid="confirmation-total">
+              {formatPrice(orderTotal(order.items, order.deliveryFeeCentsSnapshot))}
+            </dd>
+          </div>
+        </dl>
+        {order.deliveryNoteSnapshot && (
+          <p className="mt-3 text-sm text-muted-foreground">{order.deliveryNoteSnapshot}</p>
+        )}
         <dl className="mt-6 grid gap-3 border-t border-border pt-4 text-sm">
           <div>
             <dt className="text-muted-foreground">{content["checkout.name"]}</dt>

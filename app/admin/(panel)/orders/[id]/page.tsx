@@ -13,7 +13,7 @@ import {
 } from "@/components/ui/table";
 import { getOrder } from "@/lib/data/orders";
 import { formatPrice } from "@/lib/format";
-import { orderRef, orderTotal, type OrderStatusValue } from "@/lib/orders";
+import { orderRef, orderSubtotal, orderTotal, type OrderStatusValue } from "@/lib/orders";
 import { requireOwner } from "@/lib/session";
 import { cn } from "@/lib/utils";
 import { parseAttributes, variantLabel } from "@/lib/variants";
@@ -208,11 +208,27 @@ export default async function OrderDetailPage({ params }: PageProps<"/admin/orde
                 );
               })}
               <TableRow className="bg-muted/50 hover:bg-muted/50">
+                <TableCell colSpan={3} className="pl-6 text-right">
+                  Subtotal
+                </TableCell>
+                <TableCell className="pr-6 text-right tabular-nums">
+                  {formatPrice(orderSubtotal(order.items))}
+                </TableCell>
+              </TableRow>
+              <TableRow className="bg-muted/50 hover:bg-muted/50">
+                <TableCell colSpan={3} className="pl-6 text-right">
+                  Delivery
+                </TableCell>
+                <TableCell className="pr-6 text-right tabular-nums">
+                  {order.deliveryFeeCentsSnapshot === 0 ? "Free" : formatPrice(order.deliveryFeeCentsSnapshot)}
+                </TableCell>
+              </TableRow>
+              <TableRow className="bg-muted/50 hover:bg-muted/50">
                 <TableCell colSpan={3} className="pl-6 text-right font-semibold">
                   Total to collect (cash on delivery)
                 </TableCell>
                 <TableCell className="pr-6 text-right text-base font-semibold tabular-nums" data-testid="order-total">
-                  {formatPrice(orderTotal(order.items))}
+                  {formatPrice(orderTotal(order.items, order.deliveryFeeCentsSnapshot))}
                 </TableCell>
               </TableRow>
             </TableBody>

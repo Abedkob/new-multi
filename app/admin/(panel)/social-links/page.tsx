@@ -15,7 +15,7 @@ export default async function SocialLinksPage() {
     <div className="grid gap-4">
       <PageHeader
         title="Social links"
-        description="Add the profiles and location customers can open from your storefront footer. Every link is optional."
+        description="Add profiles, WhatsApp contact, and your location to the storefront footer. Every field is optional."
       />
       <SocialLinksForm
         defaults={Object.fromEntries(

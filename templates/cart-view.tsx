@@ -16,6 +16,8 @@ export function CartView({
   slug,
   basePath,
   content,
+  deliveryFeeCents,
+  deliveryNote,
   style,
 }: {
   /** Used only for the cart-details server action, which is always addressed by the real
@@ -24,6 +26,8 @@ export function CartView({
   /** "" once the store has its own domain, else "/store/[slug]" — see templates/types.ts. */
   basePath: string;
   content: ContentMap;
+  deliveryFeeCents: number;
+  deliveryNote: string;
   style: Template["pageStyle"];
 }) {
   const cart = useCart();
@@ -147,6 +151,13 @@ export function CartView({
                 {formatPrice(subtotal)}
               </span>
             </div>
+            <div className="mt-2 flex justify-between gap-3 text-sm text-muted-foreground">
+              <span>Delivery</span>
+              <span className="tabular-nums" data-testid="cart-delivery-fee">
+                {deliveryFeeCents === 0 ? "Free" : formatPrice(deliveryFeeCents)}
+              </span>
+            </div>
+            {deliveryNote && <p className="mt-2 text-sm text-muted-foreground">{deliveryNote}</p>}
             <p className="mt-2 text-sm text-muted-foreground">{content["checkout.cod"]}</p>
             <div className="mt-6 grid gap-3">
               <Link

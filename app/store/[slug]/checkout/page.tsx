@@ -25,6 +25,8 @@ export default async function CheckoutPage({ params }: PageProps<"/store/[slug]/
       slug={slug}
       basePath={data.store.basePath}
       content={data.content}
+      deliveryFeeCents={tenant.deliveryFeeCents}
+      deliveryNote={tenant.deliveryNote}
       style={getTemplate(tenant.templateId).pageStyle}
     />
   );

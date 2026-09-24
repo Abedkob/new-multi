@@ -20,6 +20,12 @@ export const SOCIAL_LINK_FIELDS = [
     placeholder: "https://www.tiktok.com/@yourstore",
   },
   {
+    key: "whatsappNumber",
+    platform: "whatsapp",
+    label: "WhatsApp",
+    placeholder: "+961 70 123 456",
+  },
+  {
     key: "googleMapsUrl",
     platform: "googleMaps",
     label: "Visit us",
@@ -46,12 +52,38 @@ const optionalPublicUrl = z
     }
   }, "Enter a full link beginning with https:// or http://");
 
-export const socialLinksSchema = z.object(
-  Object.fromEntries(SOCIAL_LINK_FIELDS.map(({ key }) => [key, optionalPublicUrl])) as Record<
-    SocialLinkKey,
-    typeof optionalPublicUrl
-  >,
-);
+const optionalWhatsappNumber = z
+  .string()
+  .trim()
+  .max(32, "Use a phone number shorter than 32 characters")
+  .transform((value, context) => {
+    if (value === "") return null;
+    if (!/^[+\d().\s-]+$/.test(value)) {
+      context.addIssue({ code: "custom", message: "Enter a valid WhatsApp phone number" });
+      return z.NEVER;
+    }
+
+    let digits = value.replace(/\D/g, "");
+    if (digits.startsWith("00")) digits = digits.slice(2);
+    // Make common Lebanese local formats useful without asking owners to understand wa.me URLs.
+    if (digits.startsWith("0")) digits = `961${digits.slice(1)}`;
+    else if (!digits.startsWith("961") && (digits.length === 7 || digits.length === 8)) {
+      digits = `961${digits}`;
+    }
+    if (digits.length < 8 || digits.length > 15) {
+      context.addIssue({ code: "custom", message: "Include a valid number with its country code" });
+      return z.NEVER;
+    }
+    return digits;
+  });
+
+export const socialLinksSchema = z.object({
+  instagramUrl: optionalPublicUrl,
+  facebookUrl: optionalPublicUrl,
+  tiktokUrl: optionalPublicUrl,
+  whatsappNumber: optionalWhatsappNumber,
+  googleMapsUrl: optionalPublicUrl,
+});
 
 export function socialLinksFromStore(store: Partial<StoreSocialLinks>): StoreSocialLinks {
   return Object.fromEntries(
@@ -62,7 +94,9 @@ export function socialLinksFromStore(store: Partial<StoreSocialLinks>): StoreSoc
 export function publicSocialLinks(store: Partial<StoreSocialLinks>) {
   const normalized = socialLinksFromStore(store);
   return SOCIAL_LINK_FIELDS.flatMap(({ key, platform, label }) => {
-    const href = normalized[key];
-    return href ? [{ platform, label, href }] : [];
+    const value = normalized[key];
+    if (!value) return [];
+    const href = platform === "whatsapp" ? `https://wa.me/${value}` : value;
+    return [{ platform, label, href }];
   });
 }

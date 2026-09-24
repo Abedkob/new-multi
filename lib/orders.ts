@@ -34,8 +34,13 @@ export const canTransition = (from: OrderStatusValue, to: OrderStatusValue) =>
 /** Short, human-friendly order reference (not a secret; the full id is the lookup key). */
 export const orderRef = (id: string) => `#${id.slice(-6).toUpperCase()}`;
 
-export const orderTotal = (items: { priceCentsSnapshot: number; quantity: number }[]) =>
+export const orderSubtotal = (items: { priceCentsSnapshot: number; quantity: number }[]) =>
   items.reduce((sum, i) => sum + i.priceCentsSnapshot * i.quantity, 0);
+
+export const orderTotal = (
+  items: { priceCentsSnapshot: number; quantity: number }[],
+  deliveryFeeCents = 0,
+) => orderSubtotal(items) + deliveryFeeCents;
 
 /**
  * Whether an order was placed recently enough that showing its confirmation page counts as "the

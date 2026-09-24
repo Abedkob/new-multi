@@ -24,34 +24,49 @@ const empty = socialLinksSchema.parse({
   instagramUrl: "",
   facebookUrl: "  ",
   tiktokUrl: "",
+  whatsappNumber: "",
   googleMapsUrl: "",
 });
 assert.deepEqual(empty, {
   instagramUrl: null,
   facebookUrl: null,
   tiktokUrl: null,
+  whatsappNumber: null,
   googleMapsUrl: null,
 });
-ok("all four links are optional and blanks normalize to null");
+ok("all five contact links are optional and blanks normalize to null");
 
 for (const invalid of ["instagram.com/store", "/profile", "javascript:alert(1)", "not a link"]) {
   const parsed = socialLinksSchema.safeParse({
     instagramUrl: invalid,
     facebookUrl: "",
     tiktokUrl: "",
+    whatsappNumber: "",
     googleMapsUrl: "",
   });
   assert.equal(parsed.success, false, `${invalid} should be rejected`);
 }
 ok("relative, unsafe and malformed values are rejected");
 
+const whatsapp = socialLinksSchema.parse({
+  instagramUrl: "",
+  facebookUrl: "",
+  tiktokUrl: "",
+  whatsappNumber: "70 123 456",
+  googleMapsUrl: "",
+});
+assert.equal(whatsapp.whatsappNumber, "96170123456");
+ok("a Lebanese local WhatsApp number normalizes to an international wa.me number");
+
 const configured = publicSocialLinks({
   instagramUrl: "https://instagram.com/store",
   facebookUrl: null,
   tiktokUrl: "https://tiktok.com/@store",
+  whatsappNumber: "96170123456",
   googleMapsUrl: "https://maps.app.goo.gl/example",
 });
-assert.deepEqual(configured.map((link) => link.platform), ["instagram", "tiktok", "googleMaps"]);
+assert.deepEqual(configured.map((link) => link.platform), ["instagram", "tiktok", "whatsapp", "googleMaps"]);
+assert.equal(configured.find((link) => link.platform === "whatsapp")?.href, "https://wa.me/96170123456");
 ok("only configured links enter storefront data in canonical order");
 
 const data = buildStorefrontData({
@@ -66,10 +81,11 @@ const data = buildStorefrontData({
     instagramUrl: "https://instagram.com/store",
     facebookUrl: null,
     tiktokUrl: null,
+    whatsappNumber: "96170123456",
     googleMapsUrl: "https://maps.app.goo.gl/example",
   },
 });
-assert.equal(data.socialLinks.length, 2);
+assert.equal(data.socialLinks.length, 3);
 ok("storefront data exposes normalized non-empty links");
 
 const looks: FooterLook[] = [
@@ -89,7 +105,7 @@ for (const look of looks) {
   assert.ok(html.includes('href="https://instagram.com/store"'), `${look} is missing Instagram`);
   assert.ok(html.includes('target="_blank"'), `${look} social links should open separately`);
   assert.ok(html.includes('rel="noopener noreferrer"'), `${look} external link rel is unsafe`);
-  for (const platform of ["instagram", "googleMaps"]) {
+  for (const platform of ["instagram", "whatsapp", "googleMaps"]) {
     assert.ok(html.includes(`data-platform-icon="${platform}"`), `${look} is missing the ${platform} icon`);
   }
   assert.ok(!/#[0-9a-f]{3,8}/i.test(html), `${look} emitted a hardcoded color`);
@@ -115,16 +131,18 @@ try {
     instagramUrl: "https://instagram.com/persisted",
     facebookUrl: null,
     tiktokUrl: "https://tiktok.com/@persisted",
+    whatsappNumber: "96170123456",
     googleMapsUrl: null,
   });
   const stored = await prisma.tenant.findUniqueOrThrow({
     where: { id: created.tenant.id },
-    select: { instagramUrl: true, facebookUrl: true, tiktokUrl: true, googleMapsUrl: true },
+    select: { instagramUrl: true, facebookUrl: true, tiktokUrl: true, whatsappNumber: true, googleMapsUrl: true },
   });
   assert.deepEqual(stored, {
     instagramUrl: "https://instagram.com/persisted",
     facebookUrl: null,
     tiktokUrl: "https://tiktok.com/@persisted",
+    whatsappNumber: "96170123456",
     googleMapsUrl: null,
   });
   ok("nullable links persist independently for one store");

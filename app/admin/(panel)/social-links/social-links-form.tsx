@@ -21,11 +21,12 @@ export function SocialLinksForm({
     <form action={action} className="grid max-w-2xl gap-4">
       <Card>
         <CardHeader>
-          <CardTitle>Profiles and location</CardTitle>
+          <CardTitle>Profiles, contact and location</CardTitle>
         </CardHeader>
         <CardContent className="grid gap-5">
           {SOCIAL_LINK_FIELDS.map(({ key, platform, label, placeholder }) => {
             const errors = state.fieldErrors?.[key];
+            const isWhatsapp = platform === "whatsapp";
             return (
               <div key={key} className="grid gap-1.5">
                 <Label htmlFor={key} className="inline-flex items-center gap-2">
@@ -35,14 +36,19 @@ export function SocialLinksForm({
                 <Input
                   id={key}
                   name={key}
-                  type="url"
-                  inputMode="url"
-                  autoComplete="url"
+                  type={isWhatsapp ? "tel" : "url"}
+                  inputMode={isWhatsapp ? "tel" : "url"}
+                  autoComplete={isWhatsapp ? "tel" : "url"}
                   defaultValue={values[key]}
                   placeholder={placeholder}
                   aria-invalid={!!errors?.length}
                   aria-describedby={errors?.length ? `${key}-error` : undefined}
                 />
+                {isWhatsapp && !errors?.length && (
+                  <p className="text-xs text-muted-foreground">
+                    Lebanese local numbers are accepted. We add the country code when needed.
+                  </p>
+                )}
                 {errors?.map((message) => (
                   <p id={`${key}-error`} key={message} className="text-sm text-destructive">
                     {message}

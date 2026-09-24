@@ -42,7 +42,8 @@ import {
 } from "../lib/data/orders";
 import { orderTotal } from "../lib/orders";
 import { calculatePrice } from "../lib/pricing";
-import { createStoreWithOwner } from "../lib/data/tenants";
+import { createStoreWithOwner, updateTenantDeliverySettings } from "../lib/data/tenants";
+import { deliverySettingsSchema } from "../lib/delivery";
 import { toStoreProduct } from "../lib/store-product";
 import { cartLinesSchema, checkoutSchema, productFormSchema } from "../lib/validation";
 import { variantSetIssues } from "../lib/variants";
@@ -436,6 +437,33 @@ async function main() {
     const [tS, tM, tL] = (await getProduct(A, tee.id))!.variants;
     const other = await createProduct(A, base({ name: "Order Hat", basePriceCents: 900, variants: [v({}, 10)] }));
     const hat = (await getProduct(A, other.id))!.variants[0];
+
+    await check("delivery settings validate, calculate server-side and remain snapshotted on the order", async () => {
+      const parsed = deliverySettingsSchema.parse({ deliveryFee: "5.50", deliveryNote: "2–4 business days" });
+      assert.equal(parsed.deliveryFee, 550);
+      await updateTenantDeliverySettings(A, {
+        deliveryFeeCents: parsed.deliveryFee,
+        deliveryNote: parsed.deliveryNote,
+      });
+      const order = await placeOrder(A, customer, [{ variantId: tS.id, quantity: 1 }], {
+        expectedDeliveryFeeCents: 550,
+      });
+      assert.equal(order.deliveryFeeCentsSnapshot, 550);
+      assert.equal(order.deliveryNoteSnapshot, "2–4 business days");
+      assert.equal(orderTotal(order.items, order.deliveryFeeCentsSnapshot), 2550);
+
+      await updateTenantDeliverySettings(A, { deliveryFeeCents: 700, deliveryNote: "Updated" });
+      await orderErr(
+        placeOrder(A, customer, [{ variantId: tS.id, quantity: 1 }], { expectedDeliveryFeeCents: 550 }),
+        "DELIVERY_CHANGED",
+      );
+      const historical = await getOrder(A, order.id);
+      assert.equal(historical?.deliveryFeeCentsSnapshot, 550);
+      assert.equal(historical?.deliveryNoteSnapshot, "2–4 business days");
+
+      await updateTenantDeliverySettings(A, { deliveryFeeCents: 0, deliveryNote: "" });
+      await prisma.productVariant.update({ where: { id: tS.id }, data: { stock: 5 } });
+    });
 
     await check("placing an order deducts stock, prices on the server and snapshots name/attributes/price", async () => {
       const order = await placeOrder(A, customer, [

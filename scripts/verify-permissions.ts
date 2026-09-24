@@ -122,7 +122,7 @@ async function main() {
   try {
     console.log("Anonymous visitor:");
     const anon = new Session();
-    for (const p of ["/admin/content", "/admin/social-links", "/admin/products", "/admin/categories", "/admin/orders", "/admin/preview", themePath, previewPath]) {
+    for (const p of ["/admin/content", "/admin/social-links", "/admin/delivery", "/admin/products", "/admin/categories", "/admin/orders", "/admin/preview", themePath, previewPath]) {
       assert.ok(isLoginRedirect(await anon.get(p)), `${p} should redirect to /login`);
     }
     ok("admin and platform pages redirect to /login");
@@ -137,10 +137,16 @@ async function main() {
     ok("can open Content, which has the 4 section switches");
     const socialLinks = await owner.get("/admin/social-links");
     assert.equal(socialLinks.status, 200);
-    for (const name of ["instagramUrl", "facebookUrl", "tiktokUrl", "googleMapsUrl"]) {
+    for (const name of ["instagramUrl", "facebookUrl", "tiktokUrl", "whatsappNumber", "googleMapsUrl"]) {
       assert.ok(socialLinks.body.includes(`name="${name}"`), `social links page is missing ${name}`);
     }
-    ok("can open Social links, with four optional URL fields");
+    ok("can open Social links, with four optional URLs and a WhatsApp number");
+    const delivery = await owner.get("/admin/delivery");
+    assert.equal(delivery.status, 200);
+    for (const name of ["deliveryFee", "deliveryNote"]) {
+      assert.ok(delivery.body.includes(`name="${name}"`), `delivery page is missing ${name}`);
+    }
+    ok("can open Delivery, with one fixed fee and an optional note");
     const ownerPreview = await owner.get("/admin/preview");
     assert.equal(ownerPreview.status, 200);
     assert.ok(ownerPreview.body.includes("Perm Test"), "owner preview should show the owner's own store");

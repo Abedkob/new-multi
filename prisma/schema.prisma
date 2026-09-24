@@ -59,7 +59,12 @@ model Tenant {
   facebookUrl            String?
   instagramUrl           String?
   tiktokUrl              String?
+  whatsappNumber         String?
   googleMapsUrl          String?
+  // One simple store-wide delivery price. Orders snapshot both values at checkout so later
+  // settings changes never rewrite order history.
+  deliveryFeeCents       Int            @default(0)
+  deliveryNote           String         @default("")
   templateId             String         @default("minimal")
   themeOverrides         Json           @default("{}")
   // Owner-controlled on/off switches for the optional storefront sections.
@@ -251,18 +256,20 @@ enum OrderStatus {
 // Guest cash-on-delivery orders. Stock is deducted when the order is placed and restored if
 // it is cancelled.
 model Order {
-  id               String      @id @default(cuid())
-  tenantId         String
-  tenant           Tenant      @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  customerName     String
-  customerPhone    String
-  customerAddress  String
+  id                       String      @id @default(cuid())
+  tenantId                 String
+  tenant                   Tenant      @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  customerName             String
+  customerPhone            String
+  customerAddress          String
   // A Google Maps link or a description of where to deliver (free text).
-  deliveryLocation String
-  notes            String      @default("")
-  status           OrderStatus @default(PENDING)
-  createdAt        DateTime    @default(now())
-  items            OrderItem[]
+  deliveryLocation         String
+  notes                    String      @default("")
+  deliveryFeeCentsSnapshot Int         @default(0)
+  deliveryNoteSnapshot     String      @default("")
+  status                   OrderStatus @default(PENDING)
+  createdAt                DateTime    @default(now())
+  items                    OrderItem[]
 
   @@index([tenantId, createdAt])
 }
