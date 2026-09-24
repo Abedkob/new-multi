@@ -40,7 +40,7 @@ export async function createDiscountAction(
   }
   try {
     const discount = await createDiscount(tenantId, parsed.data);
-    redirect(`/admin/discounts/${discount.id}/edit`);
+    redirect(`/admin/discounts/${discount.id}/edit?section=products`);
   } catch (error) {
     if (error instanceof DiscountError) return { error: error.message };
     throw error;
@@ -89,11 +89,12 @@ export async function updateDiscountProductsAction(
   try {
     await setDiscountAssignmentsForProducts(tenantId, id, visible, selected);
   } catch (error) {
-    if (error instanceof DiscountError) redirect(`/admin/discounts/${id}/edit?assignmentError=1`);
+    if (error instanceof DiscountError) redirect(`/admin/discounts/${id}/edit?section=products&assignmentError=1`);
     throw error;
   }
   const search = new URLSearchParams();
+  search.set("section", "products");
   if (q) search.set("q", q);
   if (page > 1) search.set("page", String(page));
-  redirect(`/admin/discounts/${id}/edit${search.size ? `?${search}` : ""}`);
+  redirect(`/admin/discounts/${id}/edit?${search}`);
 }

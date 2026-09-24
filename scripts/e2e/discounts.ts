@@ -50,9 +50,10 @@ async function main() {
     await page.fill("#discount-value", "20");
     await page.getByRole("switch", { name: "Enable discount" }).click();
     await Promise.all([
-      page.waitForURL(/\/admin\/discounts\/[^/]+\/edit$/),
+      page.waitForURL(/\/admin\/discounts\/[^/]+\/edit\?section=products$/),
       page.getByRole("button", { name: "Create discount" }).click(),
     ]);
+    assert.equal(await page.getByRole("button", { name: /^Save/ }).count(), 1);
     ok("owner creates and enables a percentage discount");
 
     const saleRow = page.locator("label", { hasText: "Sale Tee" });
@@ -98,6 +99,10 @@ async function main() {
     const mobileSave = mobilePage.getByRole("button", { name: "Save changes" });
     await mobileSave.scrollIntoViewIfNeeded();
     assert.ok(await mobileSave.isVisible());
+    assert.equal(await mobilePage.getByRole("button", { name: /^Save/ }).count(), 1);
+    await mobilePage.getByRole("link", { name: /^Products \(/ }).click();
+    await mobilePage.getByRole("button", { name: "Save product selection" }).waitFor();
+    assert.equal(await mobilePage.getByRole("button", { name: /^Save/ }).count(), 1);
     if (process.env.DISCOUNT_SCREENSHOT) {
       await mobilePage.screenshot({ path: process.env.DISCOUNT_SCREENSHOT, fullPage: true });
     }
