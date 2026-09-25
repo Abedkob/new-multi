@@ -105,7 +105,7 @@ const STYLES: Record<FooterLook, FooterStyle> = {
   },
   kinetic: {
     layout: "editorial",
-    surface: "border-t border-primary-foreground/20 bg-primary text-primary-foreground",
+    surface: "bg-primary text-primary-foreground",
     muted: "text-primary-foreground/65",
     link: "text-primary-foreground/70 hover:text-primary-foreground",
     border: "border-primary-foreground/20",
@@ -290,7 +290,7 @@ export function StoreFooter({ data, look }: { data: StorefrontData; look: Footer
               <div
                 aria-hidden
                 className={cn(
-                  "mb-10 max-w-full border-b pb-5 pr-20 font-black uppercase leading-[0.88] tracking-tighter [overflow-wrap:anywhere] sm:pr-0",
+                  "mb-10 max-w-full pr-20 font-black uppercase leading-[0.88] tracking-tighter [overflow-wrap:anywhere] sm:pr-0",
                   wordmarkSize,
                   style.border,
                 )}

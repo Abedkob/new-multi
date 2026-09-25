@@ -83,6 +83,14 @@ async function main() {
     assert.equal((await page.goto(base))?.status(), 200);
     await page.getByRole("heading", { name: "Objects in motion" }).waitFor();
     assert.equal(await page.locator('[data-section="hero"]').count(), 1);
+    const desktopCtaBounds = await page.locator("[data-kinetic-cta]").evaluate((element) => {
+      const rect = element.getBoundingClientRect();
+      return { top: rect.top, bottom: rect.bottom, viewport: window.innerHeight };
+    });
+    assert.ok(
+      desktopCtaBounds.top >= 0 && desktopCtaBounds.bottom <= desktopCtaBounds.viewport,
+      `desktop hero action is clipped: ${JSON.stringify(desktopCtaBounds)}`,
+    );
     assert.equal(await page.locator('[data-section="featuredCategories"] a').count(), 3);
     await page.locator(".pin-spacer").first().waitFor({ timeout: 5_000 }).catch(() => undefined);
     const motionDiagnostics = await page.evaluate(() => ({
@@ -157,6 +165,14 @@ async function main() {
     const mobilePage = await mobile.newPage();
     await mobilePage.goto(base);
     await mobilePage.getByRole("heading", { name: "CLASSY WATCH" }).waitFor();
+    const mobileCtaBounds = await mobilePage.locator("[data-kinetic-cta]").evaluate((element) => {
+      const rect = element.getBoundingClientRect();
+      return { left: rect.left, right: rect.right, viewport: window.innerWidth };
+    });
+    assert.ok(
+      mobileCtaBounds.left >= 0 && mobileCtaBounds.right <= mobileCtaBounds.viewport,
+      `mobile hero action is clipped: ${JSON.stringify(mobileCtaBounds)}`,
+    );
     const dimensions = await mobilePage.evaluate(() => ({
       viewport: document.documentElement.clientWidth,
       content: document.documentElement.scrollWidth,

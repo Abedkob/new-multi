@@ -45,7 +45,7 @@ const button = cn(
 
 function Heading({ title, aside }: { title: string; aside?: React.ReactNode }) {
   return (
-    <div className="mb-10 grid items-end gap-6 border-b border-border pb-6 sm:mb-14 sm:grid-cols-[minmax(0,1fr)_auto]">
+    <div className="mb-10 grid items-end gap-6 sm:mb-14 sm:grid-cols-[minmax(0,1fr)_auto]">
       <h2 className={cn(display, "max-w-5xl text-[clamp(2.75rem,5.6vw,6rem)]")}>{title}</h2>
       {aside}
     </div>
@@ -201,41 +201,36 @@ const Hero: SectionComponent = ({ data: { store, content, visibility } }) => {
 
   return (
     <HeroStage>
-      <section className="relative isolate min-h-[min(50rem,calc(100svh-4.5rem))] overflow-hidden bg-primary text-primary-foreground lg:min-h-[calc(100svh-4.5rem)]">
+      <section className="relative isolate min-h-[min(52rem,calc(100svh-4.5rem))] overflow-hidden bg-primary text-primary-foreground lg:min-h-[calc(100svh-4.5rem)]">
         {hasImage && (
           <div data-kinetic-media className="absolute inset-0 -z-20 will-change-transform">
             <HeroPicture content={content} alt={store.name} className="h-full w-full" />
           </div>
         )}
-        <div className="absolute inset-0 -z-10 bg-gradient-to-r from-primary/70 via-primary/15 to-primary/35" />
-        <div className="absolute inset-0 -z-10 bg-gradient-to-t from-primary via-primary/10 to-primary/15" />
+        <div data-kinetic-shade className="absolute inset-0 -z-10 bg-gradient-to-r from-primary/70 via-primary/5 to-primary/25" />
+        <div data-kinetic-shade className="absolute inset-0 -z-10 bg-gradient-to-t from-primary via-primary/5 to-primary/30" />
 
-        <div className={cn(wrap, "flex min-h-[min(50rem,calc(100svh-4.5rem))] flex-col py-10 sm:py-14 lg:min-h-[calc(100svh-4.5rem)] lg:py-16")}>
-          <div data-kinetic-detail className="flex items-center justify-between gap-4 text-xs font-semibold text-primary-foreground/80 sm:text-sm">
-            <span className="shrink-0">{store.name}</span>
-            <span className="shrink-0">{content["newArrivals.heading"]}</span>
-          </div>
-
+        <div className={cn(wrap, "flex min-h-[min(52rem,calc(100svh-4.5rem))] flex-col py-8 sm:py-10 lg:min-h-[calc(100svh-4.5rem)] lg:py-12")}>
           {visibility.heroText && (
-            <div className="flex flex-1 flex-col justify-center py-12 sm:py-14 lg:py-8">
+            <div className="flex flex-1 flex-col justify-end pb-10 pt-16 sm:pb-12 sm:pt-20 lg:pb-10 lg:pt-16">
               <h1
                 aria-label={content["hero.headline"]}
-                className={cn(display, "w-full", headlineSize)}
+                className={cn(display, "w-full leading-[0.78]", headlineSize)}
               >
                 {headlineLines.map((line, lineIndex) => (
                   <span
                     key={`${line.join("-")}-${lineIndex}`}
                     aria-hidden
                     className={cn(
-                      "block w-full pb-[0.09em] [&>span:not(:last-child)]:mr-[0.2em]",
-                      lineIndex === 1 && "justify-end text-right sm:pl-[10vw]",
+                      "block w-full overflow-hidden pb-[0.12em] [&>span:not(:last-child)]:mr-[0.18em]",
+                      lineIndex === 1 && "text-right sm:pl-[8vw]",
                     )}
                   >
                     {line.map((word, wordIndex) => (
                       <span
                         key={`${word}-${wordIndex}`}
                         data-kinetic-word
-                        className="inline-block max-w-full pb-[0.06em] will-change-transform"
+                        className="inline-block max-w-full pb-[0.08em] will-change-transform"
                       >
                         {word}
                       </span>
@@ -246,9 +241,9 @@ const Hero: SectionComponent = ({ data: { store, content, visibility } }) => {
             </div>
           )}
 
-          <div className="grid gap-6 pt-6 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-end lg:gap-10 lg:pt-8">
+          <div className="grid gap-7 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-end lg:gap-12">
             {visibility.heroText && content["hero.subtext"] && (
-              <p data-kinetic-detail className="max-w-md whitespace-pre-line text-base leading-relaxed text-primary-foreground/80 sm:text-lg">
+              <p data-kinetic-detail className="max-w-[34rem] whitespace-pre-line text-base leading-relaxed text-primary-foreground/80 sm:text-lg lg:max-w-md">
                 {content["hero.subtext"]}
               </p>
             )}
@@ -256,16 +251,15 @@ const Hero: SectionComponent = ({ data: { store, content, visibility } }) => {
             {visibility.heroText && content["hero.ctaLabel"] && (
               <Link
                 data-kinetic-detail
+                data-kinetic-cta
                 href={sectionHref(store, "new-arrivals")}
                 className={cn(
-                  "group inline-flex min-h-14 items-center justify-between gap-8 bg-accent px-5 text-sm font-semibold text-accent-foreground transition-transform hover:-translate-y-0.5 sm:col-start-2 sm:min-w-52",
+                  "group inline-flex min-h-14 w-full items-center justify-between gap-6 rounded-full bg-accent px-6 text-sm font-semibold text-accent-foreground transition-transform hover:-translate-y-1 sm:col-start-2 sm:size-32 sm:flex-col sm:items-center sm:justify-center sm:gap-3 sm:p-5 sm:text-center lg:size-36 lg:p-6",
                   focus,
                 )}
               >
-                {content["hero.ctaLabel"]}
-                <span className="grid size-8 place-items-center rounded-full border border-accent-foreground/35">
-                  <ArrowDown className="size-4 transition-transform group-hover:translate-y-0.5" aria-hidden />
-                </span>
+                <span className="max-w-24 leading-tight [overflow-wrap:anywhere]">{content["hero.ctaLabel"]}</span>
+                <ArrowDown className="size-5 shrink-0 transition-transform group-hover:translate-y-1" aria-hidden />
               </Link>
             )}
           </div>
@@ -371,7 +365,6 @@ const BrandStory: SectionComponent = ({ data: { store, content } }) => {
         {image && (
           <div className="relative overflow-hidden bg-secondary lg:order-1">
             <Picture src={image} alt={store.name} className="aspect-[4/5]" sizes="(max-width: 1024px) 100vw, 44vw" />
-            <span aria-hidden className="absolute inset-5 border border-background/50" />
           </div>
         )}
       </div>

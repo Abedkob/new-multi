@@ -77,7 +77,7 @@ export function CategoryFilm({
             <li key={category.id} className="lg:w-[min(72vw,62rem)] lg:shrink-0">
               <Link
                 href={category.href}
-                className="group relative grid min-h-[28rem] overflow-hidden border border-primary-foreground/20 sm:min-h-[34rem] lg:h-[58vh] lg:min-h-[28rem] lg:grid-cols-[minmax(0,1fr)_20rem]"
+                className="group relative grid min-h-[28rem] overflow-hidden sm:min-h-[34rem] lg:h-[58vh] lg:min-h-[28rem] lg:grid-cols-[minmax(0,1fr)_20rem]"
               >
                 <Picture
                   src={category.image}

@@ -27,25 +27,29 @@ export function HeroStage({ children }: { children: ReactNode }) {
 
           const select = gsap.utils.selector(root);
           const mediaTargets = select("[data-kinetic-media]");
+          const shadeTargets = select("[data-kinetic-shade]");
           const wordTargets = select("[data-kinetic-word]");
           const detailTargets = select("[data-kinetic-detail]");
-          const timeline = gsap.timeline({ defaults: { ease: "power3.out" } });
+          const timeline = gsap.timeline({ defaults: { ease: "power4.out" } });
 
           if (mediaTargets.length > 0) {
-            timeline.from(mediaTargets, { scale: 1.08, duration: 1.4 });
+            timeline.from(mediaTargets, { scale: 1.14, duration: 1.8 });
+          }
+          if (shadeTargets.length > 0) {
+            timeline.from(shadeTargets, { autoAlpha: 0, duration: 1.2 }, 0.08);
           }
           if (wordTargets.length > 0) {
             timeline.from(
               wordTargets,
-              { yPercent: 45, rotate: 2, autoAlpha: 0, duration: 0.85, stagger: 0.06 },
-              0.12,
+              { yPercent: 115, rotate: 1.5, duration: 1.05, stagger: 0.055 },
+              0.16,
             );
           }
           if (detailTargets.length > 0) {
             timeline.from(
               detailTargets,
-              { y: 24, autoAlpha: 0, duration: 0.75, stagger: 0.09 },
-              0.48,
+              { y: 18, autoAlpha: 0, duration: 0.85, stagger: 0.08 },
+              0.62,
             );
           }
 
