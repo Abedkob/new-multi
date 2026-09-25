@@ -41,7 +41,7 @@ async function main() {
     imageUrl: "/demo/overshirt.svg",
   });
   const movement = await createCategory(tenantId, {
-    name: "Movement",
+    name: "Movement and Performance",
     parentId: null,
     imageUrl: "/demo/sneaker.svg",
   });
@@ -60,6 +60,7 @@ async function main() {
     { key: "hero.subtext", value: "A collection designed to move through the city with you." },
     { key: "hero.image", value: "/demo/hero.svg" },
     { key: "hero.imageMobile", value: "/demo/hero.svg" },
+    { key: "navbar.logoText", value: "IDEVELOPIT ECOMMERCE EXPERIENCE" },
     { key: "featuredCategories.heading", value: "Choose your direction" },
     { key: "newArrivals.heading", value: "The moving edit" },
     { key: "bestSellers.heading", value: "Most wanted" },
@@ -121,11 +122,13 @@ async function main() {
     assert.equal(await stage.getAttribute("data-active-index"), "3");
     await page.evaluate(() => (document.activeElement as HTMLElement | null)?.blur());
     await page.mouse.move(0, 0);
+    const rotationStarted = Date.now();
     await page.waitForFunction(
       (selector) => document.querySelector(selector)?.getAttribute("data-active-index") === "0",
       '[aria-roledescription="carousel"]',
-      { timeout: 7_500 },
+      { timeout: 5_500 },
     );
+    assert.ok(Date.now() - rotationStarted < 5_000, "automatic product rotation is still too slow");
     ok("new arrivals automatically advances and wraps through the product sequence");
 
     await page.goto(`${base}/products/${overshirt.slug}`);
@@ -161,6 +164,11 @@ async function main() {
     assert.ok(dimensions.content <= dimensions.viewport, `mobile overflow: ${JSON.stringify(dimensions)}`);
     assert.equal(await mobilePage.locator(".pin-spacer").count(), 0);
     assert.equal(await mobilePage.locator('[data-section="featuredCategories"] a').count(), 3);
+    await mobilePage
+      .locator('[data-section="featuredCategories"]')
+      .getByText("Movement and Performance", { exact: true })
+      .waitFor();
+    await mobilePage.getByText("IDEVELOPIT ECOMMERCE EXPERIENCE", { exact: true }).last().waitFor();
     if (screenshots) await mobilePage.screenshot({ path: join(screenshots, "kinetic-mobile.png"), fullPage: true });
     await mobile.close();
     ok("long headings remain complete on desktop and mobile with no horizontal overflow");

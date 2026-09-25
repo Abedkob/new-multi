@@ -12,7 +12,7 @@ import type { StoreInfo, StoreProduct } from "../types";
 
 gsap.registerPlugin(useGSAP);
 
-const ROTATION_MS = 5200;
+const ROTATION_MS = 3600;
 
 export function ProductStage({ store, products, content }: {
   store: StoreInfo;

@@ -207,11 +207,11 @@ function FooterNavigation({ data, style }: { data: StorefrontData; style: Footer
 
 function FooterBrand({ data, style }: { data: StorefrontData; style: FooterStyle }) {
   return (
-    <div>
+    <div className="min-w-0 max-w-full">
       <StoreBrand
         store={data.store}
         content={data.content}
-        className={style.brand}
+        className={cn("max-w-full [overflow-wrap:anywhere]", style.brand)}
         logoClassName="h-10"
       />
       <p className={cn("mt-5 max-w-md whitespace-pre-line text-sm leading-relaxed", style.muted)}>
@@ -244,6 +244,12 @@ function FooterBottom({ data, style }: { data: StorefrontData; style: FooterStyl
  */
 export function StoreFooter({ data, look }: { data: StorefrontData; look: FooterLook }) {
   const style = STYLES[look];
+  const wordmark = data.content["navbar.logoText"] || data.store.name;
+  const wordmarkSize = wordmark.length > 28
+    ? "text-[clamp(2.25rem,8vw,7rem)]"
+    : wordmark.length > 18
+      ? "text-[clamp(2.5rem,10vw,8rem)]"
+      : "text-[clamp(3rem,12vw,9rem)]";
   const centeredLinks = [
     { key: "shop", label: data.content["navbar.shopLabel"], href: shopHref(data.store) },
     ...data.categoryTiles.map((item) => ({ key: item.id, label: item.label, href: item.href })),
@@ -284,11 +290,12 @@ export function StoreFooter({ data, look }: { data: StorefrontData; look: Footer
               <div
                 aria-hidden
                 className={cn(
-                  "mb-10 overflow-hidden border-b pb-5 pr-20 text-4xl font-black uppercase leading-none tracking-tighter sm:pr-0 sm:text-6xl lg:text-8xl xl:text-9xl",
+                  "mb-10 max-w-full border-b pb-5 pr-20 font-black uppercase leading-[0.88] tracking-tighter [overflow-wrap:anywhere] sm:pr-0",
+                  wordmarkSize,
                   style.border,
                 )}
               >
-                <span className="block truncate">{data.content["navbar.logoText"] || data.store.name}</span>
+                <span className="block max-w-full">{wordmark}</span>
               </div>
             )}
             <div className="grid gap-10 sm:grid-cols-2 lg:grid-cols-5 lg:gap-12">
@@ -306,7 +313,7 @@ export function StoreFooter({ data, look }: { data: StorefrontData; look: Footer
           aria-hidden
           className="-mb-[3vw] overflow-hidden px-4 text-center text-[16vw] font-black leading-none tracking-tighter opacity-10"
         >
-          <span className="block truncate">{data.store.name}</span>
+          <span className="block max-w-full [overflow-wrap:anywhere]">{data.store.name}</span>
         </div>
       )}
     </footer>

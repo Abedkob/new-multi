@@ -66,11 +66,10 @@ export function CategoryFilm({
   return (
     <section ref={root} className="overflow-hidden bg-primary text-primary-foreground">
       <div className="px-5 py-16 sm:px-8 lg:flex lg:h-screen lg:min-h-[44rem] lg:flex-col lg:justify-center lg:px-12 lg:py-10">
-        <div className="mb-10 flex items-end justify-between gap-6 lg:mb-8">
-          <h2 className="max-w-4xl text-[clamp(2.75rem,7vw,7rem)] font-black leading-[0.86] tracking-[-0.06em] text-balance">
+        <div className="mb-10 lg:mb-8">
+          <h2 className="max-w-5xl text-[clamp(2.4rem,6vw,6.5rem)] font-black leading-[0.88] tracking-[-0.055em] text-balance [overflow-wrap:anywhere]">
             {heading}
           </h2>
-          <span aria-hidden className="hidden h-px w-24 shrink-0 bg-primary-foreground/40 lg:block" />
         </div>
 
         <ul ref={track} className="grid gap-5 lg:flex lg:w-max lg:gap-6">
@@ -78,7 +77,7 @@ export function CategoryFilm({
             <li key={category.id} className="lg:w-[min(72vw,62rem)] lg:shrink-0">
               <Link
                 href={category.href}
-                className="group relative grid min-h-[28rem] overflow-hidden border border-primary-foreground/20 sm:min-h-[34rem] lg:h-[58vh] lg:min-h-[28rem] lg:grid-cols-[minmax(0,1fr)_18rem]"
+                className="group relative grid min-h-[28rem] overflow-hidden border border-primary-foreground/20 sm:min-h-[34rem] lg:h-[58vh] lg:min-h-[28rem] lg:grid-cols-[minmax(0,1fr)_20rem]"
               >
                 <Picture
                   src={category.image}
@@ -92,7 +91,7 @@ export function CategoryFilm({
                   <span className="text-sm tabular-nums text-primary-foreground/60">
                     {String(index + 1).padStart(2, "0")}
                   </span>
-                  <span className="max-w-full text-[clamp(2.5rem,6vw,5.5rem)] font-black leading-[0.86] tracking-[-0.06em] text-balance lg:[writing-mode:vertical-rl]">
+                  <span className="max-w-full text-[clamp(2.25rem,5vw,4.75rem)] font-black leading-[0.88] tracking-[-0.055em] text-balance [overflow-wrap:anywhere] lg:text-[clamp(2rem,3.4vw,4rem)]">
                     {category.label}
                   </span>
                   <ArrowUpRight className="size-6 transition-transform duration-300 group-hover:translate-x-1 group-hover:-translate-y-1" aria-hidden />
