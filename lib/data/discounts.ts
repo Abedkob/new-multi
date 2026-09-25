@@ -1,4 +1,5 @@
 import type { DiscountType } from "@/generated/prisma/client";
+import { normalizeAdminPageSize } from "@/lib/admin-pagination";
 import { withTenant } from "@/lib/prisma";
 
 export class DiscountError extends Error {}
@@ -25,22 +26,26 @@ function assertDiscount(input: DiscountInput) {
   }
 }
 
-export const DISCOUNTS_PAGE_SIZE = 25;
-
-export function listDiscountsPage(tenantId: string, requestedPage: number, includeArchived = false) {
+export function listDiscountsPage(
+  tenantId: string,
+  requestedPage: number,
+  includeArchived = false,
+  requestedPageSize = 25,
+) {
+  const pageSize = normalizeAdminPageSize(requestedPageSize);
   const where = { tenantId, ...(includeArchived ? {} : { archivedAt: null }) };
   return withTenant(tenantId, async (db) => {
     const total = await db.discountCampaign.count({ where });
-    const pages = Math.max(1, Math.ceil(total / DISCOUNTS_PAGE_SIZE));
+    const pages = Math.max(1, Math.ceil(total / pageSize));
     const page = Math.min(Math.max(1, Math.floor(requestedPage) || 1), pages);
     const items = await db.discountCampaign.findMany({
       where,
       orderBy: [{ createdAt: "desc" }, { id: "asc" }],
-      skip: (page - 1) * DISCOUNTS_PAGE_SIZE,
-      take: DISCOUNTS_PAGE_SIZE,
+      skip: (page - 1) * pageSize,
+      take: pageSize,
       include: { _count: { select: { products: true } } },
     });
-    return { items, total, page, pages };
+    return { items, total, page, pages, pageSize };
   });
 }
 

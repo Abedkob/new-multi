@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { BadgePercent, Plus } from "lucide-react";
+import { AdminPageSizeControl } from "@/components/admin-page-size-control";
 import { AdminPagination } from "@/components/admin-pagination";
 import { EmptyState } from "@/components/admin/empty-state";
 import { PageHeader } from "@/components/admin/page-header";
@@ -21,8 +22,14 @@ export default async function DiscountsPage({
   const { tenantId } = await requireOwner();
   const query = await searchParams;
   const requested = Number.parseInt(first(query.page) ?? "1", 10) || 1;
+  const requestedPageSize = Number.parseInt(first(query.perPage) ?? "25", 10) || 25;
   const includeArchived = first(query.archived) === "1";
-  const { items, total, page, pages } = await listDiscountsPage(tenantId, requested, includeArchived);
+  const { items, total, page, pages, pageSize } = await listDiscountsPage(
+    tenantId,
+    requested,
+    includeArchived,
+    requestedPageSize,
+  );
   const now = new Date();
   const newButton = (
     <Link href="/admin/discounts/new" className={buttonVariants()}>
@@ -39,20 +46,24 @@ export default async function DiscountsPage({
       />
       <nav aria-label="Discount views" className="flex w-fit rounded-lg border bg-muted/30 p-1">
         <Link
-          href="/admin/discounts"
+          href={pageSize === 25 ? "/admin/discounts" : `/admin/discounts?perPage=${pageSize}`}
           aria-current={!includeArchived ? "page" : undefined}
           className={buttonVariants({ variant: !includeArchived ? "secondary" : "ghost", size: "sm" })}
         >
           Current
         </Link>
         <Link
-          href="/admin/discounts?archived=1"
+          href={`/admin/discounts?${new URLSearchParams({
+            archived: "1",
+            ...(pageSize === 25 ? {} : { perPage: String(pageSize) }),
+          })}`}
           aria-current={includeArchived ? "page" : undefined}
           className={buttonVariants({ variant: includeArchived ? "secondary" : "ghost", size: "sm" })}
         >
           All discounts
         </Link>
       </nav>
+      <AdminPageSizeControl page={page} pageSize={pageSize} total={total} noun="discounts" />
       <Card className="gap-0 overflow-hidden py-0">
         {items.length === 0 ? (
           <EmptyState icon={BadgePercent} title={includeArchived ? "No discounts found." : "No discounts yet."} action={includeArchived ? undefined : newButton}>
@@ -126,7 +137,17 @@ export default async function DiscountsPage({
           </>
         )}
       </Card>
-      <AdminPagination basePath="/admin/discounts" page={page} pages={pages} total={total} noun="discounts" params={includeArchived ? { archived: "1" } : {}} />
+      <AdminPagination
+        basePath="/admin/discounts"
+        page={page}
+        pages={pages}
+        total={total}
+        noun="discounts"
+        params={{
+          ...(includeArchived ? { archived: "1" } : {}),
+          ...(pageSize === 25 ? {} : { perPage: String(pageSize) }),
+        }}
+      />
     </div>
   );
 }

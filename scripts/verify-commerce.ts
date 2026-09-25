@@ -14,6 +14,7 @@ import {
   deleteCategory,
   getCategoryBySlug,
   listCategories,
+  listCategoriesPage,
   updateCategory,
 } from "../lib/data/categories";
 import {
@@ -23,6 +24,7 @@ import {
   getProduct,
   getVariantsForStore,
   listCatalog,
+  listProductsPage,
   updateProduct,
   type ProductInput,
 } from "../lib/data/products";
@@ -30,6 +32,7 @@ import {
   createDiscount,
   DiscountError,
   getDiscount,
+  listDiscountsPage,
   setDiscountAssignmentsForProducts,
   updateDiscount,
 } from "../lib/data/discounts";
@@ -37,6 +40,7 @@ import {
   OrderError,
   getOrder,
   listOrders,
+  listOrdersPage,
   placeOrder,
   updateOrderStatus,
 } from "../lib/data/orders";
@@ -153,6 +157,49 @@ async function main() {
       await deleteCategory(A, shoes.id);
       await deleteCategory(A, men.id);
       assert.equal((await listCategories(A)).length, 0);
+    });
+
+    await check("category pagination supports 25, 50 and 75 rows while preserving tree context", async () => {
+      const parent = await createCategory(A, { name: "A Parent", parentId: null });
+      await createCategory(A, { name: "A Child", parentId: parent.id });
+      await prisma.category.createMany({
+        data: Array.from({ length: 78 }, (_, index) => {
+          const number = String(index + 1).padStart(3, "0");
+          return {
+            tenantId: A,
+            name: `Category ${number}`,
+            slug: `category-${number}`,
+          };
+        }),
+      });
+
+      const firstPage = await listCategoriesPage(A, 1, 25);
+      assert.equal(firstPage.total, 80);
+      assert.equal(firstPage.pages, 4);
+      assert.equal(firstPage.pageSize, 25);
+      assert.equal(firstPage.items.length, 25);
+      assert.deepEqual(
+        firstPage.items.slice(0, 2).map((category) => ({ name: category.name, depth: category.depth, path: category.path })),
+        [
+          { name: "A Parent", depth: 0, path: "A Parent" },
+          { name: "A Child", depth: 1, path: "A Parent / A Child" },
+        ],
+      );
+
+      const fifty = await listCategoriesPage(A, 2, 50);
+      assert.equal(fifty.page, 2);
+      assert.equal(fifty.pages, 2);
+      assert.equal(fifty.items.length, 30);
+      const seventyFive = await listCategoriesPage(A, 2, 75);
+      assert.equal(seventyFive.items.length, 5);
+      assert.equal(seventyFive.pageSize, 75);
+      const invalidSize = await listCategoriesPage(A, 99, 500);
+      assert.equal(invalidSize.pageSize, 25);
+      assert.equal(invalidSize.page, 4);
+      assert.equal(invalidSize.items.length, 5);
+      assert.equal((await listCategoriesPage(B, 1, 75)).total, 1, "another store's categories leaked");
+
+      await prisma.category.deleteMany({ where: { tenantId: A } });
     });
 
 
@@ -633,6 +680,18 @@ async function main() {
       for (let i = 1; i < list.length; i++) {
         assert.ok(list[i - 1].createdAt >= list[i].createdAt, "orders not sorted newest first");
       }
+    });
+
+    await check("admin product, discount and order lists accept the shared page sizes", async () => {
+      const products = await listProductsPage(A, 1, "", 75);
+      const discounts = await listDiscountsPage(A, 1, false, 50);
+      const orders = await listOrdersPage(A, 1, undefined, 75);
+      assert.equal(products.pageSize, 75);
+      assert.equal(discounts.pageSize, 50);
+      assert.equal(orders.pageSize, 75);
+      assert.ok(products.items.length <= 75);
+      assert.ok(discounts.items.length <= 50);
+      assert.ok(orders.items.length <= 75);
     });
 
     await check("deleting a whole store cascades over a nested category tree with assigned products", async () => {

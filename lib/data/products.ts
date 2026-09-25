@@ -1,4 +1,5 @@
 import { Prisma } from "@/generated/prisma/client";
+import { normalizeAdminPageSize } from "@/lib/admin-pagination";
 import { NO_FILTERS, type AttributeFacet, type CatalogFilters } from "@/lib/catalog-filters";
 import { withTenant, type TxClient } from "@/lib/prisma";
 import { slugCandidate, slugify } from "@/lib/slug";
@@ -76,24 +77,28 @@ export function listProducts(tenantId: string) {
   );
 }
 
-export const ADMIN_PAGE_SIZE = 25;
-
 /** The owner's product list, one page at a time (a big catalog can't all load at once). */
-export function listProductsPage(tenantId: string, requestedPage: number, search = "") {
+export function listProductsPage(
+  tenantId: string,
+  requestedPage: number,
+  search = "",
+  requestedPageSize = 25,
+) {
+  const pageSize = normalizeAdminPageSize(requestedPageSize);
   const q = search.trim().slice(0, 100);
   const where = { tenantId, ...(q ? { name: { contains: q, mode: "insensitive" as const } } : {}) };
   return withTenant(tenantId, async (db) => {
     const total = await db.product.count({ where });
-    const pages = Math.max(1, Math.ceil(total / ADMIN_PAGE_SIZE));
+    const pages = Math.max(1, Math.ceil(total / pageSize));
     const page = Math.min(Math.max(1, Math.floor(requestedPage) || 1), pages);
     const items = await db.product.findMany({
       where,
       orderBy: [{ createdAt: "desc" }, { id: "asc" }],
-      skip: (page - 1) * ADMIN_PAGE_SIZE,
-      take: ADMIN_PAGE_SIZE,
+      skip: (page - 1) * pageSize,
+      take: pageSize,
       include: { ...withPricing, category: { select: { name: true } } },
     });
-    return { items, total, page, pages };
+    return { items, total, page, pages, pageSize };
   });
 }
 

@@ -1,5 +1,7 @@
 import Link from "next/link";
 import { CornerDownRight, FolderTree, Plus } from "lucide-react";
+import { AdminPageSizeControl } from "@/components/admin-page-size-control";
+import { AdminPagination } from "@/components/admin-pagination";
 import { EmptyState } from "@/components/admin/empty-state";
 import { PageHeader } from "@/components/admin/page-header";
 import { Thumb } from "@/components/admin/thumb";
@@ -13,14 +15,22 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { flattenCategories } from "@/lib/categories";
-import { listCategories } from "@/lib/data/categories";
+import { listCategoriesPage } from "@/lib/data/categories";
 import { requireOwner } from "@/lib/session";
 import { DeleteCategoryButton } from "./delete-category-button";
 
-export default async function CategoriesPage() {
+const first = (value: string | string[] | undefined) => (Array.isArray(value) ? value[0] : value);
+
+export default async function CategoriesPage({ searchParams }: PageProps<"/admin/categories">) {
   const { tenantId } = await requireOwner();
-  const tree = flattenCategories(await listCategories(tenantId));
+  const query = await searchParams;
+  const requestedPage = Number.parseInt(first(query.page) ?? "1", 10) || 1;
+  const requestedPageSize = Number.parseInt(first(query.perPage) ?? "25", 10) || 25;
+  const { items: tree, total, page, pages, pageSize } = await listCategoriesPage(
+    tenantId,
+    requestedPage,
+    requestedPageSize,
+  );
 
   const addButton = (
     <Link href="/admin/categories/new" className={buttonVariants()}>
@@ -35,6 +45,7 @@ export default async function CategoriesPage() {
         description="Group your products so shoppers can browse, e.g. Men → Shoes. A category shows its own products plus everything inside it."
         actions={addButton}
       />
+      <AdminPageSizeControl page={page} pageSize={pageSize} total={total} noun="categories" />
       <Card className="gap-0 overflow-hidden py-0">
         {tree.length === 0 ? (
           <EmptyState icon={FolderTree} title="No categories yet." action={addButton}>
@@ -60,7 +71,14 @@ export default async function CategoriesPage() {
                     <span className="flex items-center gap-3" style={{ paddingLeft: `${c.depth * 1.5}rem` }}>
                       {c.depth > 0 && <CornerDownRight className="size-4 shrink-0 text-muted-foreground" aria-hidden />}
                       <Thumb src={c.imageUrl} className="size-8" />
-                      {c.name}
+                      <span className="min-w-0">
+                        <span className="block truncate" data-testid="category-name">{c.name}</span>
+                        {c.depth > 0 && (
+                          <span className="block truncate text-xs font-normal text-muted-foreground" title={c.path}>
+                            {c.path}
+                          </span>
+                        )}
+                      </span>
                     </span>
                   </TableCell>
                   <TableCell className="font-mono text-xs text-muted-foreground">/category/{c.slug}</TableCell>
@@ -82,6 +100,14 @@ export default async function CategoriesPage() {
           </Table>
         )}
       </Card>
+      <AdminPagination
+        basePath="/admin/categories"
+        page={page}
+        pages={pages}
+        total={total}
+        noun="categories"
+        params={pageSize === 25 ? {} : { perPage: String(pageSize) }}
+      />
     </div>
   );
 }

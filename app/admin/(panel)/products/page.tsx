@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { Package, Plus, Search } from "lucide-react";
+import { AdminPageSizeControl } from "@/components/admin-page-size-control";
 import { AdminPagination } from "@/components/admin-pagination";
 import { EmptyState } from "@/components/admin/empty-state";
 import { PageHeader } from "@/components/admin/page-header";
@@ -29,7 +30,13 @@ export default async function ProductsPage({ searchParams }: PageProps<"/admin/p
   const sp = await searchParams;
   const q = (first(sp.q) ?? "").trim().slice(0, 100);
   const requested = Number.parseInt(first(sp.page) ?? "1", 10) || 1;
-  const { items: products, total, page, pages } = await listProductsPage(tenantId, requested, q);
+  const requestedPageSize = Number.parseInt(first(sp.perPage) ?? "25", 10) || 25;
+  const { items: products, total, page, pages, pageSize } = await listProductsPage(
+    tenantId,
+    requested,
+    q,
+    requestedPageSize,
+  );
   const pricedAt = new Date();
 
   const addButton = (
@@ -48,6 +55,7 @@ export default async function ProductsPage({ searchParams }: PageProps<"/admin/p
 
       {(total > 0 || q) && (
         <form method="get" className="relative max-w-sm" role="search">
+          {pageSize !== 25 && <input type="hidden" name="perPage" value={pageSize} />}
           <Search className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground" aria-hidden />
           <input
             type="search"
@@ -59,6 +67,8 @@ export default async function ProductsPage({ searchParams }: PageProps<"/admin/p
           />
         </form>
       )}
+
+      <AdminPageSizeControl page={page} pageSize={pageSize} total={total} noun="products" />
 
       <Card className="gap-0 overflow-hidden py-0">
         {products.length === 0 ? (
@@ -168,7 +178,7 @@ export default async function ProductsPage({ searchParams }: PageProps<"/admin/p
         pages={pages}
         total={total}
         noun="products"
-        params={q ? { q } : {}}
+        params={{ ...(q ? { q } : {}), ...(pageSize === 25 ? {} : { perPage: String(pageSize) }) }}
       />
     </div>
   );

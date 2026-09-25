@@ -1,4 +1,5 @@
 import { env } from "@/lib/env";
+import { normalizeAdminPageSize } from "@/lib/admin-pagination";
 import { withTenant } from "@/lib/prisma";
 import { canTransition, type OrderStatusValue } from "@/lib/orders";
 import { calculatePrice } from "@/lib/pricing";
@@ -229,11 +230,15 @@ export function listOrders(tenantId: string) {
   );
 }
 
-const ORDERS_PAGE_SIZE = 25;
-
 /** The owner's orders list, one page at a time, newest first, optionally one status only;
  * `counts` has every status's total for the tabs. */
-export function listOrdersPage(tenantId: string, requestedPage: number, status?: OrderStatusValue) {
+export function listOrdersPage(
+  tenantId: string,
+  requestedPage: number,
+  status?: OrderStatusValue,
+  requestedPageSize = 25,
+) {
+  const pageSize = normalizeAdminPageSize(requestedPageSize);
   const where = { tenantId, ...(status ? { status } : {}) };
   return withTenant(tenantId, async (db) => {
     const [total, byStatus] = await Promise.all([
@@ -243,16 +248,16 @@ export function listOrdersPage(tenantId: string, requestedPage: number, status?:
     const counts = Object.fromEntries(byStatus.map((r) => [r.status, r._count._all])) as Partial<
       Record<OrderStatusValue, number>
     >;
-    const pages = Math.max(1, Math.ceil(total / ORDERS_PAGE_SIZE));
+    const pages = Math.max(1, Math.ceil(total / pageSize));
     const page = Math.min(Math.max(1, Math.floor(requestedPage) || 1), pages);
     const items = await db.order.findMany({
       where,
       orderBy: [{ createdAt: "desc" }, { id: "asc" }],
-      skip: (page - 1) * ORDERS_PAGE_SIZE,
-      take: ORDERS_PAGE_SIZE,
+      skip: (page - 1) * pageSize,
+      take: pageSize,
       include: { items: { select: { priceCentsSnapshot: true, quantity: true } } },
     });
-    return { items, total, page, pages, counts };
+    return { items, total, page, pages, pageSize, counts };
   });
 }
 

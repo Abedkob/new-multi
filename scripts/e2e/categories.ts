@@ -51,7 +51,7 @@ async function main() {
     const rows = await page.locator("tbody tr").evaluateAll((trs) =>
       trs.map((tr) => ({
         depth: Number(tr.getAttribute("data-depth")),
-        name: tr.querySelector("td")!.textContent!.replace(/[└\s]+/g, " ").trim(),
+        name: tr.querySelector('[data-testid="category-name"]')!.textContent!.trim(),
         indent: (tr.querySelector("td span") as HTMLElement).style.paddingLeft,
       })),
     );
@@ -97,6 +97,34 @@ async function main() {
     await page.goto(`${BASE}/admin/categories`);
     assert.ok(await page.getByText("No categories yet.").isVisible());
     ok("leaf-first deletion works");
+
+    await prisma.category.createMany({
+      data: Array.from({ length: 80 }, (_, index) => {
+        const number = String(index + 1).padStart(3, "0");
+        return {
+          tenantId: store.tenant.id,
+          name: `Paged ${number}`,
+          slug: `paged-${number}`,
+        };
+      }),
+    });
+    await page.goto(`${BASE}/admin/categories`);
+    assert.equal(await page.locator("tbody tr").count(), 25);
+    assert.equal(await page.getByTestId("admin-visible-range").innerText(), "Showing 1–25 of 80 categories");
+    await page.getByLabel("Categories per page").selectOption("50");
+    await page.waitForURL(/perPage=50/);
+    assert.equal(await page.locator("tbody tr").count(), 50);
+    await Promise.all([
+      page.waitForURL(/page=2/),
+      page.getByRole("link", { name: /Next/ }).click(),
+    ]);
+    assert.equal(await page.locator("tbody tr").count(), 30);
+    assert.equal(await page.getByTestId("admin-visible-range").innerText(), "Showing 51–80 of 80 categories");
+    await page.getByLabel("Categories per page").selectOption("75");
+    await page.waitForURL((url) => url.searchParams.get("perPage") === "75" && !url.searchParams.has("page"));
+    assert.equal(await page.locator("tbody tr").count(), 75);
+    assert.equal(await page.getByTestId("admin-visible-range").innerText(), "Showing 1–75 of 80 categories");
+    ok("25, 50 and 75 per-page options paginate and reset to page 1 when changed");
 
     // Cross-store: another store's category is a 404 at the edit URL.
     const other = await makeStore("Cat Other");

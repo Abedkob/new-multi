@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { ShoppingBag } from "lucide-react";
+import { AdminPageSizeControl } from "@/components/admin-page-size-control";
 import { AdminPagination } from "@/components/admin-pagination";
 import { EmptyState } from "@/components/admin/empty-state";
 import { PageHeader } from "@/components/admin/page-header";
@@ -36,6 +37,7 @@ export default async function OrdersPage({ searchParams }: PageProps<"/admin/ord
   const { tenantId } = await requireOwner();
   const sp = await searchParams;
   const requested = Number.parseInt(first(sp.page) ?? "1", 10) || 1;
+  const requestedPageSize = Number.parseInt(first(sp.perPage) ?? "25", 10) || 25;
   const status = ORDER_STATUSES.find((s) => s === first(sp.status));
 
   // Lazy cleanup (no scheduler): release stock held by PENDING orders the owner never acted on,
@@ -46,15 +48,28 @@ export default async function OrdersPage({ searchParams }: PageProps<"/admin/ord
     console.error("expireStalePendingOrders failed:", e instanceof Error ? e.message : e);
   }
 
-  const { items: orders, total, page, pages, counts } = await listOrdersPage(tenantId, requested, status);
+  const { items: orders, total, page, pages, pageSize, counts } = await listOrdersPage(
+    tenantId,
+    requested,
+    status,
+    requestedPageSize,
+  );
   const all = ORDER_STATUSES.reduce((n, s) => n + (counts[s] ?? 0), 0);
   const tabs: { key: OrderStatusValue | "ALL"; label: string; count: number; href: string }[] = [
-    { key: "ALL", label: "All", count: all, href: "/admin/orders" },
+    {
+      key: "ALL",
+      label: "All",
+      count: all,
+      href: pageSize === 25 ? "/admin/orders" : `/admin/orders?perPage=${pageSize}`,
+    },
     ...ORDER_STATUSES.map((s) => ({
       key: s,
       label: STATUS_LABEL[s],
       count: counts[s] ?? 0,
-      href: `/admin/orders?status=${s}`,
+      href: `/admin/orders?${new URLSearchParams({
+        status: s,
+        ...(pageSize === 25 ? {} : { perPage: String(pageSize) }),
+      })}`,
     })),
   ];
   const current = status ?? "ALL";
@@ -85,6 +100,8 @@ export default async function OrdersPage({ searchParams }: PageProps<"/admin/ord
           </Link>
         ))}
       </nav>
+
+      <AdminPageSizeControl page={page} pageSize={pageSize} total={total} noun="orders" />
 
       <Card className="gap-0 overflow-hidden py-0">
         {orders.length === 0 ? (
@@ -160,7 +177,10 @@ export default async function OrdersPage({ searchParams }: PageProps<"/admin/ord
         pages={pages}
         total={total}
         noun="orders"
-        params={status ? { status } : {}}
+        params={{
+          ...(status ? { status } : {}),
+          ...(pageSize === 25 ? {} : { perPage: String(pageSize) }),
+        }}
       />
     </div>
   );

@@ -1,5 +1,6 @@
 import { withTenant, type TxClient } from "@/lib/prisma";
 import { descendantIds } from "@/lib/categories";
+import { normalizeAdminPageSize } from "@/lib/admin-pagination";
 import { isUniqueViolation } from "@/lib/data/tenants";
 import { slugCandidate, slugify } from "@/lib/slug";
 
@@ -30,6 +31,100 @@ export function categorySitemapQuery(db: TxClient, tenantId: string) {
 
 export function listCategories(tenantId: string) {
   return withTenant(tenantId, (db) => categoriesQuery(db, tenantId));
+}
+
+type CategoryPageRow = {
+  id: string;
+  name: string;
+  slug: string;
+  parentId: string | null;
+  imageUrl: string | null;
+  depth: number;
+  path: string;
+  productCount: number;
+};
+
+/**
+ * The owner category table, ordered depth-first like flattenCategories but paged in Postgres.
+ * The recursive query keeps hierarchy depth and full paths available even when a page starts
+ * with a child whose parent was on the previous page.
+ */
+export function listCategoriesPage(
+  tenantId: string,
+  requestedPage: number,
+  requestedPageSize: number,
+) {
+  const pageSize = normalizeAdminPageSize(requestedPageSize);
+  return withTenant(tenantId, async (db) => {
+    const total = await db.category.count({ where: { tenantId } });
+    const pages = Math.max(1, Math.ceil(total / pageSize));
+    const page = Math.min(Math.max(1, Math.floor(requestedPage) || 1), pages);
+    const offset = (page - 1) * pageSize;
+    const rows = await db.$queryRaw<CategoryPageRow[]>`
+      WITH RECURSIVE category_tree AS (
+        SELECT
+          c.id,
+          c.name,
+          c.slug,
+          c."parentId",
+          c."imageUrl",
+          0 AS depth,
+          ARRAY[c.id]::text[] AS id_path,
+          ARRAY[c.name]::text[] AS name_path,
+          ARRAY[lower(c.name) || chr(31) || c.id]::text[] AS sort_path
+        FROM "Category" c
+        WHERE c."tenantId" = ${tenantId}
+          AND (
+            c."parentId" IS NULL OR NOT EXISTS (
+              SELECT 1 FROM "Category" parent
+              WHERE parent.id = c."parentId" AND parent."tenantId" = ${tenantId}
+            )
+          )
+
+        UNION ALL
+
+        SELECT
+          child.id,
+          child.name,
+          child.slug,
+          child."parentId",
+          child."imageUrl",
+          tree.depth + 1,
+          tree.id_path || child.id,
+          tree.name_path || child.name,
+          tree.sort_path || (lower(child.name) || chr(31) || child.id)
+        FROM "Category" child
+        JOIN category_tree tree ON child."parentId" = tree.id
+        WHERE child."tenantId" = ${tenantId}
+          AND NOT child.id = ANY(tree.id_path)
+      )
+      SELECT
+        tree.id,
+        tree.name,
+        tree.slug,
+        tree."parentId",
+        tree."imageUrl",
+        tree.depth,
+        array_to_string(tree.name_path, ' / ') AS path,
+        (
+          SELECT count(*)::int FROM "Product" product
+          WHERE product."tenantId" = ${tenantId} AND product."categoryId" = tree.id
+        ) AS "productCount"
+      FROM category_tree tree
+      ORDER BY tree.sort_path
+      LIMIT ${pageSize} OFFSET ${offset}`;
+
+    return {
+      items: rows.map(({ productCount, ...row }) => ({
+        ...row,
+        _count: { products: productCount },
+      })),
+      total,
+      page,
+      pages,
+      pageSize,
+    };
+  });
 }
 
 export function getCategory(tenantId: string, id: string) {
