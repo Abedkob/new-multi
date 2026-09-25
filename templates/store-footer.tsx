@@ -14,7 +14,8 @@ export type FooterLook =
   | "atelier"
   | "atlas"
   | "pearl"
-  | "drop";
+  | "drop"
+  | "kinetic";
 
 type FooterStyle = {
   layout: "centered" | "columns" | "editorial";
@@ -101,6 +102,14 @@ const STYLES: Record<FooterLook, FooterStyle> = {
     link: "text-secondary-foreground/75 hover:text-secondary-foreground",
     border: "border-secondary-foreground/20",
     brand: "text-3xl font-black uppercase tracking-tight",
+  },
+  kinetic: {
+    layout: "editorial",
+    surface: "border-t border-primary-foreground/20 bg-primary text-primary-foreground",
+    muted: "text-primary-foreground/65",
+    link: "text-primary-foreground/70 hover:text-primary-foreground",
+    border: "border-primary-foreground/20",
+    brand: "text-3xl font-black tracking-[-0.04em]",
   },
 };
 

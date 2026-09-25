@@ -7,6 +7,7 @@ import { atelierTemplate } from "./atelier";
 import { atlasTemplate } from "./atlas";
 import { pearlTemplate } from "./pearl";
 import { dropTemplate } from "./drop";
+import { kineticTemplate } from "./kinetic";
 import { normalizeTemplateId, type TemplateId } from "./meta";
 import type { Template } from "./types";
 
@@ -20,6 +21,7 @@ const templates: Record<TemplateId, Template> = {
   atlas: atlasTemplate,
   pearl: pearlTemplate,
   drop: dropTemplate,
+  kinetic: kineticTemplate,
 };
 
 /** Unknown/legacy template ids fall back to the default template. */

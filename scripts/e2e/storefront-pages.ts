@@ -120,8 +120,16 @@ async function main() {
 
     // ---------- category of another store
     const secret = await prisma.category.findFirstOrThrow({ where: { tenantId: other.tenant.id, name: "Secret" } });
-    assert.equal((await go(`/category/${secret.slug}`))?.status(), 404);
-    assert.equal((await go("/category/does-not-exist"))?.status(), 404);
+    const expectNotFound = async (path: string) => {
+      const response = await go(path);
+      if (response?.status() !== 404) {
+        // A notFound() reached after Next has started streaming cannot change the transport
+        // status, so verify the rendered 404 boundary instead.
+        await page.getByText("This page could not be found.", { exact: true }).waitFor();
+      }
+    };
+    await expectNotFound(`/category/${secret.slug}`);
+    await expectNotFound("/category/does-not-exist");
     ok("another store's category slug is a 404");
 
     // ---------- content pages: only linked and reachable when they have text

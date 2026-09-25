@@ -73,7 +73,7 @@ async function main() {
       );
     }
     await page.locator('footer').screenshot({ path: join(shots, "footer-desktop.png") });
-    ok("all nine template looks render configured links safely with no desktop overflow");
+    ok(`all ${TEMPLATE_IDS.length} template looks render configured links safely with no desktop overflow`);
 
     const mobile = await browser.newContext({
       viewport: { width: 390, height: 844 },
