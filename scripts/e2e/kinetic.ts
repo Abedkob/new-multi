@@ -102,6 +102,11 @@ async function main() {
       await page.locator('[data-section="featuredCategories"]').scrollIntoViewIfNeeded();
       await page.waitForTimeout(500);
       await page.screenshot({ path: join(screenshots, "kinetic-desktop-categories.png") });
+      await page.locator('[data-section="newArrivals"]').evaluate((element) => {
+        window.scrollTo({ top: element.getBoundingClientRect().top + window.scrollY - 72 });
+      });
+      await page.waitForTimeout(500);
+      await page.screenshot({ path: join(screenshots, "kinetic-desktop-new-arrivals.png") });
     }
 
     const velocity = page.getByRole("button", { name: "Velocity Runner" });
@@ -109,6 +114,19 @@ async function main() {
     assert.equal(await velocity.getAttribute("aria-pressed"), "true");
     await page.getByRole("link", { name: "Velocity Runner" }).first().waitFor();
     ok("the product stage switches products with accessible controls");
+
+    const stage = page.getByRole("region", { name: "The moving edit" });
+    await stage.scrollIntoViewIfNeeded();
+    await page.getByRole("button", { name: /Future Overshirt/ }).click();
+    assert.equal(await stage.getAttribute("data-active-index"), "3");
+    await page.evaluate(() => (document.activeElement as HTMLElement | null)?.blur());
+    await page.mouse.move(0, 0);
+    await page.waitForFunction(
+      (selector) => document.querySelector(selector)?.getAttribute("data-active-index") === "0",
+      '[aria-roledescription="carousel"]',
+      { timeout: 7_500 },
+    );
+    ok("new arrivals automatically advances and wraps through the product sequence");
 
     await page.goto(`${base}/products/${overshirt.slug}`);
     await page.getByTestId("add-to-cart-button").click();

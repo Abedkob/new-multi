@@ -45,8 +45,8 @@ const button = cn(
 
 function Heading({ title, aside }: { title: string; aside?: React.ReactNode }) {
   return (
-    <div className="mb-10 flex items-end justify-between gap-6 border-b border-border pb-5 sm:mb-14">
-      <h2 className={cn(display, "max-w-5xl text-[clamp(2.75rem,6vw,6.5rem)]")}>{title}</h2>
+    <div className="mb-10 grid items-end gap-6 border-b border-border pb-6 sm:mb-14 sm:grid-cols-[minmax(0,1fr)_auto]">
+      <h2 className={cn(display, "max-w-5xl text-[clamp(2.75rem,5.6vw,6rem)]")}>{title}</h2>
       {aside}
     </div>
   );
@@ -163,56 +163,80 @@ const Navbar: SectionComponent = ({ data }) => {
 
 const Hero: SectionComponent = ({ data: { store, content, visibility } }) => {
   const words = content["hero.headline"].trim().split(/\s+/).filter(Boolean);
+  const splitAt = Math.ceil(words.length / 2);
+  const headlineLines = words.length <= 1 ? [words] : [words.slice(0, splitAt), words.slice(splitAt)];
   const hasImage = Boolean(content["hero.image"] || content["hero.imageMobile"]);
 
   return (
     <HeroStage>
-      <section className="relative isolate min-h-[calc(100svh-4.5rem)] overflow-hidden bg-primary text-primary-foreground">
+      <section className="relative isolate min-h-[min(50rem,calc(100svh-4.5rem))] overflow-hidden bg-primary text-primary-foreground lg:min-h-[calc(100svh-4.5rem)]">
         {hasImage && (
           <div data-kinetic-media className="absolute inset-0 -z-20 will-change-transform">
             <HeroPicture content={content} alt={store.name} className="h-full w-full" />
           </div>
         )}
-        <div className="absolute inset-0 -z-10 bg-gradient-to-b from-primary/25 via-primary/10 to-primary" />
+        <div className="absolute inset-0 -z-10 bg-gradient-to-r from-primary/70 via-primary/15 to-primary/35" />
+        <div className="absolute inset-0 -z-10 bg-gradient-to-t from-primary via-primary/10 to-primary/15" />
+        <span aria-hidden className="pointer-events-none absolute inset-3 border border-primary-foreground/20 sm:inset-6 lg:inset-8" />
 
-        <div className={cn(wrap, "flex min-h-[calc(100svh-4.5rem)] flex-col justify-between py-8 sm:py-12")}>
-          <div data-kinetic-detail className="flex items-center justify-between gap-6 text-sm text-primary-foreground/75">
-            <span>{store.name}</span>
-            <span>{content["newArrivals.heading"]}</span>
+        <div className={cn(wrap, "flex min-h-[min(50rem,calc(100svh-4.5rem))] flex-col py-10 sm:py-14 lg:min-h-[calc(100svh-4.5rem)] lg:py-16")}>
+          <div data-kinetic-detail className="flex items-center gap-4 text-xs font-semibold text-primary-foreground/80 sm:text-sm">
+            <span className="shrink-0">{store.name}</span>
+            <span data-kinetic-rule aria-hidden className="h-px flex-1 bg-primary-foreground/30" />
+            <span className="shrink-0">{content["newArrivals.heading"]}</span>
           </div>
 
           {visibility.heroText && (
-            <div className="py-16 sm:py-24">
+            <div className="flex flex-1 flex-col justify-center py-12 sm:py-14 lg:py-8">
               <h1
                 aria-label={content["hero.headline"]}
-                className={cn(display, "flex max-w-[90rem] flex-wrap gap-x-[0.22em] overflow-hidden text-[clamp(4rem,13vw,12rem)]")}
+                className={cn(display, "w-full text-[clamp(3.5rem,10.2vw,9.75rem)]")}
               >
-                {words.map((word, index) => (
-                  <span key={`${word}-${index}`} aria-hidden className="overflow-hidden pb-[0.09em]">
-                    <span data-kinetic-word className="block will-change-transform">
-                      {word}
-                    </span>
+                {headlineLines.map((line, lineIndex) => (
+                  <span
+                    key={`${line.join("-")}-${lineIndex}`}
+                    aria-hidden
+                    className={cn(
+                      "flex flex-wrap gap-x-[0.2em] overflow-hidden pb-[0.09em]",
+                      lineIndex === 1 && "justify-end text-right sm:pl-[10vw]",
+                    )}
+                  >
+                    {line.map((word, wordIndex) => (
+                      <span key={`${word}-${wordIndex}`} className="overflow-hidden pb-[0.06em]">
+                        <span data-kinetic-word className="block will-change-transform">
+                          {word}
+                        </span>
+                      </span>
+                    ))}
                   </span>
                 ))}
               </h1>
-
-              <div className="mt-8 flex flex-col gap-7 sm:flex-row sm:items-end sm:justify-between">
-                {content["hero.subtext"] && (
-                  <p data-kinetic-detail className="max-w-xl whitespace-pre-line text-base leading-relaxed text-primary-foreground/75 sm:text-lg">
-                    {content["hero.subtext"]}
-                  </p>
-                )}
-                {content["hero.ctaLabel"] && (
-                  <Link data-kinetic-detail href={sectionHref(store, "new-arrivals")} className={button}>
-                    {content["hero.ctaLabel"]}
-                    <ArrowDown className="size-4" aria-hidden />
-                  </Link>
-                )}
-              </div>
             </div>
           )}
 
-          <div data-kinetic-detail className="h-px w-full bg-primary-foreground/25" />
+          <div className="grid gap-6 border-t border-primary-foreground/25 pt-6 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-end lg:gap-10 lg:pt-8">
+            {visibility.heroText && content["hero.subtext"] && (
+              <p data-kinetic-detail className="max-w-md whitespace-pre-line text-base leading-relaxed text-primary-foreground/80 sm:text-lg">
+                {content["hero.subtext"]}
+              </p>
+            )}
+
+            {visibility.heroText && content["hero.ctaLabel"] && (
+              <Link
+                data-kinetic-detail
+                href={sectionHref(store, "new-arrivals")}
+                className={cn(
+                  "group inline-flex min-h-14 items-center justify-between gap-8 bg-accent px-5 text-sm font-semibold text-accent-foreground transition-transform hover:-translate-y-0.5 sm:col-start-2 sm:min-w-52",
+                  focus,
+                )}
+              >
+                {content["hero.ctaLabel"]}
+                <span className="grid size-8 place-items-center rounded-full border border-accent-foreground/35">
+                  <ArrowDown className="size-4 transition-transform group-hover:translate-y-0.5" aria-hidden />
+                </span>
+              </Link>
+            )}
+          </div>
         </div>
       </section>
     </HeroStage>
@@ -224,7 +248,7 @@ const FeaturedCategories: SectionComponent = ({ data }) => (
 );
 
 const NewArrivals: SectionComponent = ({ data }) => (
-  <section className={cn(wrap, "py-20 sm:py-28 lg:py-36")}>
+  <section className={cn(wrap, "py-20 sm:py-28 lg:py-32")}>
     <Heading
       title={data.content["newArrivals.heading"]}
       aside={
