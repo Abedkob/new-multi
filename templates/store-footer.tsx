@@ -284,7 +284,7 @@ export function StoreFooter({ data, look }: { data: StorefrontData; look: Footer
               <div
                 aria-hidden
                 className={cn(
-                  "mb-10 overflow-hidden border-b pb-5 text-[clamp(3rem,12vw,9rem)] font-black uppercase leading-none tracking-tighter",
+                  "mb-10 overflow-hidden border-b pb-5 pr-20 text-[clamp(3rem,12vw,9rem)] font-black uppercase leading-none tracking-tighter sm:pr-0",
                   style.border,
                 )}
               >

@@ -94,11 +94,11 @@ function ProductCard({
           <ArrowUpRight className="size-4" aria-hidden />
         </span>
       </div>
-      <div className="mt-4 flex items-start justify-between gap-5">
+      <div className="mt-4 flex flex-col gap-1 sm:flex-row sm:items-start sm:justify-between sm:gap-5">
         <h3 className={cn("min-w-0 font-semibold leading-tight", large ? "text-2xl sm:text-3xl" : "text-base sm:text-lg")}>
           {product.name}
         </h3>
-        <p className="shrink-0 text-sm font-medium tabular-nums text-muted-foreground">
+        <p className="text-sm font-medium tabular-nums text-muted-foreground sm:shrink-0">
           {cardPrice(product, content)}
         </p>
       </div>
