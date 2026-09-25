@@ -409,6 +409,7 @@ export async function listCatalog(
 
   const orderBy = {
     newest: Prisma.sql`p."createdAt" DESC, p."id" ASC`,
+    sale: Prisma.sql`(mp.price < rp.price) DESC, p."createdAt" DESC, p."id" ASC`,
     "price-asc": Prisma.sql`mp.price ASC, p."createdAt" DESC, p."id" ASC`,
     "price-desc": Prisma.sql`mp.price DESC, p."createdAt" DESC, p."id" ASC`,
     name: Prisma.sql`lower(p."name") ASC, p."id" ASC`,

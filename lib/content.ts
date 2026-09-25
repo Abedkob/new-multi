@@ -222,6 +222,7 @@ export const CONTENT_KEYS = [
   { section: "catalog", key: "catalog.sortNewest", label: "Sort option: newest", kind: "text", default: "Newest" },
   { section: "catalog", key: "catalog.sortPriceAsc", label: "Sort option: price low to high", kind: "text", default: "Price: low to high" },
   { section: "catalog", key: "catalog.sortPriceDesc", label: "Sort option: price high to low", kind: "text", default: "Price: high to low" },
+  { section: "catalog", key: "catalog.sortSale", label: "Sort option: discounted products first", kind: "text", default: "On sale first" },
   { section: "catalog", key: "catalog.sortName", label: "Sort option: name", kind: "text", default: "Name: A to Z" },
   { section: "catalog", key: "catalog.price", label: "Price filter heading", kind: "text", default: "Price" },
   { section: "catalog", key: "catalog.min", label: "Minimum price placeholder", kind: "text", default: "Min" },

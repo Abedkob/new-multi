@@ -6,6 +6,7 @@ import { prisma } from "../../lib/prisma";
 import { createCategory } from "../../lib/data/categories";
 import { saveContent } from "../../lib/data/content";
 import { createProduct } from "../../lib/data/products";
+import { createDiscount, setDiscountAssignmentsForProducts } from "../../lib/data/discounts";
 import { setTenantTemplate } from "../../lib/data/theme";
 import { TEMPLATE_IDS } from "../../templates/meta";
 import { BASE, launch, makeStore } from "./browser";
@@ -34,7 +35,7 @@ async function main() {
   const home = await createCategory(T, { name: "Homeware", parentId: null });
 
   // 13 products: pagination (12 per page) + a category tree with products at every level.
-  await mk(T, "Cotton Shirt", men.id, "Soft cotton");
+  const saleProduct = await mk(T, "Cotton Shirt", men.id, "Soft cotton");
   await mk(T, "Leather Boot", shoes.id);
   await mk(T, "Nike Runner", nike.id, "Fast RUNNING shoe");
   await mk(T, "Nike Trainer", nike.id);
@@ -44,6 +45,15 @@ async function main() {
   // Another store with the same words must never leak into this store's results.
   await mk(other.tenant.id, "Nike Runner Other Store", null);
   await createCategory(other.tenant.id, { name: "Secret", parentId: null });
+  const sale = await createDiscount(T, {
+    name: "Catalog sale",
+    type: "PERCENTAGE",
+    value: 20,
+    isEnabled: true,
+    startsAt: null,
+    endsAt: null,
+  });
+  await setDiscountAssignmentsForProducts(T, sale.id, [saleProduct.id], [saleProduct.id]);
 
   const { browser, context } = await launch();
   const page = await context.newPage();
@@ -71,6 +81,10 @@ async function main() {
     ok("shop lists every product, 12 per page, with working page numbers and previous/next");
 
     // ---------- sort + filters (URL is the state; pagination keeps it)
+    await go("/shop?sort=sale");
+    const firstSaleHref = await page.locator('[data-testid="catalog-page"] a[href*="/products/"]').first().getAttribute("href");
+    assert.match(firstSaleHref ?? "", /\/products\/cotton-shirt$/, "sale sort does not place discounted products first");
+
     await go("/shop?sort=price-desc");
     // Sidebar templates show the filters on desktop; the others open them with the Filters button.
     const toggle = page.getByRole("button", { name: /^Filters/ });
@@ -85,6 +99,23 @@ async function main() {
       "filtered views are not indexed",
     );
     ok("sort and filters apply from the URL, survive paging, and aren't indexed");
+
+    // ---------- the two GSAP templates keep the shared filters usable on a phone
+    for (const id of ["kinetic", "mirage"] as const) {
+      await setTenantTemplate(T, id);
+      const mobile = await browser.newContext({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true });
+      const mobilePage = await mobile.newPage();
+      await mobilePage.goto(`${BASE}/store/${slug}/shop?sort=sale`);
+      assert.equal(await mobilePage.locator('[data-testid="catalog-sort"]').inputValue(), "sale", `${id}: sale sort not selected`);
+      const filterButton = mobilePage.getByRole("button", { name: /^Filters/ });
+      await filterButton.click();
+      await mobilePage.getByLabel(/In stock only/).check();
+      await mobilePage.waitForURL(/stock=1/);
+      const dimensions = await mobilePage.evaluate(() => ({ viewport: document.documentElement.clientWidth, content: document.documentElement.scrollWidth }));
+      assert.ok(dimensions.content <= dimensions.viewport, `${id}: mobile catalog overflow ${JSON.stringify(dimensions)}`);
+      await mobile.close();
+    }
+    ok("Kinetic and Mirage keep sale sorting and filters usable without mobile overflow");
 
     // ---------- categories include subcategories
     await go("/category/men");
@@ -150,8 +181,8 @@ async function main() {
     await go("/about");
     assert.equal(await page.locator('[data-testid="content-page"] p').count(), 2);
     assert.equal(await page.locator('[data-testid="content-page"] h1').innerText(), "About us");
-    assert.equal((await go("/contact"))?.status(), 404);
-    assert.equal((await go("/shipping"))?.status(), 404);
+    await expectNotFound("/contact");
+    await expectNotFound("/shipping");
     ok("About/FAQ pages render and are linked in navbar+footer in every template; empty Contact/Shipping are neither linked nor reachable");
 
     await saveContent(T, [{ key: "shipping.body", value: "We ship in 3 days." }]);
@@ -166,9 +197,18 @@ async function main() {
       await setTenantTemplate(T, id);
       await go("");
       assert.equal(await page.locator('[data-testid="cart-count"]').first().innerText(), "(0)", `${id}: cart link`);
-      const box = page.locator('header input[type="search"]').first();
+      let box = page.locator('header input[type="search"]').first();
+      if ((await box.count()) === 0) {
+        const searchLink = page.locator('header a[href$="/search"]').first();
+        await Promise.all([page.waitForURL(/\/search$/), searchLink.click()]);
+        box = page.locator('[data-testid="catalog-page"] input[type="search"]').first();
+      }
       await box.fill("shirt");
       await Promise.all([page.waitForURL(/\/search\?q=shirt/), box.press("Enter")]);
+      await page
+        .locator('[data-testid="catalog-page"] a[href$="/products/cotton-shirt"]')
+        .first()
+        .waitFor();
       assert.deepEqual(await productLinks(), ["cotton-shirt"], `${id}: navbar search`);
       // featured category tiles/links are real category pages
       await go("");

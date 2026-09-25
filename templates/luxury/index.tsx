@@ -182,7 +182,7 @@ const Navbar: SectionComponent = ({ data }) => {
               {c.label}
             </Link>
           ))}
-          {pages.slice(0, 1).map((pg) => (
+          {pages.map((pg) => (
             <Link key={pg.slug} href={pg.href} className={cn(navLink, "hidden xl:inline")}>
               {pg.label}
             </Link>

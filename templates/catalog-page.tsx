@@ -216,6 +216,7 @@ const FILTER_LABELS = [
   "catalog.sortNewest",
   "catalog.sortPriceAsc",
   "catalog.sortPriceDesc",
+  "catalog.sortSale",
   "catalog.sortName",
   "catalog.price",
   "catalog.min",

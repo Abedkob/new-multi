@@ -161,7 +161,7 @@ const Navbar: SectionComponent = ({ data }) => {
               {category.label}
             </Link>
           ))}
-          {pages.slice(0, 2).map((page) => (
+          {pages.map((page) => (
             <Link key={page.slug} href={page.href} className="text-sm font-medium transition-opacity hover:opacity-55">
               {page.label}
             </Link>

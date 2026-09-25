@@ -19,6 +19,7 @@ type Labels = Pick<
   | "catalog.sortNewest"
   | "catalog.sortPriceAsc"
   | "catalog.sortPriceDesc"
+  | "catalog.sortSale"
   | "catalog.sortName"
   | "catalog.price"
   | "catalog.min"
@@ -126,6 +127,7 @@ export function CatalogFilterBar({
             <option value="newest">{labels["catalog.sortNewest"]}</option>
             <option value="price-asc">{labels["catalog.sortPriceAsc"]}</option>
             <option value="price-desc">{labels["catalog.sortPriceDesc"]}</option>
+            <option value="sale">{labels["catalog.sortSale"]}</option>
             <option value="name">{labels["catalog.sortName"]}</option>
           </select>
         </label>

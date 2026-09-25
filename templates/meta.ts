@@ -2,7 +2,7 @@ import type { ThemeColors } from "@/lib/theme";
 
 // Metadata only (no React components), so client code and Zod can import it.
 
-export const TEMPLATE_IDS = ["minimal", "classic", "tonkic", "fashion", "luxury", "atelier", "atlas", "pearl", "drop", "kinetic"] as const;
+export const TEMPLATE_IDS = ["minimal", "classic", "tonkic", "fashion", "luxury", "atelier", "atlas", "pearl", "drop", "kinetic", "mirage"] as const;
 export type TemplateId = (typeof TEMPLATE_IDS)[number];
 
 export const DEFAULT_TEMPLATE_ID: TemplateId = "minimal";
@@ -11,6 +11,17 @@ export const TEMPLATE_META: Record<
   TemplateId,
   { label: string; description: string; defaults: ThemeColors }
 > = {
+  mirage: {
+    label: "Mirage",
+    description:
+      "Spatial editorial commerce: an expanding aperture hero, scroll-layered collection scenes and sculptural product layouts with a direct mobile path.",
+    defaults: {
+      primaryColor: "#261f38",
+      secondaryColor: "#e9e1d8",
+      accentColor: "#ff6b3d",
+      backgroundColor: "#f8f5ef",
+    },
+  },
   kinetic: {
     label: "Kinetic",
     description:

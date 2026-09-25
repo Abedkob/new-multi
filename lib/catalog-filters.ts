@@ -3,14 +3,14 @@
  * the server page (parsing), the data layer (querying) and the client filter bar (building
  * links) all agree on one format:
  *
- *   ?sort=price-asc&min=10&max=50&stock=1&attr=size:40&attr=size:41&attr=color:black
+ *   ?sort=sale&min=10&max=50&stock=1&attr=size:40&attr=size:41&attr=color:black
  *
  * `min`/`max` are in whole currency units as typed by the shopper; attribute keys and values are
  * matched case-insensitively (stored lowercased here). Anything malformed is dropped rather than
  * rejected, so a hand-edited URL still shows a page.
  */
 
-export const SORTS = ["newest", "price-asc", "price-desc", "name"] as const;
+export const SORTS = ["newest", "sale", "price-asc", "price-desc", "name"] as const;
 export type CatalogSort = (typeof SORTS)[number];
 
 export type CatalogFilters = {

@@ -99,6 +99,8 @@ const looks: FooterLook[] = [
   "atlas",
   "pearl",
   "drop",
+  "kinetic",
+  "mirage",
 ];
 for (const look of looks) {
   const html = renderToStaticMarkup(createElement(StoreFooter, { data, look }));
@@ -111,7 +113,7 @@ for (const look of looks) {
   }
   assert.ok(!/#[0-9a-f]{3,8}/i.test(html), `${look} emitted a hardcoded color`);
 }
-ok("all nine footer looks render safe, theme-token social links");
+ok("all footer looks render safe, theme-token social links");
 
 const whatsappLink = data.socialLinks.find((link) => link.platform === "whatsapp");
 const whatsappButton = renderToStaticMarkup(createElement(WhatsAppContactButton, { link: whatsappLink }));
