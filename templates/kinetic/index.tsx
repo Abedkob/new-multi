@@ -69,6 +69,18 @@ function ProductCard({
   return (
     <Link href={href} className={cn("group block", focus)}>
       <div className={cn("relative overflow-hidden bg-secondary", large ? "aspect-[4/5]" : "aspect-[3/4]")}>
+        {product.imageUrl && (
+          // Blurred, scaled-up copy of the same photo fills the tile behind it, so a product
+          // shot's own studio background (often white or gray) never clashes with the card.
+          <Picture
+            src={product.imageUrl}
+            alt=""
+            className="absolute inset-0"
+            imgClassName="scale-125 object-cover opacity-60 blur-2xl saturate-150"
+            sizes={large ? "(max-width: 1024px) 100vw, 50vw" : undefined}
+            quality={20}
+          />
+        )}
         <Picture
           src={product.imageUrl}
           alt={product.name}
