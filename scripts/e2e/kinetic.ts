@@ -141,9 +141,19 @@ async function main() {
     await reduced.close();
     ok("prefers-reduced-motion receives the complete static experience");
 
+    await saveContent(tenantId, [{ key: "hero.headline", value: "CLASSY WATCH" }]);
+    await page.goto(base);
+    await page.getByRole("heading", { name: "CLASSY WATCH" }).waitFor();
+    const desktopWidth = await page.evaluate(() => ({
+      viewport: document.documentElement.clientWidth,
+      content: document.documentElement.scrollWidth,
+    }));
+    assert.ok(desktopWidth.content <= desktopWidth.viewport, `long desktop headline overflow: ${JSON.stringify(desktopWidth)}`);
+
     const mobile = await browser.newContext({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true });
     const mobilePage = await mobile.newPage();
     await mobilePage.goto(base);
+    await mobilePage.getByRole("heading", { name: "CLASSY WATCH" }).waitFor();
     const dimensions = await mobilePage.evaluate(() => ({
       viewport: document.documentElement.clientWidth,
       content: document.documentElement.scrollWidth,
@@ -153,7 +163,7 @@ async function main() {
     assert.equal(await mobilePage.locator('[data-section="featuredCategories"] a').count(), 3);
     if (screenshots) await mobilePage.screenshot({ path: join(screenshots, "kinetic-mobile.png"), fullPage: true });
     await mobile.close();
-    ok("mobile uses native vertical flow with no horizontal overflow or pinned scene");
+    ok("long headings remain complete on desktop and mobile with no horizontal overflow");
 
     await saveContent(tenantId, [
       { key: "hero.image", value: "" },

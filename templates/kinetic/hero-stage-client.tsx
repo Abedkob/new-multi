@@ -29,7 +29,6 @@ export function HeroStage({ children }: { children: ReactNode }) {
           const mediaTargets = select("[data-kinetic-media]");
           const wordTargets = select("[data-kinetic-word]");
           const detailTargets = select("[data-kinetic-detail]");
-          const ruleTargets = select("[data-kinetic-rule]");
           const timeline = gsap.timeline({ defaults: { ease: "power3.out" } });
 
           if (mediaTargets.length > 0) {
@@ -38,12 +37,9 @@ export function HeroStage({ children }: { children: ReactNode }) {
           if (wordTargets.length > 0) {
             timeline.from(
               wordTargets,
-              { yPercent: 115, rotate: 2, duration: 0.95, stagger: 0.06 },
+              { yPercent: 45, rotate: 2, autoAlpha: 0, duration: 0.85, stagger: 0.06 },
               0.12,
             );
-          }
-          if (ruleTargets.length > 0) {
-            timeline.from(ruleTargets, { scaleX: 0, transformOrigin: "left center", duration: 0.9 }, 0.32);
           }
           if (detailTargets.length > 0) {
             timeline.from(

@@ -36,7 +36,7 @@ import { ProductStage } from "./product-stage-client";
  */
 
 const wrap = "mx-auto max-w-[96rem] px-5 sm:px-8 lg:px-12";
-const display = "font-black leading-[0.88] tracking-[-0.06em] text-balance";
+const display = "max-w-full font-black leading-[0.88] tracking-[-0.06em] text-balance [overflow-wrap:anywhere]";
 const focus = "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background";
 const button = cn(
   "inline-flex min-h-12 items-center justify-center gap-3 rounded-full bg-accent px-6 text-sm font-semibold text-accent-foreground transition-transform hover:scale-[1.025]",
@@ -165,6 +165,13 @@ const Hero: SectionComponent = ({ data: { store, content, visibility } }) => {
   const words = content["hero.headline"].trim().split(/\s+/).filter(Boolean);
   const splitAt = Math.ceil(words.length / 2);
   const headlineLines = words.length <= 1 ? [words] : [words.slice(0, splitAt), words.slice(splitAt)];
+  const longestWord = Math.max(0, ...words.map((word) => word.length));
+  const headlineSize =
+    longestWord > 12 || content["hero.headline"].length > 34
+      ? "text-[clamp(2.5rem,8vw,7.5rem)]"
+      : longestWord > 8 || content["hero.headline"].length > 24
+        ? "text-[clamp(3rem,9vw,8.5rem)]"
+        : "text-[clamp(3.5rem,10.2vw,9.75rem)]";
   const hasImage = Boolean(content["hero.image"] || content["hero.imageMobile"]);
 
   return (
@@ -177,12 +184,10 @@ const Hero: SectionComponent = ({ data: { store, content, visibility } }) => {
         )}
         <div className="absolute inset-0 -z-10 bg-gradient-to-r from-primary/70 via-primary/15 to-primary/35" />
         <div className="absolute inset-0 -z-10 bg-gradient-to-t from-primary via-primary/10 to-primary/15" />
-        <span aria-hidden className="pointer-events-none absolute inset-3 border border-primary-foreground/20 sm:inset-6 lg:inset-8" />
 
         <div className={cn(wrap, "flex min-h-[min(50rem,calc(100svh-4.5rem))] flex-col py-10 sm:py-14 lg:min-h-[calc(100svh-4.5rem)] lg:py-16")}>
-          <div data-kinetic-detail className="flex items-center gap-4 text-xs font-semibold text-primary-foreground/80 sm:text-sm">
+          <div data-kinetic-detail className="flex items-center justify-between gap-4 text-xs font-semibold text-primary-foreground/80 sm:text-sm">
             <span className="shrink-0">{store.name}</span>
-            <span data-kinetic-rule aria-hidden className="h-px flex-1 bg-primary-foreground/30" />
             <span className="shrink-0">{content["newArrivals.heading"]}</span>
           </div>
 
@@ -190,22 +195,24 @@ const Hero: SectionComponent = ({ data: { store, content, visibility } }) => {
             <div className="flex flex-1 flex-col justify-center py-12 sm:py-14 lg:py-8">
               <h1
                 aria-label={content["hero.headline"]}
-                className={cn(display, "w-full text-[clamp(3.5rem,10.2vw,9.75rem)]")}
+                className={cn(display, "w-full", headlineSize)}
               >
                 {headlineLines.map((line, lineIndex) => (
                   <span
                     key={`${line.join("-")}-${lineIndex}`}
                     aria-hidden
                     className={cn(
-                      "flex flex-wrap gap-x-[0.2em] overflow-hidden pb-[0.09em]",
+                      "block w-full pb-[0.09em] [&>span:not(:last-child)]:mr-[0.2em]",
                       lineIndex === 1 && "justify-end text-right sm:pl-[10vw]",
                     )}
                   >
                     {line.map((word, wordIndex) => (
-                      <span key={`${word}-${wordIndex}`} className="overflow-hidden pb-[0.06em]">
-                        <span data-kinetic-word className="block will-change-transform">
-                          {word}
-                        </span>
+                      <span
+                        key={`${word}-${wordIndex}`}
+                        data-kinetic-word
+                        className="inline-block max-w-full pb-[0.06em] will-change-transform"
+                      >
+                        {word}
                       </span>
                     ))}
                   </span>
@@ -214,7 +221,7 @@ const Hero: SectionComponent = ({ data: { store, content, visibility } }) => {
             </div>
           )}
 
-          <div className="grid gap-6 border-t border-primary-foreground/25 pt-6 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-end lg:gap-10 lg:pt-8">
+          <div className="grid gap-6 pt-6 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-end lg:gap-10 lg:pt-8">
             {visibility.heroText && content["hero.subtext"] && (
               <p data-kinetic-detail className="max-w-md whitespace-pre-line text-base leading-relaxed text-primary-foreground/80 sm:text-lg">
                 {content["hero.subtext"]}
