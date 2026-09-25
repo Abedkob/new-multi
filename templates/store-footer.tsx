@@ -113,12 +113,12 @@ const STYLES: Record<FooterLook, FooterStyle> = {
     brand: "text-3xl font-black tracking-[-0.04em]",
   },
   mirage: {
-    layout: "centered",
+    layout: "columns",
     surface: "bg-primary text-primary-foreground",
     muted: "text-primary-foreground/65",
     link: "text-primary-foreground/70 hover:text-primary-foreground",
     border: "border-primary-foreground/20",
-    brand: "text-3xl font-semibold tracking-[-0.04em] sm:text-5xl",
+    brand: "text-3xl font-semibold tracking-[-0.04em]",
   },
 };
 

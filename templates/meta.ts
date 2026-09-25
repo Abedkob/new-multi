@@ -14,12 +14,12 @@ export const TEMPLATE_META: Record<
   mirage: {
     label: "Mirage",
     description:
-      "Spatial editorial commerce: an expanding aperture hero, scroll-layered collection scenes and sculptural product layouts with a direct mobile path.",
+      "Immersive technology retail: full-bleed campaign imagery, fast category paths and clean product-led layouts for phones and accessories.",
     defaults: {
-      primaryColor: "#261f38",
-      secondaryColor: "#e9e1d8",
-      accentColor: "#ff6b3d",
-      backgroundColor: "#f8f5ef",
+      primaryColor: "#08131f",
+      secondaryColor: "#edf2f6",
+      accentColor: "#4f8cff",
+      backgroundColor: "#ffffff",
     },
   },
   kinetic: {

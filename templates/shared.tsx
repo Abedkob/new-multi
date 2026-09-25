@@ -14,6 +14,7 @@ export function Picture({
   imgClassName,
   sizes = "(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 33vw",
   quality = 90,
+  loading,
 }: {
   src: string;
   alt: string;
@@ -23,6 +24,7 @@ export function Picture({
   /** Next's image optimizer quality (0-100, default 75); every storefront photo asks for a
    * sharper 90 instead, since a slightly larger file beats visibly soft product photos. */
   quality?: number;
+  loading?: "eager" | "lazy";
 }) {
   return (
     <div className={cn("overflow-hidden relative", className)}>
@@ -33,6 +35,7 @@ export function Picture({
           fill
           sizes={sizes}
           quality={quality}
+          loading={loading}
           className={cn("object-cover", imgClassName)}
         />
       ) : (
@@ -160,11 +163,13 @@ export function HeroPicture({
   alt,
   className,
   mobileClassName,
+  loading,
 }: {
   content: ContentMap;
   alt: string;
   className?: string;
   mobileClassName?: string;
+  loading?: "eager" | "lazy";
 }) {
   const desktop = content["hero.image"];
   const mobile = content["hero.imageMobile"];
@@ -175,11 +180,12 @@ export function HeroPicture({
           src={mobile}
           alt={alt}
           sizes="100vw"
+          loading={loading}
           className={cn(mobileClassName ?? className, desktop && "sm:hidden")}
         />
       )}
       {desktop && (
-        <Picture src={desktop} alt={alt} sizes="100vw" className={cn(className, mobile && "hidden sm:block")} />
+        <Picture src={desktop} alt={alt} sizes="100vw" loading={loading} className={cn(className, mobile && "hidden sm:block")} />
       )}
     </>
   );

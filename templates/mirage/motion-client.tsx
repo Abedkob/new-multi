@@ -15,18 +15,18 @@ export function MirageHeroMotion({ children }: { children: ReactNode }) {
       const media = gsap.matchMedia();
       media.add("(prefers-reduced-motion: no-preference)", () => {
         const select = gsap.utils.selector(root);
-        const aperture = select("[data-mirage-aperture]");
+        const visual = select("[data-mirage-visual]");
         const words = select("[data-mirage-word]");
         const details = select("[data-mirage-detail]");
-        const intro = gsap.timeline({ defaults: { ease: "expo.out" } });
+        const intro = gsap.timeline({ defaults: { ease: "power3.out" } });
 
-        intro.from(aperture, { clipPath: "ellipse(8% 10% at 50% 50%)", scale: 1.12, duration: 1.45 });
-        intro.from(words, { yPercent: 110, rotate: 3, duration: 1.05, stagger: 0.07 }, 0.12);
-        intro.from(details, { y: 20, autoAlpha: 0, duration: 0.75, stagger: 0.08 }, 0.58);
+        intro.from(visual, { scale: 1.1, duration: 1.6 });
+        intro.from(words, { y: 48, autoAlpha: 0, duration: 0.9 }, 0.16);
+        intro.from(details, { y: 22, autoAlpha: 0, duration: 0.7, stagger: 0.1 }, 0.38);
 
-        gsap.to(aperture, {
-          clipPath: "ellipse(72% 78% at 50% 50%)",
-          scale: 1.08,
+        gsap.to(visual, {
+          yPercent: 8,
+          scale: 1.05,
           ease: "none",
           scrollTrigger: {
             trigger: root.current,
@@ -53,30 +53,23 @@ export function MirageCollectionMotion({ children, count }: { children: ReactNod
       const media = gsap.matchMedia();
       media.add(
         {
-          desktop: "(min-width: 1024px)",
           animate: "(prefers-reduced-motion: no-preference)",
         },
         (context) => {
-          if (!context.conditions?.desktop || !context.conditions.animate) return;
+          if (!context.conditions?.animate) return;
           const cards = gsap.utils.toArray<HTMLElement>("[data-mirage-collection]", root.current);
           if (cards.length < 2) return;
-
-          gsap.set(cards.slice(1), { clipPath: "inset(100% 0 0 0)", yPercent: 8 });
-          const timeline = gsap.timeline({
+          gsap.from(cards, {
+            y: 56,
+            autoAlpha: 0,
+            duration: 0.85,
+            stagger: 0.12,
+            ease: "power3.out",
             scrollTrigger: {
               trigger: root.current,
-              start: "top top",
-              end: `+=${(cards.length - 1) * 85}%`,
-              pin: true,
-              scrub: 0.75,
-              anticipatePin: 1,
+              start: "top 78%",
+              once: true,
             },
-          });
-
-          cards.slice(1).forEach((card, index) => {
-            timeline
-              .to(cards[index], { scale: 0.9, autoAlpha: 0.35, duration: 1 }, index)
-              .to(card, { clipPath: "inset(0% 0 0 0)", yPercent: 0, duration: 1 }, index);
           });
         },
         root,
@@ -95,9 +88,9 @@ export function MirageReveal({ children, className }: { children: ReactNode; cla
     () => {
       if (matchMedia("(prefers-reduced-motion: reduce)").matches) return;
       gsap.from(root.current, {
-        y: 48,
+        y: 32,
         autoAlpha: 0,
-        duration: 0.9,
+        duration: 0.75,
         ease: "power3.out",
         scrollTrigger: { trigger: root.current, start: "top 88%", once: true },
       });

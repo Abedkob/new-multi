@@ -18,14 +18,14 @@ async function main() {
   const screenshots = process.env.MIRAGE_SCREENSHOT_DIR;
 
   const categories = await Promise.all([
-    createCategory(tenantId, { name: "Form", parentId: null, imageUrl: "/demo/overshirt.svg" }),
-    createCategory(tenantId, { name: "Motion", parentId: null, imageUrl: "/demo/sneaker.svg" }),
-    createCategory(tenantId, { name: "Light", parentId: null, imageUrl: "/demo/lamp.svg" }),
+    createCategory(tenantId, { name: "Phones", parentId: null, imageUrl: "/demo/hero.svg" }),
+    createCategory(tenantId, { name: "Audio", parentId: null, imageUrl: "/demo/sneaker.svg" }),
+    createCategory(tenantId, { name: "Accessories", parentId: null, imageUrl: "/demo/lamp.svg" }),
   ]);
-  for (const [index, name] of ["Future Overshirt", "Velocity Runner", "Orbit Lamp", "Carry System"].entries()) {
+  for (const [index, name] of ["Nova Phone", "Pulse Earbuds", "Arc Charger", "Shield Case"].entries()) {
     await createProduct(tenantId, {
       name,
-      description: `${name} belongs to the Mirage spatial collection.`,
+      description: `${name} is part of the connected mobile collection.`,
       basePriceCents: 12900 + index * 1000,
       imageUrl: ["/demo/overshirt.svg", "/demo/sneaker.svg", "/demo/lamp.svg", "/demo/weekender.svg"][index],
       images: [],
@@ -35,13 +35,13 @@ async function main() {
     });
   }
   await saveContent(tenantId, [
-    { key: "hero.headline", value: "Beyond the visible" },
-    { key: "hero.subtext", value: "Objects shaped for a world in motion." },
+    { key: "hero.headline", value: "The next upgrade is here" },
+    { key: "hero.subtext", value: "Phones, audio and everyday accessories selected for life in motion." },
     { key: "hero.image", value: "/demo/hero.svg" },
     { key: "hero.imageMobile", value: "/demo/hero.svg" },
-    { key: "featuredCategories.heading", value: "Enter another dimension" },
-    { key: "newArrivals.heading", value: "New forms" },
-    { key: "bestSellers.heading", value: "In focus" },
+    { key: "featuredCategories.heading", value: "Shop by device" },
+    { key: "newArrivals.heading", value: "Just landed" },
+    { key: "bestSellers.heading", value: "Most wanted" },
   ]);
   await setTenantTemplate(tenantId, "mirage");
   if (screenshots) await mkdir(screenshots, { recursive: true });
@@ -56,11 +56,22 @@ async function main() {
 
   try {
     assert.equal((await page.goto(base))?.status(), 200);
-    await page.getByRole("heading", { name: "Beyond the visible" }).waitFor();
-    await page.locator(".pin-spacer").first().waitFor({ timeout: 5_000 });
+    await page.getByRole("heading", { name: "The next upgrade is here" }).waitFor();
+    const heroCoverage = await page.locator("[data-mirage-hero]").evaluate((hero) => {
+      const visual = hero.querySelector<HTMLElement>("[data-mirage-visual]");
+      const image = visual?.querySelector("img");
+      if (!visual || !image) return null;
+      const heroBox = hero.getBoundingClientRect();
+      const visualBox = visual.getBoundingClientRect();
+      return { heroWidth: heroBox.width, heroHeight: heroBox.height, visualWidth: visualBox.width, visualHeight: visualBox.height };
+    });
+    assert.ok(heroCoverage, "hero background image is missing");
+    assert.ok(heroCoverage.visualWidth >= heroCoverage.heroWidth, "hero image does not cover the full width");
+    assert.ok(heroCoverage.visualHeight >= heroCoverage.heroHeight, "hero image does not cover the full height");
     assert.equal(await page.locator('[data-section="featuredCategories"] a').count(), 3);
     assert.ok(await page.locator("[data-mirage-word]").count());
-    ok("desktop hero and pinned collection scenes initialize");
+    assert.equal(await page.locator(".pin-spacer").count(), 0);
+    ok("desktop hero uses a full-bleed background and product categories remain directly accessible");
 
     const width = await page.evaluate(() => ({ viewport: document.documentElement.clientWidth, content: document.documentElement.scrollWidth }));
     assert.ok(width.content <= width.viewport, `desktop overflow: ${JSON.stringify(width)}`);
@@ -84,7 +95,7 @@ async function main() {
     const mobile = await browser.newContext({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true });
     const mobilePage = await mobile.newPage();
     await mobilePage.goto(base);
-    await mobilePage.getByRole("heading", { name: "Beyond the visible" }).waitFor();
+    await mobilePage.getByRole("heading", { name: "The next upgrade is here" }).waitFor();
     const mobileWidth = await mobilePage.evaluate(() => ({ viewport: document.documentElement.clientWidth, content: document.documentElement.scrollWidth }));
     assert.ok(mobileWidth.content <= mobileWidth.viewport, `mobile overflow: ${JSON.stringify(mobileWidth)}`);
     assert.equal(await mobilePage.locator(".pin-spacer").count(), 0);
@@ -94,7 +105,7 @@ async function main() {
 
     await saveContent(tenantId, [{ key: "hero.image", value: "" }, { key: "hero.imageMobile", value: "" }]);
     await page.goto(base);
-    await page.getByRole("heading", { name: "Beyond the visible" }).waitFor();
+    await page.getByRole("heading", { name: "The next upgrade is here" }).waitFor();
     ok("image-free hero remains valid");
 
     assert.deepEqual(errors, [], `browser errors: ${errors.join("\n")}`);
