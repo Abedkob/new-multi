@@ -57,6 +57,10 @@ async function main() {
       await page.goto(`${BASE}/store/${store.tenant.slug}`);
       const footer = page.locator('footer');
       await footer.waitFor();
+      const whatsappButton = page.getByTestId("whatsapp-contact-button");
+      await whatsappButton.waitFor();
+      assert.equal(await whatsappButton.getAttribute("href"), "https://wa.me/96170123456", `${templateId}: WhatsApp href`);
+      assert.equal(await whatsappButton.getAttribute("target"), "_blank", `${templateId}: WhatsApp target`);
       assert.equal(await footer.locator('nav[aria-label="Social links"] a').count(), 4, `${templateId}: wrong social count`);
       for (const link of await footer.locator('nav[aria-label="Social links"] a').all()) {
         assert.equal(await link.getAttribute("target"), "_blank", `${templateId}: target`);
@@ -80,6 +84,10 @@ async function main() {
     await mobilePage.goto(`${BASE}/store/${store.tenant.slug}`);
     const mobileFooter = mobilePage.locator('footer');
     await mobileFooter.scrollIntoViewIfNeeded();
+    const mobileWhatsapp = mobilePage.getByTestId("whatsapp-contact-button");
+    const whatsappBox = await mobileWhatsapp.boundingBox();
+    assert.ok(whatsappBox && whatsappBox.width >= 44 && whatsappBox.height >= 44, "mobile WhatsApp target is too small");
+    assert.equal(await mobileWhatsapp.evaluate((element) => getComputedStyle(element).position), "fixed");
     assert.equal(
       await mobilePage.evaluate(() => document.documentElement.scrollWidth > document.documentElement.clientWidth),
       false,

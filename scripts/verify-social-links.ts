@@ -11,6 +11,7 @@ import { prisma } from "../lib/prisma";
 import { publicSocialLinks, socialLinksSchema } from "../lib/social-links";
 import { buildStorefrontData } from "../lib/storefront-data";
 import { StoreFooter, type FooterLook } from "../templates/store-footer";
+import { WhatsAppContactButton } from "../components/whatsapp-contact-button";
 
 let checks = 0;
 const ok = (message: string) => {
@@ -111,6 +112,14 @@ for (const look of looks) {
   assert.ok(!/#[0-9a-f]{3,8}/i.test(html), `${look} emitted a hardcoded color`);
 }
 ok("all nine footer looks render safe, theme-token social links");
+
+const whatsappLink = data.socialLinks.find((link) => link.platform === "whatsapp");
+const whatsappButton = renderToStaticMarkup(createElement(WhatsAppContactButton, { link: whatsappLink }));
+assert.ok(whatsappButton.includes('data-testid="whatsapp-contact-button"'));
+assert.ok(whatsappButton.includes('href="https://wa.me/96170123456"'));
+assert.ok(whatsappButton.includes('aria-label="Chat with us on WhatsApp"'));
+assert.equal(renderToStaticMarkup(createElement(WhatsAppContactButton, { link: undefined })), "");
+ok("floating WhatsApp contact renders only when configured and uses the safe wa.me link");
 
 for (const look of looks) {
   const source = readFileSync(join("templates", look, "index.tsx"), "utf8");

@@ -1,4 +1,5 @@
 import { MotionConfig } from "motion/react";
+import { WhatsAppContactButton } from "@/components/whatsapp-contact-button";
 import { cn } from "@/lib/utils";
 import { HOME_SECTION_ORDER, type SectionId } from "@/lib/sections";
 import type { StorefrontData, Template } from "./types";
@@ -97,6 +98,8 @@ export function StorefrontShell({
   data: StorefrontData;
   children: React.ReactNode;
 }) {
+  const whatsapp = data.socialLinks.find((link) => link.platform === "whatsapp");
+
   return (
     // reducedMotion="user" makes every motion.* component below skip straight to its end
     // state for shoppers with prefers-reduced-motion, with no per-animation opt-in needed.
@@ -106,6 +109,7 @@ export function StorefrontShell({
         <Section id="navbar" data={data} template={template} />
         <main className="flex-1">{children}</main>
         <Section id="footer" data={data} template={template} />
+        <WhatsAppContactButton link={whatsapp} />
       </div>
     </MotionConfig>
   );
