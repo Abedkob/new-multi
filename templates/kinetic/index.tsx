@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { ArrowDown, ArrowUpRight, Search } from "lucide-react";
 import type { ContentMap } from "@/lib/content";
+import { formatPrice } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { CartLink } from "../nav-client";
 import {
@@ -17,7 +18,6 @@ import {
   Picture,
   StoreBrand,
   StoreMenuButton,
-  cardPrice,
   productHref,
   searchHref,
   sectionHref,
@@ -90,16 +90,29 @@ function ProductCard({
             {content["product.outOfStock"]}
           </span>
         )}
+        {product.isOnSale && (
+          <span className="absolute right-3 top-3 inline-flex items-center rounded-full bg-foreground px-2.5 py-1 text-[0.65rem] font-semibold uppercase tracking-[0.14em] text-background">
+            {content["product.saleBadge"]}
+          </span>
+        )}
         <span className="absolute bottom-4 right-4 grid size-11 translate-y-2 place-items-center rounded-full bg-accent text-accent-foreground opacity-0 transition duration-300 group-hover:translate-y-0 group-hover:opacity-100">
           <ArrowUpRight className="size-4" aria-hidden />
         </span>
       </div>
-      <div className="mt-4 flex flex-col gap-1 sm:flex-row sm:items-start sm:justify-between sm:gap-5">
-        <h3 className={cn("min-w-0 font-semibold leading-tight", large ? "text-2xl sm:text-3xl" : "text-base sm:text-lg")}>
+      <div className="mt-4 flex flex-col gap-1.5 sm:flex-row sm:items-start sm:justify-between sm:gap-5">
+        <h3 className={cn("min-w-0 font-semibold leading-tight tracking-tight", large ? "text-2xl sm:text-3xl" : "text-base sm:text-lg")}>
           {product.name}
         </h3>
-        <p className="text-sm font-medium tabular-nums text-muted-foreground sm:shrink-0">
-          {cardPrice(product, content)}
+        <p className={cn("flex items-baseline gap-2 font-medium tabular-nums sm:shrink-0 sm:flex-col sm:items-end sm:gap-0.5", large ? "text-lg" : "text-sm")}>
+          <span className="text-foreground">
+            {product.hasPriceRange ? `${content["product.fromLabel"]} ` : ""}
+            {formatPrice(product.priceCents)}
+          </span>
+          {product.isOnSale && (
+            <span className="text-xs text-muted-foreground line-through decoration-1">
+              {formatPrice(product.regularPriceCents)}
+            </span>
+          )}
         </p>
       </div>
     </Link>
