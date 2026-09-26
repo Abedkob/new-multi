@@ -16,7 +16,8 @@ export type FooterLook =
   | "pearl"
   | "drop"
   | "kinetic"
-  | "mirage";
+  | "mirage"
+  | "muse";
 
 type FooterStyle = {
   layout: "centered" | "columns" | "editorial";
@@ -119,6 +120,14 @@ const STYLES: Record<FooterLook, FooterStyle> = {
     link: "text-primary-foreground/70 hover:text-primary-foreground",
     border: "border-primary-foreground/20",
     brand: "text-3xl font-semibold tracking-[-0.04em]",
+  },
+  muse: {
+    layout: "columns",
+    surface: "bg-background text-foreground",
+    muted: "text-muted-foreground",
+    link: "text-muted-foreground hover:text-accent",
+    border: "border-border",
+    brand: "font-muse text-4xl",
   },
 };
 

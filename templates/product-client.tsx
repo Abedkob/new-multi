@@ -278,6 +278,10 @@ const STYLES = {
     group: "gap-2",
     option: "min-w-12 rounded-full px-5 py-2.5 text-sm font-semibold",
   },
+  muse: {
+    group: "gap-2",
+    option: "min-w-12 rounded-full px-5 py-2 text-sm",
+  },
 } as const;
 
 /**
@@ -374,6 +378,7 @@ const ADD_STYLES = {
   pearl: "h-14 w-full rounded-none text-[11px] font-medium uppercase tracking-[0.25em]",
   drop: "h-14 w-full rounded-none text-xs font-bold uppercase tracking-[0.2em]",
   kinetic: "h-14 w-full rounded-full text-sm font-semibold",
+  muse: "h-14 w-full rounded-full text-sm font-medium",
   default: "",
 } as const;
 
@@ -389,6 +394,7 @@ const QTY_STYLES = {
   pearl: "h-14 rounded-none",
   drop: "h-14 rounded-none",
   kinetic: "h-14 rounded-full",
+  muse: "h-14 rounded-full",
   default: "h-10 rounded-md",
 } as const;
 

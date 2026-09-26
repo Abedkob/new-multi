@@ -12,7 +12,7 @@ import {
   StoreMenuButton,
   cardPrice,
   productHref,
-  searchHref,
+  StoreSearchButton,
   sectionHref,
   shopHref,
   storeHref,
@@ -97,9 +97,9 @@ const Navbar: SectionComponent = ({ data }) => {
             inputClassName="h-9 w-40 rounded-none border-0 border-b border-border bg-transparent px-0 text-sm focus-visible:ring-0 xl:w-48"
             buttonClassName="sr-only"
           />
-          <Link href={searchHref(store)} aria-label={content["search.button"]} className="md:hidden">
+          <StoreSearchButton data={data} look="pearl" className="md:hidden">
             <Search className="size-5" />
-          </Link>
+          </StoreSearchButton>
           <CartLink
             basePath={store.basePath}
             className={cn(micro, "flex items-center gap-1.5 hover:text-primary [&_svg]:size-5")}

@@ -197,11 +197,19 @@ async function main() {
       await setTenantTemplate(T, id);
       await go("");
       assert.equal(await page.locator('[data-testid="cart-count"]').first().innerText(), "(0)", `${id}: cart link`);
+      // An inline navbar field if the template has one; else the icon's search panel; else a
+      // plain link to the search page.
       let box = page.locator('header input[type="search"]').first();
-      if ((await box.count()) === 0) {
-        const searchLink = page.locator('header a[href$="/search"]').first();
-        await Promise.all([page.waitForURL(/\/search$/), searchLink.click()]);
-        box = page.locator('[data-testid="catalog-page"] input[type="search"]').first();
+      if (!(await box.isVisible())) {
+        const toggle = page.locator('header [data-testid="search-toggle"]').first();
+        if (await toggle.isVisible()) {
+          await toggle.click();
+          box = page.getByTestId("search-panel-input");
+        } else {
+          const searchLink = page.locator('header a[href$="/search"]').first();
+          await Promise.all([page.waitForURL(/\/search$/), searchLink.click()]);
+          box = page.locator('[data-testid="catalog-page"] input[type="search"]').first();
+        }
       }
       await box.fill("shirt");
       await Promise.all([page.waitForURL(/\/search\?q=shirt/), box.press("Enter")]);

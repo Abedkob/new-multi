@@ -13,16 +13,17 @@ import {
   VariantPicker,
 } from "../product-client";
 import {
-  HeroPicture,
   Picture,
   StoreBrand,
   StoreMenuButton,
   cardPrice,
+  heroSlides,
   productHref,
   searchHref,
   sectionHref,
   shopHref,
   storeHref,
+  type HeroSlide,
 } from "../shared";
 import { StoreFooter } from "../store-footer";
 import type { SectionComponent, StoreInfo, StoreProduct, Template } from "../types";
@@ -33,6 +34,7 @@ import {
   MirageProductsMotion,
   MirageReveal,
 } from "./motion-client";
+import { MirageHeroCarousel } from "./hero-carousel-client";
 
 const wrap = "mx-auto w-full max-w-[100rem] px-5 sm:px-8 lg:px-12";
 const display = "max-w-full font-semibold leading-[0.94] tracking-[-0.05em] text-balance [overflow-wrap:anywhere]";
@@ -78,11 +80,13 @@ function ProductCard({
           <ArrowRight className="size-4" aria-hidden />
         </span>
       </div>
-      <div className="mt-4 flex items-start justify-between gap-5">
+      {/* Phones stack the price under the name: in the two-up grid a sale price (struck-through
+          regular price + badge) is wider than the card and would push past the screen edge. */}
+      <div className="mt-4 flex flex-col gap-1.5 sm:flex-row sm:items-start sm:justify-between sm:gap-5">
         <h3 className={cn("min-w-0 font-medium leading-tight", large ? "text-2xl sm:text-4xl" : "text-base sm:text-xl")}>
           {product.name}
         </h3>
-        <p className="shrink-0 text-sm font-medium tabular-nums sm:text-base">{cardPrice(product, content)}</p>
+        <p className="min-w-0 text-sm font-medium tabular-nums sm:shrink-0 sm:text-right sm:text-base">{cardPrice(product, content)}</p>
       </div>
     </Link>
   );
@@ -123,53 +127,107 @@ const Navbar: SectionComponent = ({ data }) => {
   );
 };
 
-const Hero: SectionComponent = ({ data: { store, content, visibility, categoryTiles } }) => {
-  const hasImage = Boolean(content["hero.image"] || content["hero.imageMobile"]);
+/** A slide's photo: the "(Mobile)" upload on phones, the desktop one from sm up (either alone is
+ * used everywhere). The first slide loads eagerly, being the page's LCP. */
+function SlidePicture({ slide, eager }: { slide: HeroSlide; eager: boolean }) {
+  const { image, imageMobile } = slide;
+  const loading = eager ? "eager" : undefined;
   return (
-    <MirageHeroMotion>
-      <section data-mirage-hero className="relative isolate min-h-[42rem] overflow-hidden bg-primary text-primary-foreground lg:min-h-[calc(100svh-5rem)]">
+    <>
+      {imageMobile && (
+        <Picture src={imageMobile} alt="" sizes="100vw" loading={loading} className={cn("h-full w-full", image && "sm:hidden")} />
+      )}
+      {image && (
+        <Picture src={image} alt="" sizes="100vw" loading={loading} className={cn("h-full w-full", imageMobile && "hidden sm:block")} />
+      )}
+    </>
+  );
+}
+
+const heroHeight = "min-h-[42rem] lg:min-h-[calc(100svh-5rem)]";
+
+/**
+ * A scrollable hero: slide 1 is the main hero content, slides 2-5 come from the extra hero
+ * slides in the content editor (see heroSlides). Each slide is a full-bleed photo with its own
+ * headline, text and button; the category links stay pinned along the bottom across all of them.
+ * Only slide 1's headline is the page's <h1>, and only slide 1 carries the GSAP entrance hooks.
+ */
+const Hero: SectionComponent = ({ data: { store, content, visibility, categoryTiles } }) => {
+  const slides = heroSlides(content);
+  const nodes = slides.map((slide, i) => {
+    const first = i === 0;
+    const Heading = first ? "h1" : "h2";
+    const hasText = visibility.heroText && Boolean(slide.headline || slide.subtext || slide.ctaLabel);
+    return (
+      <div key={i} className={cn("relative isolate overflow-hidden", heroHeight)}>
         <div data-mirage-visual className="absolute inset-0 -z-30 bg-secondary">
-          {hasImage && <HeroPicture content={content} alt="" loading="eager" className="h-full w-full" />}
+          {(slide.image || slide.imageMobile) && <SlidePicture slide={slide} eager={first} />}
         </div>
         <div className="absolute inset-0 -z-20 bg-gradient-to-r from-primary/95 via-primary/60 to-primary/15" />
         <div className="absolute inset-0 -z-10 bg-gradient-to-t from-primary/80 via-transparent to-primary/25" />
 
-        <div data-mirage-hero-content className={cn(wrap, "flex min-h-[42rem] flex-col justify-end pb-8 pt-20 sm:pb-10 lg:min-h-[calc(100svh-5rem)] lg:pb-12")}>
-          {visibility.heroText && (
-            <div className="max-w-5xl pb-12 sm:pb-16">
-              <h1 data-mirage-word className={cn(display, "text-[clamp(3.25rem,7vw,7.5rem)] text-primary-foreground")}>
-                {content["hero.headline"]}
-              </h1>
-              {content["hero.subtext"] && (
-                <p data-mirage-detail className="mt-6 max-w-xl whitespace-pre-line text-base leading-relaxed text-primary-foreground/80 sm:text-lg lg:text-xl">
-                  {content["hero.subtext"]}
+        <div
+          data-mirage-hero-content
+          className={cn(
+            wrap,
+            "flex flex-col justify-end pt-20",
+            // Room for what's pinned along the bottom: the category links, plus the slide
+            // controls when there's more than one slide.
+            slides.length > 1 ? "pb-64 sm:pb-60" : "pb-44 sm:pb-40 lg:pb-44",
+            heroHeight,
+          )}
+        >
+          {hasText && (
+            <div className="max-w-5xl">
+              {slide.headline && (
+                <Heading
+                  {...(first ? { "data-mirage-word": "" } : {})}
+                  className={cn(display, "text-[clamp(3.25rem,7vw,7.5rem)] text-primary-foreground")}
+                >
+                  {slide.headline}
+                </Heading>
+              )}
+              {slide.subtext && (
+                <p
+                  {...(first ? { "data-mirage-detail": "" } : {})}
+                  className="mt-6 max-w-xl whitespace-pre-line text-base leading-relaxed text-primary-foreground/80 sm:text-lg lg:text-xl"
+                >
+                  {slide.subtext}
                 </p>
               )}
-              <div data-mirage-detail className="mt-8 flex flex-wrap gap-3">
-                {content["hero.ctaLabel"] && (
+              {slide.ctaLabel && (
+                <div {...(first ? { "data-mirage-detail": "" } : {})} className="mt-8 flex flex-wrap gap-3">
                   <Link href={shopHref(store)} className={cn("inline-flex min-h-14 items-center justify-center gap-3 rounded-full bg-accent px-7 text-sm font-semibold text-accent-foreground transition-transform hover:translate-x-1", focus)}>
-                    {content["hero.ctaLabel"]}
+                    {slide.ctaLabel}
                     <ArrowRight className="size-4" aria-hidden />
                   </Link>
-                )}
-              </div>
+                </div>
+              )}
             </div>
           )}
-
-          {categoryTiles.length > 0 && (
-            <nav data-mirage-detail aria-label={content["featuredCategories.heading"]} className="border-t border-primary-foreground/25 pt-5">
-              <ul className="flex flex-wrap gap-x-8 gap-y-3">
-                {categoryTiles.slice(0, 4).map((category) => (
-                  <li key={category.id}>
-                    <Link href={category.href} className="inline-flex min-h-11 items-center gap-2 text-sm font-medium text-primary-foreground/80 transition-colors hover:text-primary-foreground">
-                      {category.label}<ArrowUpRight className="size-3.5" aria-hidden />
-                    </Link>
-                  </li>
-                ))}
-              </ul>
-            </nav>
-          )}
         </div>
+      </div>
+    );
+  });
+
+  const categories = categoryTiles.length > 0 && (
+    <nav data-mirage-detail aria-label={content["featuredCategories.heading"]} className="border-t border-primary-foreground/25 pt-5">
+      <ul className="flex flex-wrap gap-x-8 gap-y-3">
+        {categoryTiles.slice(0, 4).map((category) => (
+          <li key={category.id}>
+            <Link href={category.href} className="inline-flex min-h-11 items-center gap-2 text-sm font-medium text-primary-foreground/80 transition-colors hover:text-primary-foreground">
+              {category.label}<ArrowUpRight className="size-3.5" aria-hidden />
+            </Link>
+          </li>
+        ))}
+      </ul>
+    </nav>
+  );
+
+  return (
+    <MirageHeroMotion>
+      <section data-mirage-hero className="relative isolate overflow-hidden bg-primary text-primary-foreground">
+        <MirageHeroCarousel slides={nodes} footer={categories || undefined} wrapClassName={wrap} />
       </section>
     </MirageHeroMotion>
   );

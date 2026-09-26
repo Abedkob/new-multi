@@ -101,6 +101,7 @@ const looks: FooterLook[] = [
   "drop",
   "kinetic",
   "mirage",
+  "muse",
 ];
 for (const look of looks) {
   const html = renderToStaticMarkup(createElement(StoreFooter, { data, look }));

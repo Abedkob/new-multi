@@ -12,7 +12,7 @@ import {
   StoreMenuButton,
   cardPrice,
   productHref,
-  searchHref,
+  StoreSearchButton,
   sectionHref,
   shopHref,
   storeHref,
@@ -92,9 +92,9 @@ const Navbar: SectionComponent = ({ data }) => {
         </nav>
 
         <div className="flex shrink-0 items-center gap-4">
-          <Link href={searchHref(store)} aria-label={content["search.button"]} className="text-foreground/70 transition-colors hover:text-foreground">
+          <StoreSearchButton data={data} look="drop" className="text-foreground/70 transition-colors hover:text-foreground">
             <Search className="size-5" />
-          </Link>
+          </StoreSearchButton>
           <CartLink
             basePath={store.basePath}
             className="flex h-9 min-w-9 items-center justify-center gap-1 bg-accent px-2.5 text-xs font-bold text-accent-foreground [&_svg]:size-4"
@@ -221,29 +221,42 @@ function Marquee({ text }: { text: string }) {
   );
 }
 
-const PromoBanner: SectionComponent = ({ data: { store, content } }) => (
-  <section className="relative overflow-hidden border-y border-border bg-foreground text-background">
-    <div className="relative flex min-h-[46vh] flex-col items-center justify-center sm:min-h-[54vh]">
-      <div className="absolute inset-0 flex items-center opacity-40">
-        <Marquee text={content["promoBanner.heading"]} />
-      </div>
-      <div className={cn(wrap, "relative z-10 flex flex-col items-center gap-6 text-center")}>
-        <h2 className="sr-only">{content["promoBanner.heading"]}</h2>
-        {content["promoBanner.subtext"] && (
-          <p className="max-w-lg whitespace-pre-line text-sm text-background/85 sm:text-base">{content["promoBanner.subtext"]}</p>
+/** The promo image fills the band behind the subtext and button, under a dark wash so they stay
+ * readable. Without an image the heading runs as a marquee there instead, so the band is never
+ * an empty block. */
+const PromoBanner: SectionComponent = ({ data: { store, content } }) => {
+  const image = content["promoBanner.image"];
+  return (
+    <section className="relative overflow-hidden border-y border-border bg-foreground text-background">
+      <div className="relative flex min-h-[46vh] flex-col items-center justify-center sm:min-h-[54vh]">
+        {image ? (
+          <>
+            <Picture src={image} alt="" sizes="100vw" className="absolute inset-0" imgClassName="object-cover" />
+            <div aria-hidden className="absolute inset-0 bg-foreground/50" />
+          </>
+        ) : (
+          <div className="absolute inset-0 flex items-center opacity-40">
+            <Marquee text={content["promoBanner.heading"]} />
+          </div>
         )}
-        {content["promoBanner.ctaLabel"] && (
-          <Link
-            href={sectionHref(store, "new-arrivals")}
-            className="inline-flex h-14 items-center gap-3 bg-background px-10 text-xs font-bold uppercase tracking-[0.2em] text-foreground transition hover:opacity-90"
-          >
-            {content["promoBanner.ctaLabel"]}
-          </Link>
-        )}
+        <div className={cn(wrap, "relative z-10 flex flex-col items-center gap-6 text-center")}>
+          <h2 className="sr-only">{content["promoBanner.heading"]}</h2>
+          {content["promoBanner.subtext"] && (
+            <p className="max-w-lg whitespace-pre-line text-sm text-background/85 sm:text-base">{content["promoBanner.subtext"]}</p>
+          )}
+          {content["promoBanner.ctaLabel"] && (
+            <Link
+              href={sectionHref(store, "new-arrivals")}
+              className="inline-flex h-14 items-center gap-3 bg-background px-10 text-xs font-bold uppercase tracking-[0.2em] text-foreground transition hover:opacity-90"
+            >
+              {content["promoBanner.ctaLabel"]}
+            </Link>
+          )}
+        </div>
       </div>
-    </div>
-  </section>
-);
+    </section>
+  );
+};
 
 const BrandStory: SectionComponent = ({ data: { store, content } }) => {
   const image = content["brandStory.image"];

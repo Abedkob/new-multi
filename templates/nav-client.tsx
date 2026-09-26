@@ -10,6 +10,32 @@ import { Menu, ShoppingBag, X } from "lucide-react";
 
 /** Small interactive pieces the (server-rendered) navbars drop in. */
 
+export type Suggestion = { id: string; slug: string; name: string; imageUrl: string };
+
+/** Product suggestions for a search term, fetched (debounced) as the shopper types. */
+export function useSuggestions(slug: string, q: string) {
+  const [suggestions, setSuggestions] = useState<Suggestion[]>([]);
+  useEffect(() => {
+    const term = q.trim();
+    if (!term) return;
+    const delay = setTimeout(async () => {
+      try {
+        const res = await fetch(`/api/store/${slug}/search?q=${encodeURIComponent(term)}`);
+        if (res.ok) setSuggestions(await res.json());
+      } catch {
+        // Suggestions are a nicety; the search page still works without them.
+      }
+    }, 250);
+    return () => clearTimeout(delay);
+  }, [q, slug]);
+  return suggestions;
+}
+
+export const searchUrl = (basePath: string, q: string) => {
+  const term = q.trim();
+  return `${basePath}/search${term ? `?q=${encodeURIComponent(term)}` : ""}`;
+};
+
 /** Search form: sends the shopper to the search page. */
 export function SearchBox({
   slug,
@@ -33,7 +59,7 @@ export function SearchBox({
 }) {
   const router = useRouter();
   const [q, setQ] = useState("");
-  const [suggestions, setSuggestions] = useState<{ id: string; slug: string; name: string; imageUrl: string }[]>([]);
+  const suggestions = useSuggestions(slug, q);
   const [showSuggestions, setShowSuggestions] = useState(false);
   const wrapperRef = useRef<HTMLFormElement>(null);
 
@@ -47,23 +73,6 @@ export function SearchBox({
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
-  useEffect(() => {
-    const term = q.trim();
-    if (!term) return;
-    const delay = setTimeout(async () => {
-      try {
-        const res = await fetch(`/api/store/${slug}/search?q=${encodeURIComponent(term)}`);
-        if (res.ok) {
-          const data = await res.json();
-          setSuggestions(data);
-        }
-      } catch {
-        // Suggestions are a nicety; the search page still works without them.
-      }
-    }, 250);
-    return () => clearTimeout(delay);
-  }, [q, slug]);
-
   return (
     <form
       ref={wrapperRef}
@@ -71,9 +80,8 @@ export function SearchBox({
       className={cn("flex items-center gap-2 relative", className)}
       onSubmit={(e) => {
         e.preventDefault();
-        const term = q.trim();
         setShowSuggestions(false);
-        router.push(`${basePath}/search${term ? `?q=${encodeURIComponent(term)}` : ""}`);
+        router.push(searchUrl(basePath, q));
       }}
     >
       <input

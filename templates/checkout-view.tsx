@@ -2,7 +2,8 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useState, useTransition } from "react";
+import { useState, useSyncExternalStore, useTransition } from "react";
+import { Check, LoaderCircle, MapPin } from "lucide-react";
 import { placeOrderAction } from "@/app/store/[slug]/checkout/actions";
 import { buttonVariants, Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -15,6 +16,65 @@ import { useCartDetails } from "@/lib/cart/use-cart-details";
 import { formatPrice } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import type { Template } from "./types";
+
+/** A Google Maps link that drops a pin on exactly these coordinates. */
+export const mapsUrl = (lat: number, lng: number) => `https://www.google.com/maps?q=${lat.toFixed(6)},${lng.toFixed(6)}`;
+
+const noSubscribe = () => () => {};
+
+/**
+ * "Use my current location": asks the browser for the shopper's live position (the browser shows
+ * its own allow/block prompt on the first click) and hands back a Google Maps link to it, which
+ * the owner opens from the order. Hidden where the browser has no geolocation (or the page isn't
+ * a secure context, where browsers withhold it); the field stays editable either way, so a
+ * pasted link or a description still works when location is blocked or unavailable.
+ */
+function LocationPicker({ content, onLocated, located }: { content: ContentMap; onLocated: (url: string) => void; located: string }) {
+  // Checked on the client only (server snapshot: false), so hydration always matches.
+  const supported = useSyncExternalStore(
+    noSubscribe,
+    () => "geolocation" in navigator && window.isSecureContext,
+    () => false,
+  );
+  const [status, setStatus] = useState<"idle" | "locating" | "found" | "denied" | "unavailable">("idle");
+
+  if (!supported) return null;
+
+  const locate = () => {
+    setStatus("locating");
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        onLocated(mapsUrl(pos.coords.latitude, pos.coords.longitude));
+        setStatus("found");
+      },
+      (err) => setStatus(err.code === err.PERMISSION_DENIED ? "denied" : "unavailable"),
+      { enableHighAccuracy: true, timeout: 15000, maximumAge: 60000 },
+    );
+  };
+
+  return (
+    <div className="grid gap-2" data-testid="location-picker">
+      <Button type="button" variant="outline" onClick={locate} disabled={status === "locating"} className="h-11 justify-center gap-2 sm:w-fit" data-testid="use-location">
+        {status === "locating" ? <LoaderCircle className="size-4 animate-spin" /> : <MapPin className="size-4" />}
+        {status === "locating" ? content["checkout.locating"] : content["checkout.useLocation"]}
+      </Button>
+      {status === "found" && located.startsWith("https://www.google.com/maps?q=") && (
+        <p role="status" className="flex flex-wrap items-center gap-x-2 gap-y-1 text-sm" data-testid="location-found">
+          <Check className="size-4 text-primary" />
+          {content["checkout.locationFound"]}
+          <a href={located} target="_blank" rel="noopener noreferrer" className="font-medium underline underline-offset-4">
+            {content["checkout.viewOnMap"]}
+          </a>
+        </p>
+      )}
+      {(status === "denied" || status === "unavailable") && (
+        <p role="alert" className="text-sm text-destructive" data-testid="location-error">
+          {status === "denied" ? content["checkout.locationDenied"] : content["checkout.locationUnavailable"]}
+        </p>
+      )}
+    </div>
+  );
+}
 
 /** Guest cash-on-delivery checkout: customer details + a read-only summary of the cart. */
 export function CheckoutView({
@@ -157,7 +217,14 @@ export function CheckoutView({
           {field("customerName", content["checkout.name"], { autoComplete: "name" })}
           {field("customerPhone", content["checkout.phone"], { type: "tel", autoComplete: "tel" })}
           {field("customerAddress", content["checkout.address"], { textarea: true, autoComplete: "street-address" })}
-          {field("deliveryLocation", content["checkout.location"], { hint: content["checkout.locationHint"] })}
+          <div className="grid gap-3">
+            {field("deliveryLocation", content["checkout.location"], { hint: content["checkout.locationHint"] })}
+            <LocationPicker
+              content={content}
+              located={form.deliveryLocation}
+              onLocated={(url) => setForm((f) => ({ ...f, deliveryLocation: url }))}
+            />
+          </div>
           {field("notes", content["checkout.notes"], { textarea: true })}
 
           {error && (

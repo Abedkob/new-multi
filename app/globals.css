@@ -171,3 +171,38 @@
     display: none;
   }
 }
+
+/* Muse template: its display serif (loaded in app/layout.tsx as --font-muse-serif). A heading
+   font picked in the theme editor still wins on h1-h6 (the rule above is more specific). */
+.font-muse {
+  font-family: var(--font-muse-serif), ui-serif, Georgia, serif;
+}
+/* Muse's page-load choreography is plain CSS, so the hero (the page's LCP) is painted by the
+   server HTML and animates without waiting for hydration. Stagger with an inline --d delay. */
+@keyframes muse-unveil {
+  from { clip-path: inset(100% 0 0 0 round 1.5rem); }
+  to { clip-path: inset(0 0 0 0 round 1.5rem); }
+}
+@keyframes muse-zoom {
+  from { transform: scale(1.2); }
+  to { transform: scale(1); }
+}
+@keyframes muse-word {
+  from { transform: translateY(110%); }
+  to { transform: translateY(0); }
+}
+@keyframes muse-fade {
+  from { opacity: 0; transform: translateY(12px); }
+  to { opacity: 1; transform: none; }
+}
+@keyframes muse-spin {
+  to { transform: rotate(360deg); }
+}
+.muse-unveil { animation: muse-unveil 1.1s cubic-bezier(0.7, 0, 0.2, 1) var(--d, 0s) both; }
+.muse-zoom { animation: muse-zoom 1.8s cubic-bezier(0.16, 1, 0.3, 1) var(--d, 0s) both; }
+.muse-word { display: inline-block; animation: muse-word 0.9s cubic-bezier(0.16, 1, 0.3, 1) var(--d, 0s) both; }
+.muse-fade { animation: muse-fade 0.8s cubic-bezier(0.16, 1, 0.3, 1) var(--d, 0s) both; }
+.muse-spin { animation: muse-spin 18s linear infinite; }
+@media (prefers-reduced-motion: reduce) {
+  .muse-unveil, .muse-zoom, .muse-word, .muse-fade, .muse-spin { animation: none; }
+}

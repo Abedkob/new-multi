@@ -114,6 +114,9 @@ type KeyDef = {
   seed?: boolean;
 };
 
+/** Hero slide numbers beyond the main hero (slide 1, the plain hero.* keys). */
+export const HERO_EXTRA_SLIDES = [2, 3, 4, 5] as const;
+
 const item = (
   section: ContentSectionId,
   prefix: string,
@@ -146,9 +149,10 @@ export const CONTENT_KEYS = [
   { section: "hero", key: "hero.ctaLabel", label: "Button text", kind: "text", default: "Shop now" },
   { section: "hero", key: "hero.image", label: "Hero image (Desktop & Tablet)", kind: "image", default: "" },
   { section: "hero", key: "hero.imageMobile", label: "Hero image (Mobile)", kind: "image", default: "" },
-  // Extra slides: optional, blank by default. A template that supports a hero slider (e.g.
-  // Tonkic) shows them as additional slides once given a headline or image; others ignore them.
-  ...[2, 3].flatMap((n) =>
+  // Extra slides: optional, blank by default. A template with a hero slider (Tonkic, Mirage)
+  // shows each as another slide once given a headline or image; Muse uses slides 2-3 as the
+  // images (and slide 2's text) of its bento hero's other two blocks; others ignore them.
+  ...HERO_EXTRA_SLIDES.flatMap((n) =>
     item("hero", "hero", n, [
       { name: "headline", label: "Headline", kind: "text" },
       { name: "subtext", label: "Subtext", kind: "textarea" },
@@ -253,6 +257,12 @@ export const CONTENT_KEYS = [
   { section: "checkout", key: "checkout.address", label: "Address label", kind: "text", default: "Address" },
   { section: "checkout", key: "checkout.location", label: "Delivery location label", kind: "text", default: "Delivery location" },
   { section: "checkout", key: "checkout.locationHint", label: "Delivery location hint", kind: "text", default: "A Google Maps link, or a description of where to deliver." },
+  { section: "checkout", key: "checkout.useLocation", label: "Use-my-location button", kind: "text", default: "Use my current location" },
+  { section: "checkout", key: "checkout.locating", label: "Text while finding the location", kind: "text", default: "Finding your location..." },
+  { section: "checkout", key: "checkout.locationFound", label: "Text once the location is added", kind: "text", default: "Your location was added." },
+  { section: "checkout", key: "checkout.viewOnMap", label: "View-on-map link", kind: "text", default: "View on map" },
+  { section: "checkout", key: "checkout.locationDenied", label: "Message when location access is blocked", kind: "text", default: "Location access is blocked. Allow it in your browser settings, or paste a Google Maps link below." },
+  { section: "checkout", key: "checkout.locationUnavailable", label: "Message when the location can't be found", kind: "text", default: "We couldn't get your location. Paste a Google Maps link or describe where to deliver." },
   { section: "checkout", key: "checkout.notes", label: "Order notes label", kind: "text", default: "Order notes (optional)" },
   { section: "checkout", key: "checkout.summary", label: "Order summary heading", kind: "text", default: "Order summary" },
   { section: "checkout", key: "checkout.submit", label: "Place-order button", kind: "text", default: "Place order" },

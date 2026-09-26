@@ -19,7 +19,7 @@ import {
   StoreBrand,
   StoreMenuButton,
   productHref,
-  searchHref,
+  StoreSearchButton,
   sectionHref,
   shopHref,
   storeHref,
@@ -169,13 +169,9 @@ const Navbar: SectionComponent = ({ data }) => {
         </nav>
 
         <div className="flex shrink-0 items-center gap-2">
-          <Link
-            href={searchHref(store)}
-            aria-label={content["search.button"]}
-            className={cn("grid size-10 place-items-center rounded-full border border-border transition-colors hover:bg-secondary", focus)}
-          >
+          <StoreSearchButton data={data} look="kinetic" className={cn("grid size-10 place-items-center rounded-full border border-border transition-colors hover:bg-secondary", focus)}>
             <Search className="size-4" aria-hidden />
-          </Link>
+          </StoreSearchButton>
           <CartLink
             basePath={store.basePath}
             className={cn("flex min-h-10 items-center gap-1 rounded-full bg-primary px-4 text-sm font-semibold text-primary-foreground [&_svg]:size-4", focus)}

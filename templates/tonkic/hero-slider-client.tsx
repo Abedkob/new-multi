@@ -34,7 +34,7 @@ function SlideImage({ desktop, mobile, alt }: { desktop: string; mobile: string;
 
 /**
  * Tonkic's hero, unchanged when there's a single slide (the common case): image and text side
- * by side, no card, no scrim. With 2-3 slides (filled in under Hero in the content editor) it
+ * by side, no card, no scrim. With 2-5 slides (filled in under Hero in the content editor) it
  * becomes an autoplaying slider that also flips which side the photo is on each slide, HP-style.
  */
 export function HeroSlider({

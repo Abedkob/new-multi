@@ -13,7 +13,7 @@ import {
   StoreMenuButton,
   cardPrice,
   productHref,
-  searchHref,
+  StoreSearchButton,
   sectionHref,
   shopHref,
   storeHref,
@@ -141,13 +141,9 @@ const Navbar: SectionComponent = ({ data }) => {
               buttonClassName="sr-only"
             />
           </div>
-          <Link
-            href={searchHref(store)}
-            aria-label={content["search.button"]}
-            className="flex items-center border-l border-border px-4 md:hidden"
-          >
+          <StoreSearchButton data={data} look="atlas" className="flex items-center border-l border-border px-4 md:hidden">
             <Search className="size-5" />
-          </Link>
+          </StoreSearchButton>
           <div className="flex items-center border-l border-border pl-4 sm:px-5">
             <CartLink basePath={store.basePath} className="font-mono text-xs transition-colors hover:text-primary [&_svg]:size-5" />
           </div>

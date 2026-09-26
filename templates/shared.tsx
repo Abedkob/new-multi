@@ -1,9 +1,10 @@
 import Image from "next/image";
 import Link from "next/link";
-import type { ContentMap } from "@/lib/content";
+import { HERO_EXTRA_SLIDES, type ContentMap } from "@/lib/content";
 import { formatPrice } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { StoreMenu } from "./nav-client";
+import { SearchToggle, type SearchLook } from "./search-client";
 import type { StoreInfo, StorefrontData, StoreProduct } from "./types";
 
 /** Product/hero image, or a neutral placeholder tile (theme "muted" color) when there is none. */
@@ -151,6 +152,68 @@ export function StoreMenuButton({
       buttonClassName={buttonClassName}
     />
   );
+}
+
+/**
+ * The navbar search icon, wired to the store: opens the template's own animated search panel
+ * (SearchToggle's `look`) instead of linking to the search page. `children` is the template's
+ * own icon, `className` its own button styling.
+ */
+export function StoreSearchButton({
+  data,
+  look,
+  className,
+  children,
+}: {
+  data: StorefrontData;
+  look: SearchLook;
+  className?: string;
+  children: React.ReactNode;
+}) {
+  const { store, content } = data;
+  return (
+    <SearchToggle
+      look={look}
+      slug={store.slug}
+      basePath={store.basePath}
+      placeholder={content["search.placeholder"]}
+      buttonLabel={content["search.button"]}
+      className={className}
+    >
+      {children}
+    </SearchToggle>
+  );
+}
+
+export type HeroSlide = {
+  headline: string;
+  subtext: string;
+  ctaLabel: string;
+  image: string;
+  imageMobile: string;
+};
+
+/**
+ * The hero's slides for templates with a slider: slide 1 is always the plain hero.* content;
+ * slides 2-5 (hero.itemN.*, under Hero in the content editor) join once they have a headline
+ * or an image, so blank slides never show up as empty frames.
+ */
+export function heroSlides(content: ContentMap): HeroSlide[] {
+  const main: HeroSlide = {
+    headline: content["hero.headline"],
+    subtext: content["hero.subtext"],
+    ctaLabel: content["hero.ctaLabel"],
+    image: content["hero.image"],
+    imageMobile: content["hero.imageMobile"],
+  };
+  const extra = HERO_EXTRA_SLIDES.map((n) => ({
+    headline: content[`hero.item${n}.headline`],
+    subtext: content[`hero.item${n}.subtext`],
+    ctaLabel: content[`hero.item${n}.ctaLabel`],
+    image: content[`hero.item${n}.image`],
+    imageMobile: content[`hero.item${n}.imageMobile`],
+  })).filter((s) => s.headline || s.image || s.imageMobile);
+  return [main, ...extra];
 }
 
 /**

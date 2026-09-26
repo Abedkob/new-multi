@@ -2,12 +2,12 @@ import Link from "next/link";
 import { buttonVariants } from "@/components/ui/button";
 import type { ContentMap } from "@/lib/content";
 import { cn } from "@/lib/utils";
-import { Picture, StoreBrand, StoreMenuButton, cardPrice, productHref, searchHref, sectionHref, shopHref } from "../shared";
+import { Picture, StoreBrand, StoreMenuButton, cardPrice, heroSlides, productHref, StoreSearchButton, sectionHref, shopHref } from "../shared";
 import { StoreFooter } from "../store-footer";
 import { CartLink, SearchBox } from "../nav-client";
 import { ProductGallery, ProductImage, ProductPrice, ProductProvider, StockStatus, VariantPicker, AddToCart } from "../product-client";
 import { ArrowRight, Search, ShoppingCart } from "lucide-react";
-import { HeroSlider, type HeroSlideContent } from "./hero-slider-client";
+import { HeroSlider } from "./hero-slider-client";
 import type {
   SectionComponent,
   StoreInfo,
@@ -66,9 +66,9 @@ const Navbar: SectionComponent = ({ data }) => {
           inputClassName="h-9 w-48 rounded-full border-border text-sm bg-muted/50 focus-visible:bg-background transition-colors text-foreground"
           buttonClassName="sr-only"
         />
-        <Link href={searchHref(store)} className="md:hidden">
+        <StoreSearchButton data={data} look="tonkic" className="md:hidden">
           <Search className="w-5 h-5 cursor-pointer hover:opacity-70 transition" />
-        </Link>
+        </StoreSearchButton>
         
         <CartLink
           basePath={store.basePath}
@@ -79,33 +79,10 @@ const Navbar: SectionComponent = ({ data }) => {
   </header>
   );
 };
-/** Slide 1 is always shown (it's the plain hero.* content every template uses); slides 2-3 are
- * optional extras that turn Tonkic's hero into an autoplaying slider once either has content. */
+/** Slide 1 is always shown (it's the plain hero.* content every template uses); slides 2-5 are
+ * optional extras that turn Tonkic's hero into an autoplaying slider once any has content. */
 const Hero: SectionComponent = ({ data: { store, content, visibility } }) => {
-  const slide1: HeroSlideContent = {
-    headline: content["hero.headline"],
-    subtext: content["hero.subtext"],
-    ctaLabel: content["hero.ctaLabel"],
-    image: content["hero.image"],
-    imageMobile: content["hero.imageMobile"],
-  };
-  const slide2: HeroSlideContent = {
-    headline: content["hero.item2.headline"],
-    subtext: content["hero.item2.subtext"],
-    ctaLabel: content["hero.item2.ctaLabel"],
-    image: content["hero.item2.image"],
-    imageMobile: content["hero.item2.imageMobile"],
-  };
-  const slide3: HeroSlideContent = {
-    headline: content["hero.item3.headline"],
-    subtext: content["hero.item3.subtext"],
-    ctaLabel: content["hero.item3.ctaLabel"],
-    image: content["hero.item3.image"],
-    imageMobile: content["hero.item3.imageMobile"],
-  };
-  const slides = [slide1, slide2, slide3].filter(
-    (s, i) => i === 0 || s.headline || s.image || s.imageMobile,
-  );
+  const slides = heroSlides(content);
 
   return (
     <HeroSlider

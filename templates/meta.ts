@@ -2,7 +2,7 @@ import type { ThemeColors } from "@/lib/theme";
 
 // Metadata only (no React components), so client code and Zod can import it.
 
-export const TEMPLATE_IDS = ["minimal", "classic", "tonkic", "fashion", "luxury", "atelier", "atlas", "pearl", "drop", "kinetic", "mirage"] as const;
+export const TEMPLATE_IDS = ["minimal", "classic", "tonkic", "fashion", "luxury", "atelier", "atlas", "pearl", "drop", "kinetic", "mirage", "muse"] as const;
 export type TemplateId = (typeof TEMPLATE_IDS)[number];
 
 export const DEFAULT_TEMPLATE_ID: TemplateId = "minimal";
@@ -20,6 +20,17 @@ export const TEMPLATE_META: Record<
       secondaryColor: "#edf2f6",
       accentColor: "#4f8cff",
       backgroundColor: "#ffffff",
+    },
+  },
+  muse: {
+    label: "Muse",
+    description:
+      "Warm editorial boutique: a rounded bento hero, high-contrast serif type, pill buttons with a spinning arrow, scroll-lit statement text with inline photos, a hover-swapped best-seller showcase and a giant rising wordmark.",
+    defaults: {
+      primaryColor: "#1c1a17", // espresso: dark cards and pill buttons
+      secondaryColor: "#dccab7", // taupe: card surfaces
+      accentColor: "#e8531f", // burnt orange: marquee, arrow circles
+      backgroundColor: "#efe7d8", // cream page
     },
   },
   kinetic: {
