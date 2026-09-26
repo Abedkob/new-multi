@@ -33,6 +33,8 @@ export function isSectionShown(id: SectionId, data: StorefrontData) {
       );
     case "reviews":
       return data.visibility.reviews && data.reviews.length > 0;
+    case "faqSection":
+      return data.visibility.faqSection && data.faqs.length > 0;
     case "featuredCategories":
       return data.categoryTiles.length > 0;
     default:
@@ -46,6 +48,7 @@ const KEBAB: Partial<Record<SectionId, string>> = {
   bestSellers: "best-sellers",
   promoBanner: "promo-banner",
   brandStory: "brand-story",
+  faqSection: "faq",
 };
 
 function Section({
@@ -68,6 +71,7 @@ function Section({
     promoBanner: template.PromoBanner,
     brandStory: template.BrandStory,
     reviews: template.Reviews,
+    faqSection: template.FAQ,
     footer: template.Footer,
   }[id];
   return (

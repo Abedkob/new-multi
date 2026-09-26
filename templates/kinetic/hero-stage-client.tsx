@@ -64,6 +64,17 @@ export function HeroStage({ children }: { children: ReactNode }) {
                 scrub: 0.8,
               },
             });
+          } else if (mediaTargets.length > 0) {
+            const scroll = {
+              trigger: root.current,
+              start: "top top",
+              end: "bottom top",
+              scrub: 0.5,
+            };
+            gsap.to(mediaTargets, { yPercent: 8, scale: 1.04, ease: "none", scrollTrigger: scroll });
+            if (wordTargets.length > 0) {
+              gsap.to(wordTargets, { yPercent: -14, autoAlpha: 0.4, ease: "none", scrollTrigger: scroll });
+            }
           }
         },
         root,

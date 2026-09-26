@@ -24,18 +24,33 @@ export function PrismMotion({ children, kind, revision = "", className }: {
       if (kind === "hero") {
         const intro = gsap.timeline({ defaults: { ease: "power3.out" } });
         intro.fromTo(select("[data-shutter]"), { scaleY: 1 }, { scaleY: 0, duration: 1.1, stagger: .07 });
+        intro.fromTo(select("[data-prism-hero-visual]"), { scale: 1.14, xPercent: -3 }, { scale: 1, xPercent: 0, duration: 1.35 }, 0);
         const words = select("[data-word]");
         if (words.length) intro.from(words, { yPercent: 110, rotation: 4, duration: .9, stagger: .045 }, .25);
+        intro.from(select("[data-hero-details]"), { y: 28, autoAlpha: 0, duration: .7 }, .55);
         if (desktop) {
           const scroll = { trigger: root.current, start: "top top", end: "bottom top", scrub: .6 };
           gsap.to(select("[data-frame]"), { scale: .84, rotation: -3, borderRadius: "2rem", ease: "none", scrollTrigger: scroll });
           gsap.to(select("[data-hero-title]"), { yPercent: -28, xPercent: 3, ease: "none", scrollTrigger: scroll });
+        } else {
+          const mobileScroll = { trigger: root.current, start: "top top", end: "bottom top", scrub: .45 };
+          gsap.to(select("[data-prism-hero-visual]"), { yPercent: 10, scale: 1.06, ease: "none", scrollTrigger: mobileScroll });
+          gsap.to(select("[data-hero-title]"), { yPercent: -18, autoAlpha: .35, ease: "none", scrollTrigger: mobileScroll });
+          gsap.to(select("[data-hero-details]"), { yPercent: -9, autoAlpha: .55, ease: "none", scrollTrigger: mobileScroll });
         }
-      } else if (kind === "collections" && desktop) {
+      } else if (kind === "collections") {
         const cards = select("[data-collection]") as HTMLElement[];
-        cards.slice(0, -1).forEach((card, index) => {
+        if (desktop) cards.slice(0, -1).forEach((card, index) => {
           const face = card.querySelector("a");
           gsap.to(face, { scale: .9, rotationX: -5, opacity: .55, ease: "none", scrollTrigger: { trigger: cards[index + 1], start: "top 80%", end: "top 6rem", scrub: .5 } });
+        });
+        if (!desktop) cards.forEach((card) => {
+          const face = card.querySelector("a");
+          const visual = card.querySelector("[data-prism-collection-visual]");
+          const label = card.querySelector("[data-prism-collection-label]");
+          gsap.fromTo(face, { scale: .88, opacity: .55, yPercent: 7 }, { scale: 1, opacity: 1, yPercent: 0, ease: "none", scrollTrigger: { trigger: card, start: "top 88%", end: "top 28%", scrub: .55 } });
+          if (visual) gsap.to(visual, { scale: 1.12, xPercent: -3, ease: "none", scrollTrigger: { trigger: card, start: "top bottom", end: "bottom top", scrub: .6 } });
+          if (label) gsap.fromTo(label, { y: 26, opacity: .4 }, { y: 0, opacity: 1, ease: "none", scrollTrigger: { trigger: card, start: "top 72%", end: "top 34%", scrub: .5 } });
         });
       } else if (kind === "campaign") {
         gsap.from(select("[data-campaign-image]"), { scale: desktop ? .78 : .95, clipPath: "inset(8% 12% round 2rem)", ease: "none", scrollTrigger: { trigger: root.current, start: "top 95%", end: "top 20%", scrub: .6 } });
@@ -49,7 +64,7 @@ export function PrismMotion({ children, kind, revision = "", className }: {
 }
 
 /** Tilt only the image surface, never its product name, price or click target. */
-export function Depth({ children, className }: { children: ReactNode; className?: string }) {
+export function Depth({ children, className, collectionVisual = false, heroVisual = false, reveal = false }: { children: ReactNode; className?: string; collectionVisual?: boolean; heroVisual?: boolean; reveal?: boolean }) {
   const root = useRef<HTMLDivElement>(null);
   useGSAP(() => {
     const media = gsap.matchMedia();
@@ -71,5 +86,5 @@ export function Depth({ children, className }: { children: ReactNode; className?
     });
     return () => media.revert();
   }, { scope: root });
-  return <div ref={root} className={className}>{children}</div>;
+  return <div ref={root} className={className} data-prism-collection-visual={collectionVisual ? "" : undefined} data-prism-hero-visual={heroVisual ? "" : undefined} data-reveal={reveal ? "" : undefined}>{children}</div>;
 }

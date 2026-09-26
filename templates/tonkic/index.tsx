@@ -3,6 +3,7 @@ import { buttonVariants } from "@/components/ui/button";
 import type { ContentMap } from "@/lib/content";
 import { cn } from "@/lib/utils";
 import { Picture, StoreBrand, StoreMenuButton, cardPrice, heroSlides, productHref, StoreSearchButton, sectionHref, shopHref } from "../shared";
+import { StoreFAQ } from "../store-faq";
 import { StoreFooter } from "../store-footer";
 import { CartLink, SearchBox } from "../nav-client";
 import { ProductGallery, ProductImage, ProductPrice, ProductProvider, StockStatus, VariantPicker, AddToCart } from "../product-client";
@@ -322,6 +323,8 @@ const Reviews: SectionComponent = ({ data: { content, reviews } }) => (
   </section>
 );
 
+const FAQ: SectionComponent = ({ data }) => <StoreFAQ data={data} look="tonkic" />;
+
 const Footer: SectionComponent = ({ data }) => <StoreFooter data={data} look="tonkic" />;
 
 const ProductPage: Template["ProductPage"] = ({ data, product, related }) => {
@@ -412,6 +415,7 @@ export const tonkicTemplate: Template = {
   PromoBanner,
   BrandStory,
   Reviews,
+  FAQ,
   Footer,
   ProductPage,
 };

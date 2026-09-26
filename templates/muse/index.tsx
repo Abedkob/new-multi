@@ -27,6 +27,7 @@ import {
   shopHref,
   storeHref,
 } from "../shared";
+import { StoreFAQ } from "../store-faq";
 import { StoreFooter } from "../store-footer";
 import type { SectionComponent, StoreInfo, StoreProduct, Template } from "../types";
 import { BestSellerShowcase, Parallax, ScrollStatement } from "./motion-client";
@@ -672,6 +673,8 @@ const Reviews: SectionComponent = ({ data: { content, reviews } }) => {
   );
 };
 
+const FAQ: SectionComponent = ({ data }) => <StoreFAQ data={data} look="muse" />;
+
 /** The footer plus a giant serif wordmark whose letters rise in one after another. */
 const Footer: SectionComponent = ({ data }) => {
   const name = data.content["navbar.logoText"] || data.store.name;
@@ -780,6 +783,7 @@ export const museTemplate: Template = {
   PromoBanner,
   BrandStory,
   Reviews,
+  FAQ,
   Footer,
   ProductPage,
 };

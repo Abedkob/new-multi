@@ -4,6 +4,7 @@ import { ArrowRight, Search } from "lucide-react";
 import type { ContentMap } from "@/lib/content";
 import { cn } from "@/lib/utils";
 import { MotionDiv, MotionH1, MotionH2, MotionLi, MotionP, MotionUl } from "../motion";
+import { StoreFAQ } from "../store-faq";
 import { StoreFooter } from "../store-footer";
 import {
   HeroPicture,
@@ -406,6 +407,8 @@ const Reviews: SectionComponent = ({ data: { content, reviews } }) => (
   </section>
 );
 
+const FAQ: SectionComponent = ({ data }) => <StoreFAQ data={data} look="pearl" />;
+
 const Footer: SectionComponent = ({ data }) => <StoreFooter data={data} look="pearl" />;
 
 const ProductPage: Template["ProductPage"] = ({ data, product, related }) => {
@@ -506,6 +509,7 @@ export const pearlTemplate: Template = {
   PromoBanner,
   BrandStory,
   Reviews,
+  FAQ,
   Footer,
   ProductPage,
 };

@@ -4,6 +4,7 @@ import { cn } from "@/lib/utils";
 import { CartLink } from "../nav-client";
 import { AddToCart, ProductPrice, ProductProvider, StockStatus, VariantPicker } from "../product-client";
 import { HeroPicture, Picture, StoreBrand, StoreMenuButton, cardPrice, productHref, sectionHref, shopHref, storeHref } from "../shared";
+import { StoreFAQ } from "../store-faq";
 import { StoreFooter } from "../store-footer";
 import type { SectionComponent, StorefrontData, StoreProduct, Template } from "../types";
 import { Depth, PrismMotion } from "./motion-client";
@@ -56,7 +57,7 @@ const Hero: SectionComponent = ({ data: { store, content, visibility, categoryTi
   <PrismMotion kind="hero" revision={`${content["hero.headline"]}:${visibility.heroText}`} className={styles.scope}>
     <section className={styles.hero} data-prism-hero>
       <div className={styles.heroFrame} data-frame>
-        <Depth className={styles.heroVisual}><HeroPicture content={content} alt="" loading="eager" className="absolute inset-0" /></Depth>
+        <Depth className={styles.heroVisual} heroVisual><HeroPicture content={content} alt="" loading="eager" className="absolute inset-0" /></Depth>
         <div className={styles.heroShade} />
         <div className={styles.shutters} aria-hidden>{Array.from({ length: 5 }, (_, i) => <span data-shutter key={i} />)}</div>
       </div>
@@ -65,7 +66,7 @@ const Hero: SectionComponent = ({ data: { store, content, visibility, categoryTi
           <h1 className={styles.heroTitle} data-hero-title aria-label={content["hero.headline"]}>
             {content["hero.headline"].split(/\s+/).map((word, i) => <span key={i} aria-hidden><span className={styles.wordMask}><span className={styles.word} data-word>{word}</span></span>{" "}</span>)}
           </h1>
-          <div className={styles.heroDetails}>
+          <div className={styles.heroDetails} data-hero-details>
             {content["hero.subtext"] && <p>{content["hero.subtext"]}</p>}
             {content["hero.ctaLabel"] && <Link href={shopHref(store)} className={cn(button, styles.heroAction)}>{content["hero.ctaLabel"]}<ArrowUpRight aria-hidden className="size-5" /></Link>}
           </div>
@@ -83,11 +84,14 @@ const FeaturedCategories: SectionComponent = ({ data }) => (
     <section>
       <div className={cn(styles.wrap, styles.collectionHeading)}><h2 className={styles.title}>{data.content["featuredCategories.heading"]}</h2></div>
       <ul className={cn(styles.wrap, styles.collectionList)}>
-        {data.categoryTiles.map((category) => <li key={category.id} className={styles.collection} data-collection>
+        {data.categoryTiles.map((category, index) => <li key={category.id} className={styles.collection} data-collection>
           <Link href={category.href} className={styles.collectionLink}>
-            <Depth className={styles.collectionVisual}><Picture src={category.image} alt="" className="absolute inset-0" sizes="100vw" /></Depth>
+            <Depth className={styles.collectionVisual} collectionVisual><Picture src={category.image} alt="" className="absolute inset-0" sizes="100vw" /></Depth>
             <div className={styles.collectionShade} />
-            <div className={styles.collectionLabel}><h3>{category.label}</h3><ArrowUpRight aria-hidden /></div>
+            <div className={styles.collectionLabel} data-prism-collection-label>
+              <div className={styles.collectionMeta}><span>{String(index + 1).padStart(2, "0")}</span><span>{data.categoryTiles.length.toString().padStart(2, "0")}</span></div>
+              <h3>{category.label}</h3><span className={styles.collectionArrow}><ArrowUpRight aria-hidden /></span>
+            </div>
           </Link>
         </li>)}
       </ul>
@@ -103,7 +107,7 @@ function Products({ data, best = false }: { data: StorefrontData; best?: boolean
         <h2 className={styles.title}>{data.content[best ? "bestSellers.heading" : "newArrivals.heading"]}</h2>
         <Link href={shopHref(data.store)} className="inline-flex min-h-11 items-center gap-3 text-sm">{data.content["navbar.shopLabel"]}<ArrowUpRight className="size-5" aria-hidden /></Link>
       </div>
-      {products.length ? <ul className={cn(styles.grid, best && styles.bestGrid)}>{products.map((product) => <li key={product.id}><ProductCard data={data} product={product} /></li>)}</ul> : <p className="mt-10 text-muted-foreground">{data.content[best ? "bestSellers.empty" : "newArrivals.empty"]}</p>}
+      {products.length ? <ul className={cn(styles.grid, best && styles.bestGrid)}>{products.map((product) => <li key={product.id} data-reveal><ProductCard data={data} product={product} /></li>)}</ul> : <p className="mt-10 text-muted-foreground">{data.content[best ? "bestSellers.empty" : "newArrivals.empty"]}</p>}
     </section>
   </PrismMotion>;
 }
@@ -126,19 +130,26 @@ const PromoBanner: SectionComponent = ({ data: { store, content } }) => (
 const BrandStory: SectionComponent = ({ data: { store, content } }) => (
   <PrismMotion kind="reveal">
     <section className={cn(section, content["brandStory.image"] && styles.story)}>
-      {content["brandStory.image"] && <Depth className={styles.storyImage}><Picture src={content["brandStory.image"]} alt={store.name} className="h-full" sizes="(max-width: 1024px) 100vw, 50vw" /></Depth>}
+      {content["brandStory.image"] && <Depth className={styles.storyImage} reveal><Picture src={content["brandStory.image"]} alt={store.name} className="h-full" sizes="(max-width: 1024px) 100vw, 50vw" /></Depth>}
       <div data-reveal><h2 className={styles.title}>{content["brandStory.heading"]}</h2><p className="mt-8 max-w-xl whitespace-pre-line text-lg leading-relaxed text-muted-foreground">{content["brandStory.body"]}</p><Link href={shopHref(store)} className={cn(button, "mt-9")}>{content["navbar.shopLabel"]}<ArrowUpRight className="size-5" aria-hidden /></Link></div>
     </section>
   </PrismMotion>
 );
 const Reviews: SectionComponent = ({ data }) => (
-  <section className={cn(styles.scope, "bg-secondary")}><div className={section}>
-    <h2 className={styles.title}>{data.content["reviews.heading"]}</h2>
-    <div className={styles.reviews}>{data.reviews.map((review, i) => <figure key={i} className={styles.review}><blockquote>{review.quote}</blockquote>{review.author && <figcaption className="mt-6 text-sm text-muted-foreground">{review.author}</figcaption>}</figure>)}</div>
-  </div></section>
+  <PrismMotion kind="reveal" className={styles.scope}>
+    <section className="bg-secondary"><div className={section}>
+      <h2 className={styles.title}>{data.content["reviews.heading"]}</h2>
+      <div className={styles.reviews}>{data.reviews.map((review, i) => <figure key={i} className={styles.review} data-reveal><blockquote>{review.quote}</blockquote>{review.author && <figcaption className="mt-6 text-sm text-muted-foreground">{review.author}</figcaption>}</figure>)}</div>
+    </div></section>
+  </PrismMotion>
 );
+const FAQ: SectionComponent = ({ data }) => <PrismMotion kind="reveal" className={styles.scope}><StoreFAQ data={data} look="kinetic" /></PrismMotion>;
 const Footer: SectionComponent = ({ data }) => <StoreFooter data={data} look="kinetic" />;
-const ProductGrid: Template["ProductGrid"] = ({ data, products }) => <ul className={cn(styles.scope, styles.grid)}>{products.map((product) => <li key={product.id}><ProductCard data={data} product={product} /></li>)}</ul>;
+const ProductGrid: Template["ProductGrid"] = ({ data, products }) => (
+  <PrismMotion kind="reveal" className={styles.scope}>
+    <ul className={styles.grid}>{products.map((product) => <li key={product.id} data-reveal><ProductCard data={data} product={product} /></li>)}</ul>
+  </PrismMotion>
+);
 const CatalogHeader: NonNullable<Template["CatalogHeader"]> = ({ data, title, basePath }) => {
   const category = data.categoryTiles.find((tile) => tile.href === basePath);
   if (!category?.image) return <h1 className={styles.title}>{title}</h1>;
@@ -165,7 +176,7 @@ const ProductPage: Template["ProductPage"] = ({ data, product, related }) => (
 );
 
 export const prismTemplate: Template = {
-  Announcement, Navbar, Hero, FeaturedCategories, NewArrivals, BestSellers, PromoBanner, BrandStory, Reviews, Footer, ProductGrid, ProductPage, CatalogHeader,
+  Announcement, Navbar, Hero, FeaturedCategories, NewArrivals, BestSellers, PromoBanner, BrandStory, Reviews, FAQ, Footer, ProductGrid, ProductPage, CatalogHeader,
   pageStyle: {
     container: cn(styles.scope, styles.wrap, "max-w-5xl py-16 sm:py-24"),
     catalogContainer: cn(styles.scope, styles.wrap, "py-16 sm:py-24"),

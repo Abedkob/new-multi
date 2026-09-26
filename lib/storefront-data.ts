@@ -5,6 +5,7 @@ import { parseSectionVisibility } from "@/lib/sections";
 import { publicSocialLinks, type StoreSocialLinks } from "@/lib/social-links";
 import type {
   CategoryTile,
+  FaqItem,
   PageLink,
   ReviewItem,
   StoreInfo,
@@ -72,6 +73,13 @@ export function buildStorefrontData(input: {
     if (quote) reviews.push({ quote, author: at(content, `reviews.item${n}.author`) });
   }
 
+  const faqs: FaqItem[] = [];
+  for (const n of [1, 2, 3, 4, 5, 6]) {
+    const question = at(content, `faqSection.item${n}.question`);
+    const answer = at(content, `faqSection.item${n}.answer`);
+    if (question && answer) faqs.push({ question, answer });
+  }
+
   return {
     store,
     content,
@@ -81,6 +89,7 @@ export function buildStorefrontData(input: {
     categoryTiles,
     pages,
     reviews,
+    faqs,
     socialLinks: publicSocialLinks(input.socialLinks ?? {}),
   };
 }

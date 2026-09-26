@@ -62,6 +62,14 @@ const CONTENT: Record<string, string> = {
   "reviews.item3.quote": "Sturdy, handsome and it smells like a proper workshop.",
   "reviews.item3.author": "Sample customer, Bristol",
 
+  "faqSection.heading": "Frequently asked questions",
+  "faqSection.item1.question": "How long does delivery take?",
+  "faqSection.item1.answer": "Most orders arrive within 2-4 business days. You'll get a call to confirm before it's out for delivery.",
+  "faqSection.item2.question": "Can I return an item?",
+  "faqSection.item2.answer": "Yes, unworn items can be returned within 14 days. Contact us and we'll arrange a pickup.",
+  "faqSection.item3.question": "Do you accept card payments?",
+  "faqSection.item3.answer": "We currently accept cash on delivery only. You pay the courier when your order arrives.",
+
   "footer.about":
     "Demo Boutique is a sample store used to preview storefront templates. Everything here is placeholder content.",
   "footer.copyright": "© {year} {store}. All rights reserved.",
@@ -230,6 +238,7 @@ async function main() {
         promoBanner: true,
         brandStory: true,
         reviews: true,
+        faqSection: true,
       },
     },
   });

@@ -44,7 +44,9 @@ pnpm dev                              # http://localhost:3000
 | `pnpm verify:commerce` | Test catalog/order/stock logic (category trees, variant rules, concurrent stock deduction) |
 | `pnpm verify:templates` | Test all templates × all sections (needs server running) |
 | `pnpm verify:permissions` | Test role-based access (needs server + login session) |
-| `pnpm e2e:categories` / `e2e:variants` / `e2e:pages` / `e2e:checkout` | Chrome automation tests (needs server + Chrome installed) |
+| `pnpm verify:social-links` | Test tenant social-link fields (validation, storefront rendering) |
+| `pnpm uploads:migrate --rewrite-from=<old URL>` | Rewrite stored R2 URLs after moving buckets/domains |
+| `pnpm e2e:categories` / `e2e:variants` / `e2e:discounts` / `e2e:social-links` / `e2e:pages` / `e2e:checkout` / `e2e:kinetic` / `e2e:mirage` / `e2e:prism` | Chrome automation tests, one per feature area (needs server + Chrome installed; each creates/removes throwaway stores) |
 
 **After pulling changes:**
 ```bash
@@ -79,8 +81,11 @@ Three layers:
 | `lib/env.ts` | Environment validation (fails fast at startup if anything's missing/invalid) |
 | `app/actions/auth.ts` | Login, logout, password change |
 | `proxy.ts` | Custom-domain host routing, path-based → domain redirect, auth role gates |
-| `templates/*` | Three templates (Atelier, Minimal, Luxury) + one more; each implements 10 sections per `templates/types.ts` contract |
-| `lib/sections.ts` | Canonical content keys for the 10 sections (announcement, navbar, hero, featured categories, new arrivals, best sellers, promo, brand story, reviews, footer) |
+| `templates/meta.ts` | Canonical `TEMPLATE_IDS` registry (13 templates: minimal, classic, tonkic, fashion, luxury, atelier, atlas, pearl, drop, kinetic, mirage, muse, prism) + per-template default colors; `normalizeTemplateId` falls back unknown/legacy ids to `minimal` |
+| `templates/*` | Each template dir implements 11 sections + product page per `templates/types.ts` contract |
+| `lib/sections.ts` | Canonical content keys for the 11 sections (announcement, navbar, hero, featured categories, new arrivals, best sellers, promo, brand story, reviews, FAQ, footer) |
+| `templates/store-footer.tsx`, `templates/store-faq.tsx` | The two sections shared across all 13 templates instead of reimplemented per template: one component + a per-template `look` style table (`FooterLook`/`FaqLook`) |
+| `lib/license/*` | Store licensing/entitlement: `crypto.ts` (encrypt/decrypt license secrets), `provider.ts` (calls the external license API), `service.ts` (activate/heartbeat flow), `status.ts` (`isLicenseActive`/`canServeTenant` gating) |
 
 ### Common Patterns
 
@@ -119,8 +124,8 @@ const allProducts = await withBypass(async (tx) => {
 
 - Content lives on `TenantContent` by canonical key (defined in `lib/content.ts`, grouped by section).
 - Templates never hardcode text or colors; they read everything from `TenantContent`.
-- Section visibility is on `Tenant.sectionVisibility`; optional sections (announcement, promo, brand story, reviews) can be hidden.
-- The 10 sections are in a fixed order (`SECTION_ORDER` in `lib/sections.ts`) — no reordering yet.
+- Section visibility is on `Tenant.sectionVisibility`; optional sections (announcement, promo, brand story, reviews, FAQ) can be hidden.
+- The 11 sections are in a fixed order (`SECTION_ORDER` in `lib/sections.ts`) — no reordering yet.
 
 #### Variants & Stock
 
@@ -139,13 +144,14 @@ const allProducts = await withBypass(async (tx) => {
 
 ### Data Model Highlights
 
-- **Tenants** have `sectionVisibility`, `themeOverrides` (CSS vars), `domain` (nullable, unique, verified-and-live), integrations (GA4, Meta, Google Ads IDs), and favicon.
+- **Tenants** have `sectionVisibility`, `themeOverrides` (CSS vars), `domain` (nullable, unique, verified-and-live), integrations (GA4, Meta, Google Ads IDs), favicon, social links (`facebookUrl`, `instagramUrl`, `tiktokUrl`, `googleMapsUrl`), `whatsappNumber`, `deliveryFeeCents`/`deliveryNote`, and `isPaused`/`pausedAt`/`pauseReason` (platform-admin manual kill switch, independent of licensing).
 - **Users** have `mustChangePassword` (platform admin can force an owner to change) and `sessionVersion` (bumped when password reset to revoke live sessions).
+- **TenantLicense** (one per tenant) holds encrypted license key/activation token ciphertext, `status`, `expiresAt`, `offlineGraceUntil`, and heartbeat bookkeeping (`checkAfter`, `lastCheckedAt`, `lastError`) for the self-hosted licensing system — see "Licensing & Store Availability" below.
 - **Categories** form a tree (`parentId`); a category page shows its products + everything in subcategories; can't be deleted if it has subcategories or products.
 - **Products** have a slug (never changes on rename, keeping old URLs valid), `isBestSeller` flag (manual, not sales-driven), and a `tenantId`.
 - **DiscountCampaigns** apply an automatic percentage or fixed per-unit discount to assigned products. Eligible campaigns never stack; the lowest final price wins. Campaign names are admin-only.
 - **ProductVariants** live under products (no direct `tenantId`); stock, optional price/image override, free-form attributes. One variant per product minimum.
-- **Orders** go Pending → Confirmed → Delivered (or can be Cancelled at any point); cancelling restores stock exactly once. Cancelled and Delivered are final.
+- **Orders** go Pending → Confirmed → Delivered (or can be Cancelled at any point); cancelling restores stock exactly once. Cancelled and Delivered are final. Orders snapshot `deliveryFeeCentsSnapshot`/`deliveryNoteSnapshot` from the tenant's settings at purchase time.
 - **OrderItems** snapshot the product name, attributes, and price from the moment of purchase — editing a product doesn't affect past orders.
 
 ## Storefront & Templates
@@ -153,7 +159,10 @@ const allProducts = await withBypass(async (tx) => {
 ### How Templates Work
 
 - `templates/render.tsx` decides section visibility and order (so a template can't get it wrong).
-- Each template (e.g., `templates/atelier/index.tsx`) implements 10 section components + product page.
+- Each template (e.g., `templates/atelier/index.tsx`) implements 11 section components + product page.
+  Footer and FAQ are the two sections most templates don't reimplement: they wire in the shared
+  `StoreFooter`/`StoreFAQ` components (`templates/store-footer.tsx`, `templates/store-faq.tsx`) with
+  their own `look` value instead.
 - `templates/types.ts` is the contract all templates follow.
 - Colors are injected as CSS variables at the root by `components/theme-scope.tsx` (from `Tenant.themeOverrides`).
 
@@ -181,6 +190,13 @@ const allProducts = await withBypass(async (tx) => {
 - **Session revocation:** `User.sessionVersion` is stamped into the JWT at login. An admin password reset or the owner changing their own password bumps it. Any token with a stale version is sent to `/force-logout`, which clears the session cookie and redirects to `/login` (not straight to `/login`, because the JWT would just bounce an already-"authenticated" owner back to `/admin`).
 - **RLS & delayed logout:** `requireOwner` and `requirePlatformAdmin` re-check the user in the DB on every render/action (deduped per request with React's `cache()`), so a deleted tenant or a password reset takes effect on the very next request, not just the next login.
 
+## Licensing & Store Availability
+
+- The app is self-hosted/sold with a per-tenant license (see `LICENSE_SETUP.md`). `lib/license/provider.ts` calls an external license API (`LICENSE_API_BASE_URL`, `LICENSE_PRODUCT_CODE`); `lib/license/crypto.ts` encrypts license keys/activation tokens at rest with `LICENSE_ENCRYPTION_KEY` (the browser never sees the raw key or token).
+- Platform admin activates a license from `/platform/stores/[slug]` (`store-license-control.tsx`), which calls `lib/license/service.ts`'s `activateTenantLicense`.
+- `POST /api/internal/license-heartbeat` (auth'd with `LICENSE_HEARTBEAT_SECRET`, meant to be hit by a cron every ~5 min) only contacts the provider for licenses whose `checkAfter` is due, and records failures; see `lib/data/licenses.ts`.
+- `lib/license/status.ts`'s `canServeTenant()` = `!tenant.isPaused && isLicenseActive(...)` gates storefront/checkout availability. A license temporarily unreachable is tolerated only within its `offlineGraceUntil` window. Tenants without any assigned license are allowed (opt-in rollout). Manual `isPaused` (platform admin) is a separate, always-available kill switch.
+
 ## Performance & Scaling Notes
 
 - **Connection pool:** `max: 30` (up from node-postgres default of 10). Load-tested:
@@ -189,7 +205,7 @@ const allProducts = await withBypass(async (tx) => {
   - 150 concurrent: p95 ~2.9s, 0 failures.
   - 300 concurrent: 10% fail with 500 (Prisma's `maxWait` timeout).
   - *Always test against `next build && next start`, not `next dev`.*
-- **Before multi-instance:** rate limiters and domain-resolution cache are in-memory (per-instance). Use a shared store (Redis) or adjust cache TTLs.
+- **Rate limiting is Redis-backed with in-memory fallback** (`lib/redis.ts`, `lib/rate-limit.ts`): set `REDIS_URL` to share limits across instances; without it (or if Redis is unreachable — fails open) each instance limits independently. The domain-resolution cache is still in-memory per-instance regardless.
 - **Storefront data:** `loadStorefrontData` runs 5 reads inside one `withTenant` transaction (was 5 separate ones, costing 5 pooled connections per page load).
 
 ## Important Gotchas
@@ -203,13 +219,14 @@ const allProducts = await withBypass(async (tx) => {
 
 ## Testing & Verification
 
-No automated test suite yet. Four manual verification scripts + browser E2E tests:
+No automated test suite yet. Manual verification scripts + browser E2E tests:
 
 - `pnpm verify:isolation`: app-level tenant isolation (DB access attempts must fail).
 - `pnpm verify:commerce`: category trees, variant rules, stock deduction (concurrent), order snapshots, cancellation.
-- `pnpm verify:templates`: all 3+ templates × 10 sections, switches, live preview in admin/platform.
+- `pnpm verify:templates`: all 13 templates × 10 sections, switches, live preview in admin/platform.
 - `pnpm verify:permissions`: role-based access via real login sessions + static check that every server action verifies role.
-- `pnpm e2e:*`: Chrome automation (categories, variants, shop/category/search/content pages, checkout flow).
+- `pnpm verify:social-links`: tenant social-link field validation and rendering.
+- `pnpm e2e:*`: Chrome automation, one script per feature (categories, variants, discounts, social-links, storefront pages, checkout, kinetic/mirage/prism template-specific flows).
 
 ## Development Tips
 
@@ -224,8 +241,16 @@ No automated test suite yet. Four manual verification scripts + browser E2E test
 
 See [KNOWN_GAPS.md](KNOWN_GAPS.md) for:
 - Intentional MVP limitations (e.g., no caching, cart is in-memory only, no pagination on admin products).
-- Production readiness TODOs (e.g., no automated scheduler, rate limiters are in-memory, etc.).
+- Production readiness TODOs (e.g., no automated scheduler, etc.).
 - Rough edges flagged for future work (e.g., `ContentKey` is untyped, content editor doesn't warn about missing-content optional sections).
+
+## Production Deployment
+
+The app is deployed to production via Dockploy (Docker Compose: Next.js + Postgres + Redis behind a reverse proxy):
+- [DOCKPLOY_SETUP.md](DOCKPLOY_SETUP.md): step-by-step first-time deployment.
+- [PRODUCTION.md](PRODUCTION.md): environment variables and service configuration reference.
+- [DEPLOYMENT_CHECKLIST.md](DEPLOYMENT_CHECKLIST.md): pre-launch checklist.
+- [LICENSE_SETUP.md](LICENSE_SETUP.md): licensing env vars and heartbeat cron setup (see "Licensing & Store Availability" above).
 
 ---
 

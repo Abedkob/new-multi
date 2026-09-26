@@ -84,10 +84,15 @@ async function main() {
     await page.setViewportSize({ width: 390, height: 844 });
     await page.goto(base);
     await page.getByRole("heading", { name: "A different perspective." }).waitFor();
+    await page.waitForFunction(() => document.querySelector("[data-prism-hero-visual]")?.getAttribute("style")?.includes("transform"));
+    await page.evaluate(() => window.scrollTo({ top: Math.round(innerHeight * .45), behavior: "instant" as ScrollBehavior }));
+    await page.waitForFunction(() => getComputedStyle(document.querySelector("[data-prism-hero-visual]")!).transform !== "none");
     assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth));
-    assert.equal(await page.locator("[data-collection]").first().evaluate((el) => getComputedStyle(el).position), "relative");
+    assert.equal(await page.locator("[data-collection]").first().evaluate((el) => getComputedStyle(el).position), "sticky");
+    await page.locator("[data-collection]").first().scrollIntoViewIfNeeded();
+    await page.waitForFunction(() => document.querySelector("[data-collection] a")?.getAttribute("style")?.includes("transform"));
     if (screenshots) { await page.waitForTimeout(1600); await page.screenshot({ path: join(screenshots, "prism-mobile.png") }); }
-    console.log("ok: mobile has no page overflow and uses an unpinned collection gallery");
+    console.log("ok: mobile has no page overflow and uses a pinned, animated collection sequence");
     await page.getByRole("button", { name: "Search", exact: true }).click();
     assert.ok(await dialog.evaluate((el) => el.scrollWidth <= innerWidth));
     await dialog.getByRole("button", { name: "Close search" }).click();

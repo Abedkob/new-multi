@@ -32,7 +32,31 @@ export function CategoryFilm({
           animate: "(prefers-reduced-motion: no-preference)",
         },
         (context) => {
-          if (!context.conditions?.desktop || !context.conditions.animate || !track.current) return;
+          if (!context.conditions?.animate || !track.current) return;
+
+          if (!context.conditions.desktop) {
+            const select = gsap.utils.selector(root);
+            select("[data-kinetic-card]").forEach((card) => {
+              gsap.fromTo(
+                card,
+                { autoAlpha: 0, y: 40 },
+                {
+                  autoAlpha: 1,
+                  y: 0,
+                  ease: "power2.out",
+                  scrollTrigger: { trigger: card, start: "top 88%", end: "top 58%", scrub: 0.6 },
+                },
+              );
+            });
+            select("[data-kinetic-card-visual]").forEach((visual) => {
+              gsap.to(visual, {
+                scale: 1.08,
+                ease: "none",
+                scrollTrigger: { trigger: visual, start: "top bottom", end: "bottom top", scrub: 0.6 },
+              });
+            });
+            return;
+          }
 
           const distance = () => Math.max(0, track.current!.scrollWidth - window.innerWidth + 48);
           const tween = gsap.to(track.current, {
@@ -74,18 +98,20 @@ export function CategoryFilm({
 
         <ul ref={track} className="grid gap-5 lg:flex lg:w-max lg:gap-6">
           {categories.map((category, index) => (
-            <li key={category.id} className="lg:w-[min(72vw,62rem)] lg:shrink-0">
+            <li key={category.id} data-kinetic-card className="lg:w-[min(72vw,62rem)] lg:shrink-0">
               <Link
                 href={category.href}
                 className="group relative grid min-h-[28rem] overflow-hidden sm:min-h-[34rem] lg:h-[58vh] lg:min-h-[28rem] lg:grid-cols-[minmax(0,1fr)_20rem]"
               >
-                <Picture
-                  src={category.image}
-                  alt={category.label}
-                  className="absolute inset-0 lg:relative"
-                  imgClassName="transition-transform duration-700 group-hover:scale-[1.035]"
-                  sizes="(max-width: 1024px) 100vw, 65vw"
-                />
+                <div data-kinetic-card-visual className="absolute inset-0 lg:relative">
+                  <Picture
+                    src={category.image}
+                    alt={category.label}
+                    className="h-full w-full"
+                    imgClassName="transition-transform duration-700 group-hover:scale-[1.035]"
+                    sizes="(max-width: 1024px) 100vw, 65vw"
+                  />
+                </div>
                 <span className="absolute inset-0 bg-gradient-to-t from-primary via-primary/15 to-transparent lg:hidden" />
                 <span className="relative mt-auto flex items-end justify-between gap-6 p-6 sm:p-8 lg:mt-0 lg:flex-col lg:items-start lg:bg-primary lg:p-8">
                   <span className="text-sm tabular-nums text-primary-foreground/60">

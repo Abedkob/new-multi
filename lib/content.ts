@@ -70,6 +70,12 @@ export const CONTENT_SECTIONS = [
     optional: "reviews",
   },
   {
+    id: "faqSection",
+    title: "FAQ",
+    description: "Up to six questions and answers, shown on the home page. Needs at least one filled question and answer to appear.",
+    optional: "faqSection",
+  },
+  {
     id: "footer",
     title: "Footer",
     description: "{year} and {store} in the copyright text are filled in automatically.",
@@ -192,6 +198,15 @@ export const CONTENT_KEYS = [
     item("reviews", "reviews", n, [
       { name: "quote", label: "Quote", kind: "textarea" },
       { name: "author", label: "Author", kind: "text" },
+    ]),
+  ),
+
+  // 9b. FAQ
+  { section: "faqSection", key: "faqSection.heading", label: "Heading", kind: "text", default: "Frequently asked questions" },
+  ...[1, 2, 3, 4, 5, 6].flatMap((n) =>
+    item("faqSection", "faqSection", n, [
+      { name: "question", label: "Question", kind: "text" },
+      { name: "answer", label: "Answer", kind: "textarea" },
     ]),
   ),
 

@@ -68,6 +68,7 @@ export type PageLink = {
 };
 
 export type ReviewItem = { quote: string; author: string };
+export type FaqItem = { question: string; answer: string };
 export type SocialLink = { platform: SocialPlatform; label: string; href: string };
 
 /**
@@ -85,6 +86,8 @@ export type StorefrontData = {
   /** Only pages whose text is non-empty, so a blank page is never linked. */
   pages: PageLink[];
   reviews: ReviewItem[];
+  /** Only entries with both a question and an answer. */
+  faqs: FaqItem[];
   /** Only configured links; empty settings never produce blank footer controls. */
   socialLinks: SocialLink[];
 };
@@ -105,12 +108,14 @@ export type Template = {
   PromoBanner: SectionComponent;
   BrandStory: SectionComponent;
   Reviews: SectionComponent;
+  FAQ: SectionComponent;
   Footer: SectionComponent;
-  /** Order of the 7 home sections (between navbar and footer). Defaults to lib/sections.ts's
+  /** Order of the 8 home sections (between navbar and footer). Defaults to lib/sections.ts's
    * HOME_SECTION_ORDER (hero, featuredCategories, newArrivals, bestSellers, promoBanner,
-   * brandStory, reviews) when omitted. Set this only when the template's layout genuinely calls
-   * for a different flow, e.g. new arrivals right after the hero. Visibility rules (an empty
-   * optional section still disappears) are unaffected — this only changes relative order. */
+   * brandStory, reviews, faqSection) when omitted. Set this only when the template's layout
+   * genuinely calls for a different flow, e.g. new arrivals right after the hero. Visibility
+   * rules (an empty optional section still disappears) are unaffected — this only changes
+   * relative order. */
   homeSectionOrder?: readonly HomeSectionId[];
   /** A grid of product cards, used by the shop, category and search pages. */
   ProductGrid: ComponentType<{ data: StorefrontData; products: StoreProduct[] }>;

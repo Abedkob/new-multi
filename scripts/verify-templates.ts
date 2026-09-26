@@ -139,12 +139,12 @@ function staticChecks() {
     const src = readFileSync(`templates/${id}/index.tsx`, "utf8");
     for (const s of [
       "Announcement", "Navbar", "Hero", "FeaturedCategories", "NewArrivals", "BestSellers",
-      "PromoBanner", "BrandStory", "Reviews", "Footer", "ProductPage",
+      "PromoBanner", "BrandStory", "Reviews", "FAQ", "Footer", "ProductPage",
     ]) {
       assert.ok(new RegExp(`const ${s}\\b`).test(src), `${id} does not implement ${s}`);
     }
   }
-  ok("every template implements all 10 sections + the product page");
+  ok("every template implements all 11 sections + the product page");
 }
 
 async function main() {
@@ -185,6 +185,7 @@ async function main() {
       promoBanner: { section: "promoBanner", probe: c["promoBanner.heading"] },
       brandStory: { section: "brandStory", probe: c["brandStory.heading"] },
       reviews: { section: "reviews", probe: c["reviews.item1.quote"] },
+      faqSection: { section: "faqSection", probe: c["faqSection.item1.question"] },
     };
     for (const [k, v] of Object.entries(optionalContent)) {
       assert.ok(v.probe, `demo content for ${k} is empty; run pnpm demo:seed`);
@@ -196,14 +197,15 @@ async function main() {
       const home = await page(`/store/${SLUG}`);
 
       assert.deepEqual(sectionsIn(home), orderFor(id), `${id}: sections missing or out of order`);
-      ok("all 10 sections render in the canonical order");
+      ok("all 11 sections render in the canonical order");
 
       for (const key of [
         "navbar.shopLabel", "announcement.text", "hero.headline", "hero.subtext", "hero.ctaLabel",
         "featuredCategories.heading", "newArrivals.heading", "bestSellers.heading",
         "promoBanner.heading", "promoBanner.subtext", "promoBanner.ctaLabel", "brandStory.heading",
         "brandStory.body", "reviews.heading", "reviews.item1.quote", "reviews.item1.author",
-        "reviews.item2.quote", "reviews.item3.quote", "footer.about",
+        "reviews.item2.quote", "reviews.item3.quote", "faqSection.heading",
+        "faqSection.item1.question", "faqSection.item1.answer", "footer.about",
       ] as const) {
         assertShows(home, c[key], `${id} home (${key})`);
       }

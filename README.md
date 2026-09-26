@@ -30,7 +30,7 @@ Production: `pnpm db:deploy && pnpm build && pnpm start`.
 | `pnpm db:seed` | upserts the platform admin from `PLATFORM_ADMIN_EMAIL` / `PLATFORM_ADMIN_PASSWORD` |
 | `pnpm demo:seed` | creates/refreshes a "Demo Boutique" store: content for every key, a nested category tree, 6 products with variants, 2 sample orders, all optional sections on |
 | `pnpm verify:isolation` | runs cross-tenant access attempts against the DB and checks they fail |
-| `pnpm verify:templates` | (server running) all 3 templates x 11 sections, section toggles, template switching keeps all data |
+| `pnpm verify:templates` | (server running) all 13 templates x 11 sections, section toggles, template switching keeps all data |
 | `pnpm verify:commerce` | data-layer checks: category tree and cycles, variants and their rules, stock deduction (incl. a concurrent race for the last unit), cancel-restores-stock, order snapshots, cross-store attacks |
 | `pnpm e2e:categories` `e2e:variants` `e2e:pages` `e2e:checkout` | real-Chrome runs (server running, Chrome installed; each creates and removes throwaway stores): admin categories, variant editor + storefront picker, shop/category/search/content pages, and the full browse-to-order flow |
 | `pnpm verify:permissions` | (server running) who can reach what, over real login sessions, plus a static check that every server action verifies a role |
@@ -68,10 +68,10 @@ Production: `pnpm db:deploy && pnpm build && pnpm start`.
 
 ## Storefront
 
-Every template renders the same 10 sections in the same fixed order (`SECTION_ORDER` in
+Every template renders the same 11 sections in the same fixed order (`SECTION_ORDER` in
 `lib/sections.ts`): announcement bar, navbar, hero, featured categories, new arrivals,
-best sellers, promo banner, brand story, reviews, footer. Announcement bar, promo
-banner, brand story and reviews are optional: the owner can switch them off, and they also
+best sellers, promo banner, brand story, reviews, FAQ, footer. Announcement bar, promo
+banner, brand story, reviews and FAQ are optional: the owner can switch them off, and they also
 need content to appear. Templates differ only in visual treatment.
 
 - `templates/render.tsx` decides which sections show and in what order (so a template

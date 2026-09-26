@@ -25,6 +25,7 @@ import {
   storeHref,
   type HeroSlide,
 } from "../shared";
+import { StoreFAQ } from "../store-faq";
 import { StoreFooter } from "../store-footer";
 import type { SectionComponent, StoreInfo, StoreProduct, Template } from "../types";
 import {
@@ -364,6 +365,8 @@ const Reviews: SectionComponent = ({ data: { content, reviews } }) => (
   </section>
 );
 
+const FAQ: SectionComponent = ({ data }) => <StoreFAQ data={data} look="mirage" />;
+
 const Footer: SectionComponent = ({ data }) => <MirageFooterMotion><StoreFooter data={data} look="mirage" /></MirageFooterMotion>;
 
 const ProductGrid: Template["ProductGrid"] = ({ data, products }) => (
@@ -432,6 +435,7 @@ export const mirageTemplate: Template = {
   PromoBanner,
   BrandStory,
   Reviews,
+  FAQ,
   Footer,
   ProductGrid,
   ProductPage,

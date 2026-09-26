@@ -24,11 +24,14 @@ import {
   shopHref,
   storeHref,
 } from "../shared";
+import { StoreFAQ } from "../store-faq";
 import { StoreFooter } from "../store-footer";
 import type { SectionComponent, StoreInfo, StoreProduct, Template } from "../types";
 import { CategoryFilm } from "./category-film-client";
 import { HeroStage } from "./hero-stage-client";
+import { ProductCardVisual } from "./product-card-visual-client";
 import { ProductStage } from "./product-stage-client";
+import { KineticReveal } from "./reveal-client";
 
 /**
  * Kinetic is built for image-led stores. Its visual signature is concentrated in the hero,
@@ -69,34 +72,7 @@ function ProductCard({
   return (
     <Link href={href} className={cn("group block", focus)}>
       <div className={cn("relative overflow-hidden bg-secondary", large ? "aspect-[4/5]" : "aspect-[3/4]")}>
-        {product.imageUrl && (
-          // Blurred, scaled-up copy of the same photo fills the tile behind it, so a product
-          // shot's own studio background (often white or gray) never clashes with the card.
-          <Picture
-            src={product.imageUrl}
-            alt=""
-            className="absolute inset-0"
-            imgClassName="scale-125 object-cover opacity-60 blur-2xl saturate-150"
-            sizes={large ? "(max-width: 1024px) 100vw, 50vw" : undefined}
-            quality={20}
-          />
-        )}
-        <Picture
-          src={product.imageUrl}
-          alt={product.name}
-          className="absolute inset-0"
-          imgClassName="object-contain p-5 transition duration-700 group-hover:scale-[1.035] group-hover:opacity-0 sm:p-8"
-          sizes={large ? "(max-width: 1024px) 100vw, 50vw" : undefined}
-        />
-        {second && (
-          <Picture
-            src={second}
-            alt=""
-            className="absolute inset-0 opacity-0 transition-opacity duration-700 group-hover:opacity-100"
-            imgClassName="object-contain p-5 sm:p-8"
-            sizes={large ? "(max-width: 1024px) 100vw, 50vw" : undefined}
-          />
-        )}
+        <ProductCardVisual primaryUrl={product.imageUrl} secondaryUrl={second} alt={product.name} large={large} />
         {!product.inStock && (
           <span className="absolute left-3 top-3 rounded-full bg-background px-3 py-1.5 text-xs font-medium text-foreground">
             {content["product.outOfStock"]}
@@ -294,13 +270,19 @@ const BestSellers: SectionComponent = ({ data: { store, content, bestSellers } }
       {bestSellers.length === 0 ? (
         <p className="text-muted-foreground">{content["bestSellers.empty"]}</p>
       ) : (
-        <ul className="grid grid-cols-2 gap-x-4 gap-y-12 sm:gap-x-7 lg:grid-cols-4 lg:gap-y-20">
-          {bestSellers.map((product, index) => (
-            <li key={product.id} className={cn(index % 2 === 1 && "lg:translate-y-16")}>
-              <ProductCard store={store} product={product} content={content} />
-            </li>
-          ))}
-        </ul>
+        <KineticReveal>
+          <ul className="grid grid-cols-2 gap-x-4 gap-y-12 sm:gap-x-7 lg:grid-cols-4 lg:gap-y-20">
+            {bestSellers.map((product, index) => (
+              <li key={product.id} className={cn(index % 2 === 1 && "lg:translate-y-16")}>
+                {/* data-reveal on this inner wrapper, not the <li>, so GSAP's own transform doesn't
+                  * clobber the zigzag lg:translate-y-16 already on the <li> above. */}
+                <div data-reveal>
+                  <ProductCard store={store} product={product} content={content} />
+                </div>
+              </li>
+            ))}
+          </ul>
+        </KineticReveal>
       )}
     </div>
   </section>
@@ -319,22 +301,24 @@ const PromoBanner: SectionComponent = ({ data: { store, content } }) => {
         />
       )}
       <div className="absolute inset-0 -z-10 bg-gradient-to-t from-primary via-primary/35 to-transparent" />
-      <div className={cn(wrap, "w-full py-14 sm:py-20")}>
-        <h2 className={cn(display, "max-w-6xl text-[clamp(3.5rem,10vw,10rem)]")}>{content["promoBanner.heading"]}</h2>
-        <div className="mt-8 flex flex-col gap-7 sm:flex-row sm:items-end sm:justify-between">
-          {content["promoBanner.subtext"] && (
-            <p className="max-w-xl whitespace-pre-line leading-relaxed text-primary-foreground/75">
-              {content["promoBanner.subtext"]}
-            </p>
-          )}
-          {content["promoBanner.ctaLabel"] && (
-            <Link href={sectionHref(store, "new-arrivals")} className={button}>
-              {content["promoBanner.ctaLabel"]}
-              <ArrowUpRight className="size-4" aria-hidden />
-            </Link>
-          )}
+      <KineticReveal className={cn(wrap, "w-full py-14 sm:py-20")}>
+        <div data-reveal>
+          <h2 className={cn(display, "max-w-6xl text-[clamp(3.5rem,10vw,10rem)]")}>{content["promoBanner.heading"]}</h2>
+          <div className="mt-8 flex flex-col gap-7 sm:flex-row sm:items-end sm:justify-between">
+            {content["promoBanner.subtext"] && (
+              <p className="max-w-xl whitespace-pre-line leading-relaxed text-primary-foreground/75">
+                {content["promoBanner.subtext"]}
+              </p>
+            )}
+            {content["promoBanner.ctaLabel"] && (
+              <Link href={sectionHref(store, "new-arrivals")} className={button}>
+                {content["promoBanner.ctaLabel"]}
+                <ArrowUpRight className="size-4" aria-hidden />
+              </Link>
+            )}
+          </div>
         </div>
-      </div>
+      </KineticReveal>
     </section>
   );
 };
@@ -342,39 +326,41 @@ const PromoBanner: SectionComponent = ({ data: { store, content } }) => {
 const BrandStory: SectionComponent = ({ data: { store, content } }) => {
   const image = content["brandStory.image"];
   return (
-    <section className={cn(wrap, "py-20 sm:py-28 lg:py-36")}>
-      <div className={cn("grid gap-12", image && "lg:grid-cols-[0.9fr_1.1fr] lg:items-center lg:gap-20")}>
-        <div className={cn(image && "lg:order-2")}>
-          {content["brandStory.heading"] && (
-            <h2 className={cn(display, "text-[clamp(3rem,7vw,7rem)]")}>{content["brandStory.heading"]}</h2>
-          )}
-          {content["brandStory.body"] && (
-            <p className="mt-8 max-w-2xl whitespace-pre-line text-base leading-relaxed text-muted-foreground sm:text-lg">
-              {content["brandStory.body"]}
-            </p>
-          )}
-          <Link href={shopHref(store)} className="mt-10 inline-flex items-center gap-2 text-sm font-semibold underline underline-offset-4">
-            {content["navbar.shopLabel"]}
-            <ArrowUpRight className="size-4" aria-hidden />
-          </Link>
-        </div>
-        {image && (
-          <div className="relative overflow-hidden bg-secondary lg:order-1">
-            <Picture src={image} alt={store.name} className="aspect-[4/5]" sizes="(max-width: 1024px) 100vw, 44vw" />
+    <KineticReveal>
+      <section className={cn(wrap, "py-20 sm:py-28 lg:py-36")}>
+        <div className={cn("grid gap-12", image && "lg:grid-cols-[0.9fr_1.1fr] lg:items-center lg:gap-20")}>
+          <div data-reveal className={cn(image && "lg:order-2")}>
+            {content["brandStory.heading"] && (
+              <h2 className={cn(display, "text-[clamp(3rem,7vw,7rem)]")}>{content["brandStory.heading"]}</h2>
+            )}
+            {content["brandStory.body"] && (
+              <p className="mt-8 max-w-2xl whitespace-pre-line text-base leading-relaxed text-muted-foreground sm:text-lg">
+                {content["brandStory.body"]}
+              </p>
+            )}
+            <Link href={shopHref(store)} className="mt-10 inline-flex items-center gap-2 text-sm font-semibold underline underline-offset-4">
+              {content["navbar.shopLabel"]}
+              <ArrowUpRight className="size-4" aria-hidden />
+            </Link>
           </div>
-        )}
-      </div>
-    </section>
+          {image && (
+            <div data-reveal className="relative overflow-hidden bg-secondary lg:order-1">
+              <Picture src={image} alt={store.name} className="aspect-[4/5]" sizes="(max-width: 1024px) 100vw, 44vw" />
+            </div>
+          )}
+        </div>
+      </section>
+    </KineticReveal>
   );
 };
 
 const Reviews: SectionComponent = ({ data: { content, reviews } }) => (
   <section className="overflow-hidden border-y border-border">
-    <div className={cn(wrap, "py-20 sm:py-28")}>
+    <KineticReveal className={cn(wrap, "py-20 sm:py-28")}>
       <Heading title={content["reviews.heading"]} />
       <ul className="grid gap-8 lg:grid-cols-3">
         {reviews.map((review, index) => (
-          <li key={index} className="flex min-h-72 flex-col justify-between border-l border-border pl-6 sm:pl-8">
+          <li key={index} data-reveal className="flex min-h-72 flex-col justify-between border-l border-border pl-6 sm:pl-8">
             <blockquote className="text-2xl font-semibold leading-snug tracking-[-0.025em] sm:text-3xl">
               &ldquo;{review.quote}&rdquo;
             </blockquote>
@@ -382,25 +368,33 @@ const Reviews: SectionComponent = ({ data: { content, reviews } }) => (
           </li>
         ))}
       </ul>
-    </div>
+    </KineticReveal>
   </section>
+);
+
+const FAQ: SectionComponent = ({ data }) => (
+  <KineticReveal>
+    <StoreFAQ data={data} look="kinetic" />
+  </KineticReveal>
 );
 
 const Footer: SectionComponent = ({ data }) => <StoreFooter data={data} look="kinetic" />;
 
 const ProductGrid: Template["ProductGrid"] = ({ data, products }) => (
-  <ul className="grid grid-cols-2 gap-x-4 gap-y-12 sm:gap-x-7 lg:grid-cols-3 lg:gap-y-20">
-    {products.map((product, index) => (
-      <li key={product.id} className={cn(index % 5 === 0 && "lg:col-span-2")}>
-        <ProductCard
-          store={data.store}
-          product={product}
-          content={data.content}
-          large={index % 5 === 0}
-        />
-      </li>
-    ))}
-  </ul>
+  <KineticReveal>
+    <ul className="grid grid-cols-2 gap-x-4 gap-y-12 sm:gap-x-7 lg:grid-cols-3 lg:gap-y-20">
+      {products.map((product, index) => (
+        <li key={product.id} data-reveal className={cn(index % 5 === 0 && "lg:col-span-2")}>
+          <ProductCard
+            store={data.store}
+            product={product}
+            content={data.content}
+            large={index % 5 === 0}
+          />
+        </li>
+      ))}
+    </ul>
+  </KineticReveal>
 );
 
 const ProductPage: Template["ProductPage"] = ({ data, product, related }) => {
@@ -442,13 +436,15 @@ const ProductPage: Template["ProductPage"] = ({ data, product, related }) => {
         {related.length > 0 && (
           <section className="mt-24 sm:mt-32">
             <Heading title={content["product.relatedHeading"]} />
-            <ul className="grid grid-cols-2 gap-x-4 gap-y-12 sm:gap-x-7 lg:grid-cols-4">
-              {related.map((item) => (
-                <li key={item.id}>
-                  <ProductCard store={store} product={item} content={content} />
-                </li>
-              ))}
-            </ul>
+            <KineticReveal>
+              <ul className="grid grid-cols-2 gap-x-4 gap-y-12 sm:gap-x-7 lg:grid-cols-4">
+                {related.map((item) => (
+                  <li key={item.id} data-reveal>
+                    <ProductCard store={store} product={item} content={content} />
+                  </li>
+                ))}
+              </ul>
+            </KineticReveal>
           </section>
         )}
       </div>
@@ -475,6 +471,7 @@ export const kineticTemplate: Template = {
   PromoBanner,
   BrandStory,
   Reviews,
+  FAQ,
   Footer,
   ProductGrid,
   ProductPage,

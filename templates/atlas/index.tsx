@@ -5,6 +5,7 @@ import { ArrowLeft, ArrowRight, ArrowUpRight, Search } from "lucide-react";
 import type { ContentMap } from "@/lib/content";
 import { cn } from "@/lib/utils";
 import { MotionDiv, MotionH1, MotionLi, MotionP, MotionUl } from "../motion";
+import { StoreFAQ } from "../store-faq";
 import { StoreFooter } from "../store-footer";
 import {
   HeroPicture,
@@ -552,6 +553,8 @@ const Reviews: SectionComponent = ({ data: { content, reviews } }) => {
   );
 };
 
+const FAQ: SectionComponent = ({ data }) => <StoreFAQ data={data} look="atlas" />;
+
 const Footer: SectionComponent = ({ data }) => <StoreFooter data={data} look="atlas" />;
 
 /** A spec sheet: the photo in a ruled frame on the left, ruled rows of details on the right. */
@@ -639,6 +642,7 @@ export const atlasTemplate: Template = {
   PromoBanner,
   BrandStory,
   Reviews,
+  FAQ,
   Footer,
   ProductPage,
 };

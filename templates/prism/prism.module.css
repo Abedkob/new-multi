@@ -25,16 +25,20 @@
 .heroAction { flex-shrink: 0; }
 .collections { background: var(--color-secondary); color: var(--color-on-secondary); }
 .collectionHeading { padding-block: 4rem; }
-.collectionList { display: grid; gap: 2rem; padding-bottom: var(--prism-space); }
+.collectionList { display: grid; gap: 2rem; padding-bottom: var(--prism-space); counter-reset: collection; }
 .collection { position: sticky; top: 6rem; height: min(72svh, 50rem); min-height: 23rem; perspective: 1400px; }
 .collection:focus-within { z-index: 2; }
 .collection:focus-within .collectionLink { opacity: 1 !important; transform: none !important; }
 .collectionLink { display: block; position: relative; height: 100%; overflow: hidden; border-radius: .25rem; background: var(--color-primary); color: var(--color-on-primary); transform-origin: center top; }
 .collectionVisual { position: absolute; inset: -5%; }
 .collectionShade { position: absolute; inset: 0; background: linear-gradient(0deg, var(--color-primary), transparent 85%); }
-.collectionLabel { position: absolute; inset-inline: var(--prism-gutter); bottom: 2rem; display: flex; justify-content: space-between; align-items: end; gap: 1rem; }
+.collectionLabel { position: absolute; inset-inline: var(--prism-gutter); bottom: 2rem; display: grid; grid-template-columns: auto 1fr auto; align-items: end; gap: 1.5rem; }
+.collectionMeta { display: flex; align-self: start; gap: .35rem; padding-top: .6rem; font-size: .7rem; font-variant-numeric: tabular-nums; opacity: .7; }
+.collectionMeta span:first-child::after { content: "/"; margin-left: .35rem; opacity: .5; }
 .collectionLabel h3 { max-width: 85%; font-size: var(--prism-heading); line-height: 1; letter-spacing: -.045em; overflow-wrap: anywhere; }
-.collectionLabel svg { width: 3rem; height: 3rem; flex-shrink: 0; }
+.collectionArrow { display: grid; place-items: center; width: 3rem; height: 3rem; flex-shrink: 0; border: 1px solid color-mix(in oklab, currentColor 45%, transparent); border-radius: 999px; transition: background .35s var(--prism-ease), color .35s var(--prism-ease), transform .35s var(--prism-ease); }
+.collectionLink:hover .collectionArrow, .collectionLink:focus-visible .collectionArrow { background: var(--color-on-primary); color: var(--color-primary); transform: rotate(45deg); }
+.collectionArrow svg { width: 1.25rem; height: 1.25rem; }
 .grid { display: grid; grid-template-columns: repeat(4,minmax(0,1fr)); gap: 3rem 1.5rem; margin-top: 3rem; }
 .card { display: block; min-width: 0; }
 .cardVisual { position: relative; aspect-ratio: 3/4; background: var(--color-secondary); overflow: hidden; transform-style: preserve-3d; }
@@ -73,9 +77,12 @@
   .searchResults { grid-template-columns: repeat(3,minmax(0,1fr)); }
 }
 @media (max-width: 767px) {
-  .collectionList { display: flex; overflow-x: auto; scroll-snap-type: x mandatory; gap: 1rem; }
-  .collection { position: relative; top: auto; flex: 0 0 88%; height: 65svh; scroll-snap-align: center; }
-  .collectionLabel { inset-inline: 1.25rem; }
+  .collectionList { display: grid; gap: 1.5rem; padding-inline: 1.25rem; }
+  .collection { position: sticky; top: 5.5rem; height: min(76svh, 40rem); min-height: 28rem; }
+  .collection:nth-child(2) { top: 6.5rem; }
+  .collection:nth-child(3) { top: 7.5rem; }
+  .collectionLabel { inset-inline: 1.25rem; bottom: 1.5rem; grid-template-columns: auto 1fr auto; gap: .8rem; }
+  .collectionMeta { font-size: .65rem; }
   .collectionLabel h3 { font-size: 2.5rem; }
   .bestGrid { gap: 2rem 1rem; }
   .bestGrid > li:nth-child(even) { padding-top: 3rem; }

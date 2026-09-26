@@ -2,8 +2,8 @@ import { z } from "zod";
 
 /**
  * The storefront is a fixed sequence of sections, identical in every template.
- * Only the four OPTIONAL ones can be switched off by the store owner; the other
- * seven are always shown. Templates differ only in how each section looks.
+ * Only the five OPTIONAL ones can be switched off by the store owner; the other
+ * six are always shown. Templates differ only in how each section looks.
  */
 
 export const OPTIONAL_SECTIONS = [
@@ -12,6 +12,7 @@ export const OPTIONAL_SECTIONS = [
   "promoBanner",
   "brandStory",
   "reviews",
+  "faqSection",
 ] as const;
 export type OptionalSection = (typeof OPTIONAL_SECTIONS)[number];
 export type SectionVisibility = Record<OptionalSection, boolean>;
@@ -22,6 +23,7 @@ export const VISIBILITY_DEFAULTS: SectionVisibility = {
   promoBanner: false,
   brandStory: true,
   reviews: true,
+  faqSection: true,
 };
 
 /** Tolerant read of Tenant.sectionVisibility: valid booleans win, everything else is defaulted. */
@@ -50,12 +52,13 @@ export const SECTION_ORDER = [
   "promoBanner",
   "brandStory",
   "reviews",
+  "faqSection",
   "footer",
 ] as const;
 export type SectionId = (typeof SECTION_ORDER)[number];
 
 /**
- * The 7 "home" sections (everything between navbar and footer) — the ones whose relative order
+ * The 8 "home" sections (everything between navbar and footer) — the ones whose relative order
  * a template may override (templates/types.ts's Template.homeSectionOrder), e.g. to put new
  * arrivals right after the hero instead of after featured categories. Announcement, navbar and
  * footer always stay fixed at the top/bottom, so they're excluded here.
@@ -68,5 +71,6 @@ export const HOME_SECTION_ORDER = [
   "promoBanner",
   "brandStory",
   "reviews",
+  "faqSection",
 ] as const;
 export type HomeSectionId = (typeof HOME_SECTION_ORDER)[number];

@@ -4,6 +4,7 @@ import { buttonVariants } from "@/components/ui/button";
 import type { ContentMap } from "@/lib/content";
 import { cn } from "@/lib/utils";
 import { MotionDiv, MotionH1, MotionH2, MotionLi, MotionP, MotionSection, MotionUl } from "../motion";
+import { StoreFAQ } from "../store-faq";
 import { StoreFooter } from "../store-footer";
 import { HeroPicture, Picture, StoreBrand, StoreMenuButton, cardPrice, productHref, sectionHref, shopHref, storeHref } from "../shared";
 import { CartLink, SearchBox } from "../nav-client";
@@ -328,6 +329,8 @@ const Reviews: SectionComponent = ({ data: { content, reviews } }) => (
   </section>
 );
 
+const FAQ: SectionComponent = ({ data }) => <StoreFAQ data={data} look="minimal" />;
+
 const Footer: SectionComponent = ({ data }) => <StoreFooter data={data} look="minimal" />;
 
 const ProductPage: Template["ProductPage"] = ({ data, product, related }) => {
@@ -428,6 +431,7 @@ export const minimalTemplate: Template = {
   PromoBanner,
   BrandStory,
   Reviews,
+  FAQ,
   Footer,
   ProductPage,
 };
