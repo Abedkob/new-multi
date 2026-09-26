@@ -14,6 +14,7 @@
  */
 import "dotenv/config";
 import "./_owner";
+import "./_styles";
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import { readdirSync, readFileSync, statSync } from "node:fs";

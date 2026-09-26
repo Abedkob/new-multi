@@ -10,6 +10,7 @@ import { dropTemplate } from "./drop";
 import { kineticTemplate } from "./kinetic";
 import { mirageTemplate } from "./mirage";
 import { museTemplate } from "./muse";
+import { prismTemplate } from "./prism";
 import { normalizeTemplateId, type TemplateId } from "./meta";
 import type { Template } from "./types";
 
@@ -26,6 +27,7 @@ const templates: Record<TemplateId, Template> = {
   kinetic: kineticTemplate,
   mirage: mirageTemplate,
   muse: museTemplate,
+  prism: prismTemplate,
 };
 
 /** Unknown/legacy template ids fall back to the default template. */

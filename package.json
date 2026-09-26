@@ -27,7 +27,8 @@
     "e2e:pages": "tsx scripts/e2e/storefront-pages.ts",
     "e2e:checkout": "tsx scripts/e2e/checkout.ts",
     "e2e:kinetic": "tsx scripts/e2e/kinetic.ts",
-    "e2e:mirage": "tsx scripts/e2e/mirage.ts"
+    "e2e:mirage": "tsx scripts/e2e/mirage.ts",
+    "e2e:prism": "tsx scripts/e2e/prism.ts"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1138.0",

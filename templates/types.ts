@@ -114,6 +114,8 @@ export type Template = {
   homeSectionOrder?: readonly HomeSectionId[];
   /** A grid of product cards, used by the shop, category and search pages. */
   ProductGrid: ComponentType<{ data: StorefrontData; products: StoreProduct[] }>;
+  /** Optional editorial catalog heading; filters and results stay in the shared layout. */
+  CatalogHeader?: ComponentType<{ data: StorefrontData; title: string; basePath: string }>;
   /** Where the catalog sort + filters go: above the grid (default) or in a column on its left
    * (from the lg breakpoint; phones always get the collapsible bar above). */
   filterLayout?: "top" | "sidebar";

@@ -101,7 +101,7 @@ export function CatalogPage({
         </nav>
       )}
 
-      <h1 className={s.title}>{title}</h1>
+      {template.CatalogHeader ? <template.CatalogHeader data={data} title={title} basePath={basePath} /> : <h1 className={s.title}>{title}</h1>}
       <p className={cn(s.subtitle, "mt-2")} data-testid="result-count">
         {fillVars(content["catalog.count"], { count: total })}
       </p>
