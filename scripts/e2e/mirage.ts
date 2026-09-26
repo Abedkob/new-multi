@@ -70,24 +70,40 @@ async function main() {
     assert.ok(heroCoverage.visualHeight >= heroCoverage.heroHeight, "hero image does not cover the full height");
     assert.equal(await page.locator('[data-section="featuredCategories"] a').count(), 3);
     assert.ok(await page.locator("[data-mirage-word]").count());
+    await page.waitForFunction(() => document.querySelector("[data-mirage-word]")?.hasAttribute("style"));
     assert.equal(await page.locator(".pin-spacer").count(), 0);
-    ok("desktop hero uses a full-bleed background and product categories remain directly accessible");
+    ok("desktop hero uses a full-bleed background and initializes its GSAP entrance");
 
     const width = await page.evaluate(() => ({ viewport: document.documentElement.clientWidth, content: document.documentElement.scrollWidth }));
     assert.ok(width.content <= width.viewport, `desktop overflow: ${JSON.stringify(width)}`);
     if (screenshots) {
       await page.waitForTimeout(1_500);
       await page.screenshot({ path: join(screenshots, "mirage-desktop-hero.png") });
-      await page.locator('[data-section="featuredCategories"]').scrollIntoViewIfNeeded();
-      await page.waitForTimeout(500);
-      await page.screenshot({ path: join(screenshots, "mirage-desktop-collections.png") });
     }
     ok("desktop composition has no horizontal overflow");
+
+    await page.locator('[data-section="featuredCategories"]').scrollIntoViewIfNeeded();
+    await page.waitForFunction(() => document.querySelector("[data-mirage-collection]")?.hasAttribute("style"));
+    assert.match((await page.locator("[data-mirage-collection]").first().getAttribute("style")) ?? "", /transform|opacity/);
+    if (screenshots) {
+      await page.waitForTimeout(700);
+      await page.screenshot({ path: join(screenshots, "mirage-desktop-collections.png") });
+    }
+    await page.locator('[data-section="newArrivals"]').scrollIntoViewIfNeeded();
+    await page.waitForFunction(() => document.querySelector("[data-mirage-product]")?.hasAttribute("style"));
+    assert.match((await page.locator("[data-mirage-product]").first().getAttribute("style")) ?? "", /transform|opacity/);
+    await page.getByRole("contentinfo").scrollIntoViewIfNeeded();
+    await page.waitForFunction(() => document.querySelector("footer [data-footer-motion-item]")?.hasAttribute("style"));
+    assert.match((await page.locator("footer [data-footer-motion-item]").first().getAttribute("style")) ?? "", /transform|opacity/);
+    ok("category, product and footer GSAP sequences initialize on scroll");
 
     const reduced = await browser.newContext({ reducedMotion: "reduce", viewport: { width: 1280, height: 800 } });
     const reducedPage = await reduced.newPage();
     await reducedPage.goto(base);
     assert.equal(await reducedPage.locator("[data-mirage-word]").first().getAttribute("style"), null);
+    assert.equal(await reducedPage.locator("[data-mirage-collection]").first().getAttribute("style"), null);
+    assert.equal(await reducedPage.locator("[data-mirage-product]").first().getAttribute("style"), null);
+    assert.equal(await reducedPage.locator("footer [data-footer-motion-item]").first().getAttribute("style"), null);
     assert.equal(await reducedPage.locator(".pin-spacer").count(), 0);
     await reduced.close();
     ok("reduced motion receives the complete static composition");

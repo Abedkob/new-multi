@@ -157,7 +157,7 @@ function LinkGroup({
   muted: string;
 }) {
   return (
-    <div>
+    <div data-footer-motion-item>
       <h3 className={cn("mb-5 text-xs font-semibold uppercase tracking-[0.16em]", muted)}>
         {heading}
       </h3>
@@ -216,7 +216,7 @@ function FooterNavigation({ data, style }: { data: StorefrontData; style: Footer
 
 function FooterBrand({ data, style }: { data: StorefrontData; style: FooterStyle }) {
   return (
-    <div className="min-w-0 max-w-full">
+    <div data-footer-motion-item className="min-w-0 max-w-full">
       <StoreBrand
         store={data.store}
         content={data.content}
@@ -233,6 +233,7 @@ function FooterBrand({ data, style }: { data: StorefrontData; style: FooterStyle
 function FooterBottom({ data, style }: { data: StorefrontData; style: FooterStyle }) {
   return (
     <div
+      data-footer-motion-bottom
       className={cn(
         "mt-12 flex flex-col gap-3 border-t pt-6 text-xs sm:flex-row sm:items-center sm:justify-between",
         style.border,

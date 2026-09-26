@@ -26,7 +26,13 @@ import {
 } from "../shared";
 import { StoreFooter } from "../store-footer";
 import type { SectionComponent, StoreInfo, StoreProduct, Template } from "../types";
-import { MirageCollectionMotion, MirageHeroMotion, MirageReveal } from "./motion-client";
+import {
+  MirageCollectionMotion,
+  MirageFooterMotion,
+  MirageHeroMotion,
+  MirageProductsMotion,
+  MirageReveal,
+} from "./motion-client";
 
 const wrap = "mx-auto w-full max-w-[100rem] px-5 sm:px-8 lg:px-12";
 const display = "max-w-full font-semibold leading-[0.94] tracking-[-0.05em] text-balance [overflow-wrap:anywhere]";
@@ -128,7 +134,7 @@ const Hero: SectionComponent = ({ data: { store, content, visibility, categoryTi
         <div className="absolute inset-0 -z-20 bg-gradient-to-r from-primary/95 via-primary/60 to-primary/15" />
         <div className="absolute inset-0 -z-10 bg-gradient-to-t from-primary/80 via-transparent to-primary/25" />
 
-        <div className={cn(wrap, "flex min-h-[42rem] flex-col justify-end pb-8 pt-20 sm:pb-10 lg:min-h-[calc(100svh-5rem)] lg:pb-12")}>
+        <div data-mirage-hero-content className={cn(wrap, "flex min-h-[42rem] flex-col justify-end pb-8 pt-20 sm:pb-10 lg:min-h-[calc(100svh-5rem)] lg:pb-12")}>
           {visibility.heroText && (
             <div className="max-w-5xl pb-12 sm:pb-16">
               <h1 data-mirage-word className={cn(display, "text-[clamp(3.25rem,7vw,7.5rem)] text-primary-foreground")}>
@@ -173,7 +179,7 @@ const FeaturedCategories: SectionComponent = ({ data: { content, categoryTiles }
   <MirageCollectionMotion count={categoryTiles.length}>
     <section className="bg-background">
       <div className={cn(wrap, "py-20 sm:py-28 lg:py-32")}>
-        <SectionHeading>{content["featuredCategories.heading"]}</SectionHeading>
+        <div data-mirage-collection-heading><SectionHeading>{content["featuredCategories.heading"]}</SectionHeading></div>
         <div className="mt-10 grid gap-4 sm:grid-cols-2 lg:mt-14 lg:grid-cols-3">
           {categoryTiles.map((category) => (
             <Link
@@ -182,7 +188,9 @@ const FeaturedCategories: SectionComponent = ({ data: { content, categoryTiles }
               href={category.href}
               className={cn("group relative min-h-[25rem] overflow-hidden rounded-[1.75rem] bg-secondary text-primary-foreground sm:min-h-[30rem]")}
             >
-              <Picture src={category.image} alt={category.label} className="absolute inset-0" imgClassName="transition-transform duration-700 group-hover:scale-105" sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 33vw" />
+              <span data-mirage-collection-visual className="absolute inset-0 overflow-hidden">
+                <Picture src={category.image} alt={category.label} className="h-full w-full" imgClassName="transition-transform duration-700 group-hover:scale-105" sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 33vw" />
+              </span>
               <span className="absolute inset-0 bg-gradient-to-t from-primary/90 via-primary/10 to-transparent" />
               <span className="absolute inset-x-0 bottom-0 flex items-end justify-between gap-6 p-6 sm:p-8">
                 <span className={cn(display, "max-w-full text-[clamp(2rem,3.5vw,3.75rem)]")}>{category.label}</span>
@@ -199,48 +207,52 @@ const FeaturedCategories: SectionComponent = ({ data: { content, categoryTiles }
 );
 
 const NewArrivals: SectionComponent = ({ data: { store, content, newArrivals } }) => (
-  <section className={cn(wrap, "py-20 sm:py-28 lg:py-32")}>
-    <SectionHeading>{content["newArrivals.heading"]}</SectionHeading>
-    {newArrivals.length === 0 ? (
-      <p className="mt-10 text-muted-foreground">{content["newArrivals.empty"]}</p>
-    ) : (
-      <ul className="mt-12 grid grid-cols-2 gap-x-4 gap-y-12 sm:gap-x-6 lg:grid-cols-4 lg:gap-y-16">
-        {newArrivals.map((product) => (
-          <li key={product.id}>
-            <MirageReveal><ProductCard store={store} product={product} content={content} /></MirageReveal>
-          </li>
-        ))}
-      </ul>
-    )}
-  </section>
-);
-
-const BestSellers: SectionComponent = ({ data: { store, content, bestSellers } }) => (
-  <section className="overflow-hidden bg-secondary text-secondary-foreground">
-    <div className={cn(wrap, "py-24 sm:py-32")}>
-      <SectionHeading>{content["bestSellers.heading"]}</SectionHeading>
-      {bestSellers.length === 0 ? (
-        <p className="mt-10 text-muted-foreground">{content["bestSellers.empty"]}</p>
+  <MirageProductsMotion count={newArrivals.length}>
+    <section className={cn(wrap, "py-20 sm:py-28 lg:py-32")}>
+      <div data-mirage-product-heading><SectionHeading>{content["newArrivals.heading"]}</SectionHeading></div>
+      {newArrivals.length === 0 ? (
+        <p className="mt-10 text-muted-foreground">{content["newArrivals.empty"]}</p>
       ) : (
-        <ul className="mt-14 grid gap-5 lg:grid-cols-2">
-          {bestSellers.map((product) => (
-            <li key={product.id}>
-              <Link href={productHref(store, product)} className="group grid min-h-72 grid-cols-[0.9fr_1.1fr] overflow-hidden rounded-[1.75rem] bg-background text-foreground sm:min-h-96">
-                <Picture src={product.imageUrl} alt={product.name} className="h-full bg-secondary" imgClassName="object-contain p-4 transition-transform duration-700 group-hover:scale-105 sm:p-8" sizes="(max-width: 1024px) 40vw, 24vw" />
-                <span className="flex min-w-0 flex-col justify-between p-5 sm:p-9">
-                  <span className={cn(display, "text-[clamp(1.8rem,4vw,4.5rem)]")}>{product.name}</span>
-                  <span className="flex items-center justify-between gap-3 text-sm font-semibold tabular-nums">
-                    {cardPrice(product, content)}
-                    <ArrowRight className="size-5 transition-transform group-hover:translate-x-1" aria-hidden />
-                  </span>
-                </span>
-              </Link>
+        <ul className="mt-12 grid grid-cols-2 gap-x-4 gap-y-12 sm:gap-x-6 lg:grid-cols-4 lg:gap-y-16">
+          {newArrivals.map((product) => (
+            <li key={product.id} data-mirage-product>
+              <ProductCard store={store} product={product} content={content} />
             </li>
           ))}
         </ul>
       )}
-    </div>
-  </section>
+    </section>
+  </MirageProductsMotion>
+);
+
+const BestSellers: SectionComponent = ({ data: { store, content, bestSellers } }) => (
+  <MirageProductsMotion count={bestSellers.length}>
+    <section className="overflow-hidden bg-secondary text-secondary-foreground">
+      <div className={cn(wrap, "py-24 sm:py-32")}>
+        <div data-mirage-product-heading><SectionHeading>{content["bestSellers.heading"]}</SectionHeading></div>
+        {bestSellers.length === 0 ? (
+          <p className="mt-10 text-muted-foreground">{content["bestSellers.empty"]}</p>
+        ) : (
+          <ul className="mt-14 grid gap-5 lg:grid-cols-2">
+            {bestSellers.map((product) => (
+              <li key={product.id} data-mirage-product>
+                <Link href={productHref(store, product)} className="group grid min-h-72 grid-cols-[0.9fr_1.1fr] overflow-hidden rounded-[1.75rem] bg-background text-foreground sm:min-h-96">
+                  <Picture src={product.imageUrl} alt={product.name} className="h-full bg-secondary" imgClassName="object-contain p-4 transition-transform duration-700 group-hover:scale-105 sm:p-8" sizes="(max-width: 1024px) 40vw, 24vw" />
+                  <span className="flex min-w-0 flex-col justify-between p-5 sm:p-9">
+                    <span className={cn(display, "text-[clamp(1.8rem,4vw,4.5rem)]")}>{product.name}</span>
+                    <span className="flex items-center justify-between gap-3 text-sm font-semibold tabular-nums">
+                      {cardPrice(product, content)}
+                      <ArrowRight className="size-5 transition-transform group-hover:translate-x-1" aria-hidden />
+                    </span>
+                  </span>
+                </Link>
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
+    </section>
+  </MirageProductsMotion>
 );
 
 const PromoBanner: SectionComponent = ({ data: { store, content } }) => {
@@ -294,16 +306,18 @@ const Reviews: SectionComponent = ({ data: { content, reviews } }) => (
   </section>
 );
 
-const Footer: SectionComponent = ({ data }) => <StoreFooter data={data} look="mirage" />;
+const Footer: SectionComponent = ({ data }) => <MirageFooterMotion><StoreFooter data={data} look="mirage" /></MirageFooterMotion>;
 
 const ProductGrid: Template["ProductGrid"] = ({ data, products }) => (
-  <ul className="grid grid-cols-2 gap-x-4 gap-y-12 sm:gap-x-6 lg:grid-cols-3 xl:grid-cols-4">
-    {products.map((product) => (
-      <li key={product.id}>
-        <ProductCard store={data.store} product={product} content={data.content} />
-      </li>
-    ))}
-  </ul>
+  <MirageProductsMotion count={products.length}>
+    <ul className="grid grid-cols-2 gap-x-4 gap-y-12 sm:gap-x-6 lg:grid-cols-3 xl:grid-cols-4">
+      {products.map((product) => (
+        <li key={product.id} data-mirage-product>
+          <ProductCard store={data.store} product={product} content={data.content} />
+        </li>
+      ))}
+    </ul>
+  </MirageProductsMotion>
 );
 
 const ProductPage: Template["ProductPage"] = ({ data, product, related }) => {
@@ -331,7 +345,9 @@ const ProductPage: Template["ProductPage"] = ({ data, product, related }) => {
         {related.length > 0 && (
           <section className="mt-28 sm:mt-36">
             <SectionHeading>{content["product.relatedHeading"]}</SectionHeading>
-            <ul className="mt-12 grid grid-cols-2 gap-4 sm:gap-8 lg:grid-cols-4">{related.map((item) => <li key={item.id}><ProductCard store={store} product={item} content={content} /></li>)}</ul>
+            <MirageProductsMotion count={related.length}>
+              <ul className="mt-12 grid grid-cols-2 gap-4 sm:gap-8 lg:grid-cols-4">{related.map((item) => <li key={item.id} data-mirage-product><ProductCard store={store} product={item} content={content} /></li>)}</ul>
+            </MirageProductsMotion>
           </section>
         )}
       </div>
