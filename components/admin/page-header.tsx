@@ -22,7 +22,7 @@ export function PageHeader({
           href={back.href}
           className="inline-flex w-fit items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground"
         >
-          <ArrowLeft className="size-4" aria-hidden /> {back.label}
+          <ArrowLeft className="size-4 rtl:rotate-180" aria-hidden /> {back.label}
         </Link>
       )}
       <div className="flex flex-wrap items-start justify-between gap-4">

@@ -42,11 +42,12 @@ function toInput(p: z.output<typeof productFormSchema>) {
 export async function createProductAction(input: ProductFormInput): Promise<ProductActionState> {
   const { tenantId } = await requireOwner();
   const parsed = productFormSchema.safeParse(input);
-  if (!parsed.success) return { error: "Some fields need attention.", fieldErrors: flatten(parsed.error) };
+  if (!parsed.success)
+    return { error: "validation.someFieldsNeedAttention", fieldErrors: flatten(parsed.error) };
   try {
     await createProduct(tenantId, toInput(parsed.data));
   } catch (e) {
-    if (e instanceof ProductError) return { error: e.message };
+    if (e instanceof ProductError) return { error: e.code };
     throw e;
   }
   redirect("/admin/products");
@@ -58,12 +59,13 @@ export async function updateProductAction(
 ): Promise<ProductActionState> {
   const { tenantId } = await requireOwner();
   const parsed = productFormSchema.safeParse(input);
-  if (!parsed.success) return { error: "Some fields need attention.", fieldErrors: flatten(parsed.error) };
+  if (!parsed.success)
+    return { error: "validation.someFieldsNeedAttention", fieldErrors: flatten(parsed.error) };
   try {
     // tenantId is in the WHERE clause, so another store's product id updates nothing.
     if (!(await updateProduct(tenantId, id, toInput(parsed.data)))) notFound();
   } catch (e) {
-    if (e instanceof ProductError) return { error: e.message };
+    if (e instanceof ProductError) return { error: e.code };
     throw e;
   }
   redirect("/admin/products");

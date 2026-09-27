@@ -1,9 +1,10 @@
 import Link from "next/link";
 import { buttonVariants } from "@/components/ui/button";
+import { getT } from "@/lib/i18n/locale";
 import { archiveDiscountAction, restoreDiscountAction } from "./actions";
 import { ArchiveDiscountButton } from "./archive-button";
 
-export function DiscountCampaignActions({
+export async function DiscountCampaignActions({
   id,
   name,
   archived,
@@ -12,11 +13,12 @@ export function DiscountCampaignActions({
   name: string;
   archived: boolean;
 }) {
+  const t = await getT();
   if (archived) {
     return (
       <form action={restoreDiscountAction.bind(null, id)}>
         <button type="submit" className={buttonVariants({ variant: "outline", size: "sm" })}>
-          Restore
+          {t("discounts.restore")}
         </button>
       </form>
     );
@@ -25,7 +27,7 @@ export function DiscountCampaignActions({
   return (
     <div className="flex flex-wrap justify-end gap-2">
       <Link href={`/admin/discounts/${id}/edit`} className={buttonVariants({ variant: "outline", size: "sm" })}>
-        Edit
+        {t("common.edit")}
       </Link>
       <form action={archiveDiscountAction.bind(null, id)}>
         <ArchiveDiscountButton name={name} />

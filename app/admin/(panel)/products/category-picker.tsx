@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { Input } from "@/components/ui/input";
+import { useT } from "@/lib/i18n/context";
 import { cn } from "@/lib/utils";
 
 export type CategoryOption = { id: string; name: string; path: string; depth: number };
@@ -21,6 +22,7 @@ export function CategoryPicker({
   onChange: (id: string) => void;
   id?: string;
 }) {
+  const t = useT();
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
   const root = useRef<HTMLDivElement>(null);
@@ -52,10 +54,10 @@ export function CategoryPicker({
         aria-haspopup="listbox"
         aria-expanded={open}
         onClick={() => setOpen((o) => !o)}
-        className="flex h-8 w-full items-center justify-between rounded-lg border border-input bg-transparent px-2.5 text-left text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50"
+        className="flex h-8 w-full items-center justify-between rounded-lg border border-input bg-transparent px-2.5 text-start text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50"
       >
         <span className={cn(!selected && "text-muted-foreground")}>
-          {selected ? selected.path : "No category"}
+          {selected ? selected.path : t("categoryPicker.noCategory")}
         </span>
         <span aria-hidden className="text-xs text-muted-foreground">
           &#9662;
@@ -67,8 +69,8 @@ export function CategoryPicker({
             autoFocus
             value={query}
             onChange={(e) => setQuery(e.target.value)}
-            placeholder="Search categories..."
-            aria-label="Search categories"
+            placeholder={t("categoryPicker.searchPlaceholder")}
+            aria-label={t("categoryPicker.searchAriaLabel")}
           />
           <ul role="listbox" className="mt-2 max-h-56 overflow-y-auto text-sm">
             <li>
@@ -77,9 +79,9 @@ export function CategoryPicker({
                 role="option"
                 aria-selected={value === ""}
                 onClick={() => pick("")}
-                className="w-full rounded px-2 py-1.5 text-left text-muted-foreground hover:bg-muted"
+                className="w-full rounded px-2 py-1.5 text-start text-muted-foreground hover:bg-muted"
               >
-                No category
+                {t("categoryPicker.noCategory")}
               </button>
             </li>
             {filtered.map((o) => (
@@ -89,9 +91,9 @@ export function CategoryPicker({
                   role="option"
                   aria-selected={value === o.id}
                   onClick={() => pick(o.id)}
-                  style={{ paddingLeft: `${0.5 + (q ? 0 : o.depth) * 1}rem` }}
+                  style={{ paddingInlineStart: `${0.5 + (q ? 0 : o.depth) * 1}rem` }}
                   className={cn(
-                    "w-full rounded py-1.5 pr-2 text-left hover:bg-muted",
+                    "w-full rounded py-1.5 pe-2 text-start hover:bg-muted",
                     value === o.id && "bg-muted font-medium",
                   )}
                 >
@@ -100,7 +102,7 @@ export function CategoryPicker({
               </li>
             ))}
             {filtered.length === 0 && (
-              <li className="px-2 py-1.5 text-muted-foreground">No matches</li>
+              <li className="px-2 py-1.5 text-muted-foreground">{t("categoryPicker.noMatches")}</li>
             )}
           </ul>
         </div>

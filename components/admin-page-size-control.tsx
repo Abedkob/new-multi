@@ -3,6 +3,7 @@
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useTransition } from "react";
 import { ADMIN_PAGE_SIZES, type AdminPageSize } from "@/lib/admin-pagination";
+import { useT } from "@/lib/i18n/context";
 
 export function AdminPageSizeControl({
   page,
@@ -19,6 +20,7 @@ export function AdminPageSizeControl({
   const router = useRouter();
   const searchParams = useSearchParams();
   const [pending, startTransition] = useTransition();
+  const t = useT();
   const firstVisible = total === 0 ? 0 : (page - 1) * pageSize + 1;
   const lastVisible = Math.min(page * pageSize, total);
 
@@ -27,12 +29,12 @@ export function AdminPageSizeControl({
   return (
     <div className="flex flex-wrap items-center justify-between gap-3">
       <p className="text-sm text-muted-foreground" data-testid="admin-visible-range">
-        Showing {firstVisible}&ndash;{lastVisible} of {total} {noun}
+        {t("common.showing")} {firstVisible}&ndash;{lastVisible} {t("common.of")} {total} {noun}
       </p>
       <label className="inline-flex items-center gap-2 text-sm text-muted-foreground">
-        Show
+        {t("common.show")}
         <select
-          aria-label={`${noun[0].toUpperCase()}${noun.slice(1)} per page`}
+          aria-label={`${noun} ${t("common.perPage")}`}
           value={pageSize}
           disabled={pending}
           onChange={(event) => {
@@ -52,7 +54,7 @@ export function AdminPageSizeControl({
             </option>
           ))}
         </select>
-        per page
+        {t("common.perPage")}
       </label>
     </div>
   );

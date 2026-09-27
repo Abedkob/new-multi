@@ -6,6 +6,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { resolveMessage, useT } from "@/lib/i18n/context";
 import { saveDeliverySettingsAction } from "./actions";
 
 export function DeliverySettingsForm({
@@ -14,6 +15,7 @@ export function DeliverySettingsForm({
   defaults: { deliveryFee: string; deliveryNote: string };
 }) {
   const [state, action] = useActionState(saveDeliverySettingsAction, {});
+  const t = useT();
   const values = { ...defaults, ...state.values };
   const feeErrors = state.fieldErrors?.deliveryFee;
   const noteErrors = state.fieldErrors?.deliveryNote;
@@ -22,11 +24,13 @@ export function DeliverySettingsForm({
     <form action={action} className="grid max-w-2xl gap-4">
       <Card>
         <CardHeader>
-          <CardTitle>Delivery across Lebanon</CardTitle>
+          <CardTitle>{t("delivery.form.title")}</CardTitle>
         </CardHeader>
         <CardContent className="grid gap-5">
           <div className="grid gap-1.5">
-            <Label htmlFor="deliveryFee">Delivery fee</Label>
+            <Label htmlFor="deliveryFee">{t("delivery.form.feeLabel")}</Label>
+            {/* Currency affix is intentionally LTR-positioned regardless of locale (see plan's
+                numeric-formatting non-goal). */}
             <div className="relative max-w-xs">
               <span className="pointer-events-none absolute inset-y-0 left-3 flex items-center text-sm text-muted-foreground">
                 $
@@ -43,35 +47,37 @@ export function DeliverySettingsForm({
             </div>
             {!feeErrors?.length && (
               <p id="deliveryFee-help" className="text-xs text-muted-foreground">
-                This fixed fee applies to every order. Enter 0 for free delivery.
+                {t("delivery.form.feeHelp")}
               </p>
             )}
             {feeErrors?.map((message) => (
               <p id="deliveryFee-error" key={message} className="text-sm text-destructive">
-                {message}
+                {resolveMessage(t, message)}
               </p>
             ))}
           </div>
 
           <div className="grid gap-1.5">
-            <Label htmlFor="deliveryNote">Delivery note <span className="font-normal text-muted-foreground">(optional)</span></Label>
+            <Label htmlFor="deliveryNote">
+              {t("delivery.form.noteLabel")} <span className="font-normal text-muted-foreground">{t("common.optional")}</span>
+            </Label>
             <Textarea
               id="deliveryNote"
               name="deliveryNote"
               rows={3}
               defaultValue={values.deliveryNote}
-              placeholder="Usually delivered within 2–4 business days."
+              placeholder={t("delivery.form.notePlaceholder")}
               aria-invalid={!!noteErrors?.length}
               aria-describedby={noteErrors?.length ? "deliveryNote-error" : "deliveryNote-help"}
             />
             {!noteErrors?.length && (
               <p id="deliveryNote-help" className="text-xs text-muted-foreground">
-                Shown to customers in the cart, at checkout, and on their confirmation.
+                {t("delivery.form.noteHelp")}
               </p>
             )}
             {noteErrors?.map((message) => (
               <p id="deliveryNote-error" key={message} className="text-sm text-destructive">
-                {message}
+                {resolveMessage(t, message)}
               </p>
             ))}
           </div>
@@ -79,9 +85,9 @@ export function DeliverySettingsForm({
       </Card>
 
       <div className="flex flex-wrap items-center gap-3 rounded-xl border bg-background px-4 py-3 sm:sticky sm:bottom-3 sm:z-10 sm:-mx-1 sm:bg-background/95 sm:shadow-lg sm:backdrop-blur">
-        <SubmitButton>Save delivery settings</SubmitButton>
-        {state.ok && <p role="status" className="text-sm text-green-700">Delivery settings saved.</p>}
-        {state.error && <p role="alert" className="text-sm text-destructive">{state.error}</p>}
+        <SubmitButton>{t("delivery.form.submit")}</SubmitButton>
+        {state.ok && <p role="status" className="text-sm text-green-700">{t("delivery.form.saved")}</p>}
+        {state.error && <p role="alert" className="text-sm text-destructive">{resolveMessage(t, state.error)}</p>}
       </div>
     </form>
   );

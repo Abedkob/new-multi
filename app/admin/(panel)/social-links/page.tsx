@@ -1,12 +1,14 @@
 import { notFound } from "next/navigation";
 import { PageHeader } from "@/components/admin/page-header";
 import { getTenantById } from "@/lib/data/tenants";
+import { getT } from "@/lib/i18n/locale";
 import { requireOwner } from "@/lib/session";
 import { SOCIAL_LINK_FIELDS, socialLinksFromStore } from "@/lib/social-links";
 import { SocialLinksForm } from "./social-links-form";
 
 export default async function SocialLinksPage() {
   const { tenantId } = await requireOwner();
+  const t = await getT();
   const tenant = await getTenantById(tenantId);
   if (!tenant) notFound();
   const links = socialLinksFromStore(tenant);
@@ -14,8 +16,8 @@ export default async function SocialLinksPage() {
   return (
     <div className="grid gap-4">
       <PageHeader
-        title="Social links"
-        description="Add profiles, WhatsApp contact, and your location to the storefront footer. Every field is optional."
+        title={t("nav.socialLinks")}
+        description={t("socialLinks.page.description")}
       />
       <SocialLinksForm
         defaults={Object.fromEntries(

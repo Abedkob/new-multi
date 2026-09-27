@@ -83,12 +83,14 @@ export function ConfirmSubmitButton({
   title,
   description,
   confirmLabel,
+  cancelLabel,
   destructive = true,
   ...buttonProps
 }: Omit<ButtonProps, "type" | "onClick" | "title"> & {
   title: string;
   description?: React.ReactNode;
   confirmLabel: string;
+  cancelLabel?: string;
   destructive?: boolean;
 }) {
   const [open, setOpen] = useState(false);
@@ -104,6 +106,7 @@ export function ConfirmSubmitButton({
         title={title}
         description={description}
         confirmLabel={confirmLabel}
+        cancelLabel={cancelLabel}
         destructive={destructive}
         onConfirm={() => ref.current?.form?.requestSubmit()}
       />

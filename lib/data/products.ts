@@ -17,8 +17,18 @@ import { variantSetIssues } from "@/lib/variants";
  * alone.
  */
 
-/** A problem the owner can fix; the message is safe to show. */
-export class ProductError extends Error {}
+/**
+ * A problem the owner can fix. `message` stays English (logs/stack traces only); `code` is the
+ * admin i18n dictionary key (or "key|param") shown to the owner — see lib/i18n/dictionaries.
+ */
+export class ProductError extends Error {
+  constructor(
+    message: string,
+    public readonly code: string = message,
+  ) {
+    super(message);
+  }
+}
 
 export type VariantInput = {
   /** An existing variant of this product to update in place (keeps its id). Omit to add one. */
@@ -56,13 +66,14 @@ async function assertCategory(db: TxClient, tenantId: string, categoryId: string
     where: { id: categoryId, tenantId },
     select: { id: true },
   });
-  if (!found) throw new ProductError("That category doesn't exist.");
+  if (!found) throw new ProductError("That category doesn't exist.", "products.error.categoryNotFound");
 }
 
 /** The invariants Prisma can't express: at least one variant, and a coherent attribute set. */
 function assertVariants(variants: VariantInput[]) {
   const issues = variantSetIssues(variants);
-  if (issues.length) throw new ProductError(issues[0].message);
+  // issues[0].message is already an i18n dictionary key ("key" or "key|param"), not English text.
+  if (issues.length) throw new ProductError(issues[0].message, issues[0].message);
 }
 
 // ---- admin ---------------------------------------------------------------------------------
@@ -179,7 +190,10 @@ export async function createProduct(tenantId: string, input: ProductInput) {
       if (!isUniqueViolation(e)) throw e;
     }
   }
-  throw new ProductError("Could not allocate a unique product URL, please retry.");
+  throw new ProductError(
+    "Could not allocate a unique product URL, please retry.",
+    "products.error.slugAllocationFailed",
+  );
 }
 
 /**

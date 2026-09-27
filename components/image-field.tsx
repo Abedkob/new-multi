@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { importImageUrlAction, uploadImageAction } from "@/app/admin/content/actions";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { useT } from "@/lib/i18n/context";
 import { cn } from "@/lib/utils";
 
 const isRemoteLink = (v: string) => /^https?:\/\//i.test(v.trim());
@@ -20,9 +21,9 @@ export function ImageField({
   onChange,
   id,
   name,
-  placeholder = "https://... or upload",
+  placeholder,
   invalid,
-  uploadLabel = "Upload image",
+  uploadLabel,
   className,
   uploadAction = uploadImageAction,
   importAction = importImageUrlAction,
@@ -42,6 +43,11 @@ export function ImageField({
   importAction?: (link: string) => Promise<{ url?: string; error?: string }>;
   "aria-label"?: string;
 }) {
+  // Falls back to English automatically when rendered outside /admin (e.g. the platform admin's
+  // favicon field), since useT() has no <LocaleProvider> to read there.
+  const t = useT();
+  const effectivePlaceholder = placeholder ?? t("imageField.placeholder");
+  const effectiveUploadLabel = uploadLabel ?? t("imageField.uploadLabel");
   const fileInput = useRef<HTMLInputElement>(null);
   const [busy, setBusy] = useState<"upload" | "import" | null>(null);
   const [note, setNote] = useState<{ text: string; error: boolean }>();
@@ -64,24 +70,30 @@ export function ImageField({
     failed.current.delete(url);
     tried.current.add(url);
     setBusy("import");
-    setNote({ text: "Copying image to your storage...", error: false });
+    setNote({ text: t("imageField.importing"), error: false });
     try {
       const res = await importAction(url);
       if (current.current.trim() !== url) return;
       if (res.url) {
         tried.current.add(res.url);
-        setNote(res.url === url ? undefined : { text: "Image copied to your storage.", error: false });
+        setNote(res.url === url ? undefined : { text: t("imageField.imported"), error: false });
         if (res.url !== url) onChange(res.url);
       } else {
         tried.current.delete(url);
         failed.current.add(url);
-        setNote({ text: `${res.error ?? "Couldn't copy this image."} The link will be used as-is.`, error: true });
+        setNote({
+          text: `${res.error ?? t("imageField.importFailedDefault")} ${t("imageField.importFailedSuffix")}`,
+          error: true,
+        });
       }
     } catch {
       tried.current.delete(url);
       failed.current.add(url);
       if (current.current.trim() === url) {
-        setNote({ text: "Couldn't copy this image. The link will be used as-is.", error: true });
+        setNote({
+          text: `${t("imageField.importFailedDefault")} ${t("imageField.importFailedSuffix")}`,
+          error: true,
+        });
       }
     } finally {
       setBusy(null);
@@ -101,10 +113,10 @@ export function ImageField({
         tried.current.add(res.url);
         onChange(res.url);
       } else {
-        setNote({ text: res.error ?? "Upload failed.", error: true });
+        setNote({ text: res.error ?? t("imageField.uploadFailedDefault"), error: true });
       }
     } catch {
-      setNote({ text: "Upload failed. Please try again.", error: true });
+      setNote({ text: t("imageField.uploadFailedRetry"), error: true });
     } finally {
       setBusy(null);
     }
@@ -116,7 +128,7 @@ export function ImageField({
         id={id}
         name={name}
         value={value}
-        placeholder={placeholder}
+        placeholder={effectivePlaceholder}
         aria-invalid={invalid}
         aria-label={aria["aria-label"]}
         onChange={(e) => {
@@ -155,7 +167,7 @@ export function ImageField({
           disabled={busy !== null}
           onClick={() => fileInput.current?.click()}
         >
-          {busy === "upload" ? "Uploading..." : uploadLabel}
+          {busy === "upload" ? t("imageField.uploading") : effectiveUploadLabel}
         </Button>
         {note && (
           <span

@@ -7,6 +7,7 @@ import { SubmitButton } from "@/components/submit-button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { resolveMessage, useT } from "@/lib/i18n/context";
 import { SOCIAL_LINK_FIELDS, type SocialLinkKey } from "@/lib/social-links";
 
 export function SocialLinksForm({
@@ -15,23 +16,28 @@ export function SocialLinksForm({
   defaults: Record<SocialLinkKey, string>;
 }) {
   const [state, action] = useActionState(saveSocialLinksAction, {});
+  const t = useT();
   const values = { ...defaults, ...state.values };
 
   return (
     <form action={action} className="grid max-w-2xl gap-4">
       <Card>
         <CardHeader>
-          <CardTitle>Profiles, contact and location</CardTitle>
+          <CardTitle>{t("socialLinks.form.title")}</CardTitle>
         </CardHeader>
         <CardContent className="grid gap-5">
           {SOCIAL_LINK_FIELDS.map(({ key, platform, label, placeholder }) => {
             const errors = state.fieldErrors?.[key];
             const isWhatsapp = platform === "whatsapp";
+            // Brand names (Instagram/Facebook/TikTok/WhatsApp) stay as-is in any locale; "Visit
+            // us" is the one non-brand label, and lib/social-links.ts is shared with the
+            // storefront footer, so the Arabic override lives here rather than in that constant.
+            const displayLabel = platform === "googleMaps" ? t("socialLinks.visitUs") : label;
             return (
               <div key={key} className="grid gap-1.5">
                 <Label htmlFor={key} className="inline-flex items-center gap-2">
                   <SocialPlatformIcon platform={platform} className="text-muted-foreground" />
-                  {label}
+                  {displayLabel}
                 </Label>
                 <Input
                   id={key}
@@ -45,28 +51,24 @@ export function SocialLinksForm({
                   aria-describedby={errors?.length ? `${key}-error` : undefined}
                 />
                 {isWhatsapp && !errors?.length && (
-                  <p className="text-xs text-muted-foreground">
-                    Lebanese local numbers are accepted. We add the country code when needed.
-                  </p>
+                  <p className="text-xs text-muted-foreground">{t("socialLinks.form.whatsappHelp")}</p>
                 )}
                 {errors?.map((message) => (
                   <p id={`${key}-error`} key={message} className="text-sm text-destructive">
-                    {message}
+                    {resolveMessage(t, message)}
                   </p>
                 ))}
               </div>
             );
           })}
-          <p className="text-sm text-muted-foreground">
-            Leave a field empty to hide it from your storefront footer.
-          </p>
+          <p className="text-sm text-muted-foreground">{t("socialLinks.form.emptyHidesNote")}</p>
         </CardContent>
       </Card>
 
       <div className="flex flex-wrap items-center gap-3 rounded-xl border bg-background px-4 py-3 sm:sticky sm:bottom-3 sm:z-10 sm:-mx-1 sm:bg-background/95 sm:shadow-lg sm:backdrop-blur">
-        <SubmitButton>Save social links</SubmitButton>
-        {state.ok && <p role="status" className="text-sm text-green-700">Social links saved.</p>}
-        {state.error && <p role="alert" className="text-sm text-destructive">{state.error}</p>}
+        <SubmitButton>{t("socialLinks.form.submit")}</SubmitButton>
+        {state.ok && <p role="status" className="text-sm text-green-700">{t("socialLinks.form.saved")}</p>}
+        {state.error && <p role="alert" className="text-sm text-destructive">{resolveMessage(t, state.error)}</p>}
       </div>
     </form>
   );

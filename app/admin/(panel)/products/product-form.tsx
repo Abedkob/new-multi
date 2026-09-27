@@ -10,6 +10,8 @@ import { Button, buttonVariants } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { resolveMessage, useT } from "@/lib/i18n/context";
+import { encodeMessage } from "@/lib/i18n/types";
 import type { ProductFormInput } from "@/lib/validation";
 
 type VariantRow = {
@@ -70,6 +72,7 @@ export function ProductForm({
   defaults?: ProductFormDefaults;
   submitLabel: string;
 }) {
+  const t = useT();
   const [name, setName] = useState(defaults.name);
   const [description, setDescription] = useState(defaults.description);
   const [price, setPrice] = useState(defaults.price);
@@ -150,7 +153,7 @@ export function ProductForm({
   const err = (path: string) =>
     errors[path]?.map((e) => (
       <p key={e} className="text-xs text-destructive">
-        {e}
+        {resolveMessage(t, e)}
       </p>
     ));
 
@@ -158,20 +161,20 @@ export function ProductForm({
     <div className="flex flex-col xl:flex-row gap-8 items-start">
       <div className="grid w-full max-w-3xl gap-6 flex-1">
         <section className="grid gap-5 rounded-xl border bg-card p-6 shadow-xs">
-        <SectionTitle icon={Info} title="Basic details" text="What shoppers see first: the name, photo, price and a short description." />
+        <SectionTitle icon={Info} title={t("products.form.basicDetailsTitle")} text={t("products.form.basicDetailsText")} />
         <div className="grid gap-1.5">
-          <Label htmlFor="name">Name</Label>
+          <Label htmlFor="name">{t("products.form.nameLabel")}</Label>
           <Input id="name" value={name} onChange={(e) => setName(e.target.value)} aria-invalid={!!errors.name} />
           {err("name")}
         </div>
         <div className="grid gap-1.5">
-          <Label htmlFor="description">Description <Optional /></Label>
+          <Label htmlFor="description">{t("products.form.descriptionLabel")} <Optional /></Label>
           <Textarea id="description" rows={4} value={description} onChange={(e) => setDescription(e.target.value)} />
           {err("description")}
         </div>
         <div className="grid gap-4 sm:grid-cols-2">
           <div className="grid gap-1.5">
-            <Label htmlFor="price">Price (USD)</Label>
+            <Label htmlFor="price">{t("products.form.priceLabel")}</Label>
             <Input
               id="price"
               inputMode="decimal"
@@ -180,24 +183,24 @@ export function ProductForm({
               onChange={(e) => setPrice(e.target.value)}
               aria-invalid={!!errors.price}
             />
-            <p className="text-xs text-muted-foreground">Sizes or colours can have their own price further down.</p>
+            <p className="text-xs text-muted-foreground">{t("products.form.priceHelp")}</p>
             {err("price")}
           </div>
           <div className="grid gap-1.5">
-            <Label htmlFor="category">Category <Optional /></Label>
+            <Label htmlFor="category">{t("products.form.categoryLabel")} <Optional /></Label>
             <CategoryPicker id="category" options={categories} value={categoryId} onChange={setCategoryId} />
             {err("categoryId")}
           </div>
         </div>
         <div className="grid gap-1.5">
-          <Label htmlFor="imageUrl">Main photo</Label>
+          <Label htmlFor="imageUrl">{t("products.form.mainPhotoLabel")}</Label>
           <ImageField
             id="imageUrl"
             value={imageUrl}
             onChange={setImageUrl}
             invalid={!!errors.imageUrl}
           />
-          <p className="text-xs text-muted-foreground">Upload a photo, or paste a link to one. Square photos look best.</p>
+          <p className="text-xs text-muted-foreground">{t("products.form.mainPhotoHelp")}</p>
           {err("imageUrl")}
         </div>
         <label className="flex items-start gap-3 rounded-lg border bg-muted/40 p-3 text-sm">
@@ -208,8 +211,8 @@ export function ProductForm({
             className="mt-0.5 size-4 accent-primary"
           />
           <span>
-            <span className="block font-medium">Feature as a best seller</span>
-            <span className="block text-muted-foreground">Shows this product in the Best sellers section of your homepage.</span>
+            <span className="block font-medium">{t("products.form.bestSellerLabel")}</span>
+            <span className="block text-muted-foreground">{t("products.form.bestSellerHelp")}</span>
           </span>
         </label>
       </section>
@@ -218,9 +221,9 @@ export function ProductForm({
         <div>
           <SectionTitle
             icon={Images}
-            title="More photos"
+            title={t("products.form.morePhotosTitle")}
             optional
-            text="Extra photos shoppers can flip through on the product page. The main photo always comes first; use the arrows to change the order."
+            text={t("products.form.morePhotosText")}
           />
           {err("images")}
         </div>
@@ -229,9 +232,9 @@ export function ProductForm({
           <div key={img.key} className="flex items-start gap-2 rounded-lg border bg-muted/30 p-3">
             <div className="grid flex-1 gap-2 sm:grid-cols-2">
               <div className="grid gap-1">
-                <Label className="text-xs">Image</Label>
+                <Label className="text-xs">{t("products.form.imageLabel")}</Label>
                 <ImageField
-                  aria-label={`Gallery image ${i + 1} URL`}
+                  aria-label={resolveMessage(t, encodeMessage("products.form.galleryImageUrlAria", i + 1))}
                   value={img.url}
                   onChange={(url) => patchImage(img.key, { url })}
                   invalid={!!errors[`images.${i}.url`]}
@@ -239,9 +242,9 @@ export function ProductForm({
                 {err(`images.${i}.url`)}
               </div>
               <div className="grid gap-1">
-                <Label className="text-xs">Alt text (optional)</Label>
+                <Label className="text-xs">{t("products.form.altTextLabel")}</Label>
                 <Input
-                  aria-label={`Gallery image ${i + 1} alt text`}
+                  aria-label={resolveMessage(t, encodeMessage("products.form.galleryImageAltAria", i + 1))}
                   value={img.altText}
                   onChange={(e) => patchImage(img.key, { altText: e.target.value })}
                 />
@@ -252,7 +255,7 @@ export function ProductForm({
                 type="button"
                 variant="ghost"
                 size="sm"
-                aria-label={`Move gallery image ${i + 1} up`}
+                aria-label={resolveMessage(t, encodeMessage("products.form.moveImageUpAria", i + 1))}
                 disabled={i === 0}
                 onClick={() => moveImage(img.key, -1)}
               >
@@ -262,7 +265,7 @@ export function ProductForm({
                 type="button"
                 variant="ghost"
                 size="sm"
-                aria-label={`Move gallery image ${i + 1} down`}
+                aria-label={resolveMessage(t, encodeMessage("products.form.moveImageDownAria", i + 1))}
                 disabled={i === images.length - 1}
                 onClick={() => moveImage(img.key, 1)}
               >
@@ -272,7 +275,7 @@ export function ProductForm({
                 type="button"
                 variant="ghost"
                 size="sm"
-                aria-label={`Remove gallery image ${i + 1}`}
+                aria-label={resolveMessage(t, encodeMessage("products.form.removeImageAria", i + 1))}
                 onClick={() => setImages((rows) => rows.filter((r) => r.key !== img.key))}
               >
                 &times;
@@ -283,7 +286,7 @@ export function ProductForm({
 
         <div>
           <Button type="button" variant="outline" size="sm" onClick={addImage}>
-            Add image
+            {t("products.form.addImage")}
           </Button>
         </div>
       </section>
@@ -292,8 +295,8 @@ export function ProductForm({
         <div>
           <SectionTitle
             icon={Boxes}
-            title="Sizes, colours & stock"
-            text="Selling just one version? Only fill in how many you have. Selling sizes or colours? Click “Add variant” for each one and describe it, e.g. size = M, color = Black. Every version needs the same option names."
+            title={t("products.form.variantsTitle")}
+            text={t("products.form.variantsText")}
           />
           {err("variants")}
         </div>
@@ -302,9 +305,9 @@ export function ProductForm({
           <div key={v.key} data-variant-row={i} className="grid gap-3 rounded-lg border bg-muted/30 p-4">
             <div className="flex items-center justify-between">
               <span className="text-sm font-medium">
-                {variants.length === 1 ? "Default variant" : `Variant ${i + 1}`}
+                {variants.length === 1 ? t("products.form.defaultVariant") : resolveMessage(t, encodeMessage("products.form.variantN", i + 1))}
                 {variantSummary(v) && (
-                  <span className="ml-2 font-normal text-muted-foreground">· {variantSummary(v)}</span>
+                  <span className="ms-2 font-normal text-muted-foreground">· {variantSummary(v)}</span>
                 )}
               </span>
               <Button
@@ -314,19 +317,19 @@ export function ProductForm({
                 disabled={variants.length === 1}
                 onClick={() => setVariants((vs) => vs.filter((x) => x.key !== v.key))}
               >
-                Remove
+                {t("products.form.remove")}
               </Button>
             </div>
 
             <div className="grid gap-2">
               <span className="text-xs text-muted-foreground">
-                Options {variants.length === 1 && "(not needed if there's only one version)"}
+                {t("products.form.optionsLabel")} {variants.length === 1 && t("products.form.optionsNotNeeded")}
               </span>
               {v.attrs.map((a, ai) => (
                 <div key={ai} className="flex items-center gap-2">
                   <Input
-                    aria-label={`Variant ${i + 1} attribute name ${ai + 1}`}
-                    placeholder="name, e.g. size"
+                    aria-label={resolveMessage(t, encodeMessage("products.form.attrNameAria", i + 1, ai + 1))}
+                    placeholder={t("products.form.attrNamePlaceholder")}
                     value={a.key}
                     onChange={(e) =>
                       patchVariant(v.key, {
@@ -335,8 +338,8 @@ export function ProductForm({
                     }
                   />
                   <Input
-                    aria-label={`Variant ${i + 1} attribute value ${ai + 1}`}
-                    placeholder="value, e.g. 40"
+                    aria-label={resolveMessage(t, encodeMessage("products.form.attrValueAria", i + 1, ai + 1))}
+                    placeholder={t("products.form.attrValuePlaceholder")}
                     value={a.value}
                     onChange={(e) =>
                       patchVariant(v.key, {
@@ -348,7 +351,7 @@ export function ProductForm({
                     type="button"
                     variant="ghost"
                     size="sm"
-                    aria-label="Remove attribute"
+                    aria-label={t("products.form.removeAttribute")}
                     onClick={() => patchVariant(v.key, { attrs: v.attrs.filter((_, xi) => xi !== ai) })}
                   >
                     &times;
@@ -362,7 +365,7 @@ export function ProductForm({
                   size="sm"
                   onClick={() => patchVariant(v.key, { attrs: [...v.attrs, { key: "", value: "" }] })}
                 >
-                  Add attribute
+                  {t("products.form.addAttribute")}
                 </Button>
               </div>
               {err(`variants.${i}.attributes`)}
@@ -370,9 +373,9 @@ export function ProductForm({
 
             <div className="grid gap-3 sm:grid-cols-3">
               <div className="grid gap-1">
-                <Label className="text-xs">How many in stock</Label>
+                <Label className="text-xs">{t("products.form.stockLabel")}</Label>
                 <Input
-                  aria-label={`Variant ${i + 1} stock`}
+                  aria-label={resolveMessage(t, encodeMessage("products.form.stockAria", i + 1))}
                   inputMode="numeric"
                   value={v.stock}
                   onChange={(e) => patchVariant(v.key, { stock: e.target.value })}
@@ -380,21 +383,21 @@ export function ProductForm({
                 {err(`variants.${i}.stock`)}
               </div>
               <div className="grid gap-1">
-                <Label className="text-xs">Own price <Optional /></Label>
+                <Label className="text-xs">{t("products.form.ownPriceLabel")} <Optional /></Label>
                 <Input
-                  aria-label={`Variant ${i + 1} price override`}
+                  aria-label={resolveMessage(t, encodeMessage("products.form.priceOverrideAria", i + 1))}
                   inputMode="decimal"
-                  placeholder={price ? `Same as main (${price})` : "Same as main price"}
+                  placeholder={price ? resolveMessage(t, encodeMessage("products.form.sameAsMain", price)) : t("products.form.sameAsMainPrice")}
                   value={v.price}
                   onChange={(e) => patchVariant(v.key, { price: e.target.value })}
                 />
                 {err(`variants.${i}.price`)}
               </div>
               <div className="grid gap-1">
-                <Label className="text-xs">Own photo <Optional /></Label>
+                <Label className="text-xs">{t("products.form.ownPhotoLabel")} <Optional /></Label>
                 <ImageField
-                  aria-label={`Variant ${i + 1} image override`}
-                  uploadLabel="Upload"
+                  aria-label={resolveMessage(t, encodeMessage("products.form.imageOverrideAria", i + 1))}
+                  uploadLabel={t("products.form.uploadShort")}
                   value={v.imageUrl}
                   onChange={(url) => patchVariant(v.key, { imageUrl: url })}
                 />
@@ -406,7 +409,7 @@ export function ProductForm({
 
         <div>
           <Button type="button" variant="outline" onClick={addVariant}>
-            Add variant
+            {t("products.form.addVariant")}
           </Button>
         </div>
       </section>
@@ -414,22 +417,22 @@ export function ProductForm({
       {/* Stays in view while scrolling a long form, so saving is always one click away. */}
       <div className="sticky bottom-0 z-10 -mx-1 flex flex-wrap items-center gap-3 rounded-xl border bg-background/95 px-4 py-3 shadow-lg backdrop-blur">
         <Button onClick={submit} disabled={pending}>
-          {pending ? "Saving..." : submitLabel}
+          {pending ? t("products.form.saving") : submitLabel}
         </Button>
         <Link href="/admin/products" className={buttonVariants({ variant: "ghost" })}>
-          Cancel
+          {t("common.cancel")}
         </Link>
         {state.error && (
           <p role="alert" className="text-sm text-destructive">
-            {state.error}
+            {resolveMessage(t, state.error)}
           </p>
         )}
       </div>
       </div>
 
       <div className="w-full xl:w-80 shrink-0 sticky top-6">
-        <h3 className="mb-1 text-sm font-semibold">How it looks in your store</h3>
-        <p className="mb-4 text-xs text-muted-foreground">Updates as you type.</p>
+        <h3 className="mb-1 text-sm font-semibold">{t("products.form.previewHeading")}</h3>
+        <p className="mb-4 text-xs text-muted-foreground">{t("products.form.previewSubtext")}</p>
         <ProductPreviewCard name={name} description={description} price={price} imageUrl={imageUrl} />
       </div>
     </div>
@@ -437,11 +440,12 @@ export function ProductForm({
 }
 
 function ProductPreviewCard({ name, description, price, imageUrl }: { name: string; description: string; price: string; imageUrl: string }) {
+  const t = useT();
   return (
     <div className="rounded-3xl overflow-hidden border border-border shadow-sm bg-background">
       <div className="aspect-[4/3] bg-muted relative overflow-hidden flex items-center justify-center">
         {imageUrl ? (
-          <img src={imageUrl} alt="preview" className="w-full h-full object-cover" />
+          <img src={imageUrl} alt={t("products.form.previewAlt")} className="w-full h-full object-cover" />
         ) : (
           <div className="w-full h-full bg-secondary/50 flex items-center justify-center text-muted-foreground/30 text-6xl">
             {name ? name.charAt(0).toUpperCase() : "P"}
@@ -450,11 +454,13 @@ function ProductPreviewCard({ name, description, price, imageUrl }: { name: stri
       </div>
       <div className="p-5">
         <div className="flex justify-between items-start gap-3 mb-2">
-          <h3 className="text-base font-semibold text-foreground line-clamp-1">{name || "Product Name"}</h3>
+          <h3 className="text-base font-semibold text-foreground line-clamp-1">
+            {name || t("products.form.previewNamePlaceholder")}
+          </h3>
           <span className="font-bold text-foreground shrink-0">${price || "0.00"}</span>
         </div>
         <p className="text-xs text-muted-foreground line-clamp-2 leading-relaxed">
-          {description || "Add a description to see how it looks on the storefront."}
+          {description || t("products.form.previewDescPlaceholder")}
         </p>
       </div>
     </div>
@@ -488,7 +494,8 @@ function SectionTitle({
 }
 
 function Optional() {
-  return <span className="text-xs font-normal text-muted-foreground">(optional)</span>;
+  const t = useT();
+  return <span className="text-xs font-normal text-muted-foreground">{t("common.optional")}</span>;
 }
 
 /** "size: M, color: Black" for a variant's header, once it has filled-in options. */

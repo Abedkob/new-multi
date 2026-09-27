@@ -6,6 +6,7 @@ import { CONTENT_KEY_NAMES, IMAGE_CONTENT_KEYS } from "@/lib/content";
 // bundle. See lib/domain-check.ts's own docstring for the full story.
 import { isValidDomainFormat, normalizeHostname } from "@/lib/domain-format";
 import { INTEGRATION_FORMATS, extractMetaContent, type IntegrationKey } from "@/lib/integrations";
+import { encodeMessage } from "@/lib/i18n/types";
 import { variantSetIssues } from "@/lib/variants";
 
 export const loginSchema = z.object({
@@ -98,13 +99,13 @@ export const changePasswordSchema = z
   .object({
     password: z
       .string()
-      .min(8, "Password must be at least 8 characters")
-      .max(72, "Password must be at most 72 characters"),
+      .min(8, "validation.password.tooShort")
+      .max(72, "validation.password.tooLong"),
     confirm: z.string(),
   })
   .refine((v) => v.password === v.confirm, {
     path: ["confirm"],
-    message: "Passwords do not match",
+    message: "validation.password.mismatch",
   });
 
 /** "12.99" | "12" | "$1,299.5" -> integer cents, or null if invalid. */
@@ -130,10 +131,15 @@ export function isImageUrl(v: string) {
   }
 }
 
+// --- Admin-only schemas below (productFormSchema, variantInputSchema, categorySchema,
+// discountFormSchema, contentSchema, changePasswordSchema) use i18n dictionary keys as their Zod
+// messages (see lib/i18n/dictionaries) instead of English text — every other schema in this file
+// is shared with /login, storefront checkout, or /platform and must stay plain English.
+
 const priceString = z.string().transform((v, ctx) => {
   const cents = parsePriceToCents(v);
   if (cents === null || cents > 100_000_000) {
-    ctx.addIssue({ code: "custom", message: "Enter a price like 19.99" });
+    ctx.addIssue({ code: "custom", message: "validation.price.invalid" });
     return z.NEVER;
   }
   return cents;
@@ -142,14 +148,14 @@ const priceString = z.string().transform((v, ctx) => {
 const stockString = z
   .string()
   .trim()
-  .regex(/^\d{1,9}$/, "Enter a whole number (0 or more)")
+  .regex(/^\d{1,9}$/, "validation.stock.invalid")
   .transform(Number);
 
 const optionalImage = z
   .string()
   .trim()
   .max(2000)
-  .refine(isImageUrl, { message: "Must be an http(s) URL, or empty" })
+  .refine(isImageUrl, { message: "validation.image.mustBeUrl" })
   .transform((v) => (v === "" ? null : v));
 
 /** One attribute row as typed in the form: both sides required, unless the row is left blank. */
@@ -160,7 +166,7 @@ export const variantInputSchema = z.object({
   id: z.string().max(64).optional(),
   attributes: z
     .array(attributeRow)
-    .max(10, "At most 10 attributes")
+    .max(10, "validation.attributes.tooMany")
     .transform((rows, ctx) => {
       const out: Record<string, string> = {};
       const seen = new Set<string>();
@@ -169,15 +175,15 @@ export const variantInputSchema = z.object({
         const value = row.value.trim();
         if (key === "" && value === "") continue; // untouched blank row
         if (key === "" || value === "") {
-          ctx.addIssue({ code: "custom", message: "Each attribute needs a name and a value" });
+          ctx.addIssue({ code: "custom", message: "validation.attributes.needNameAndValue" });
           return z.NEVER;
         }
         if (key.length > 40 || value.length > 80) {
-          ctx.addIssue({ code: "custom", message: "Attribute names/values are too long" });
+          ctx.addIssue({ code: "custom", message: "validation.attributes.tooLong" });
           return z.NEVER;
         }
         if (seen.has(key.toLowerCase())) {
-          ctx.addIssue({ code: "custom", message: `"${key}" is listed twice` });
+          ctx.addIssue({ code: "custom", message: encodeMessage("validation.attributes.duplicate", key) });
           return z.NEVER;
         }
         seen.add(key.toLowerCase());
@@ -194,7 +200,7 @@ export const variantInputSchema = z.object({
       if (v === "") return null;
       const cents = parsePriceToCents(v);
       if (cents === null || cents > 100_000_000) {
-        ctx.addIssue({ code: "custom", message: "Enter a price like 19.99, or leave empty" });
+        ctx.addIssue({ code: "custom", message: "validation.price.invalidOrEmpty" });
         return z.NEVER;
       }
       return cents;
@@ -204,19 +210,19 @@ export const variantInputSchema = z.object({
 
 export const productFormSchema = z
   .object({
-    name: z.string().trim().min(1, "Name is required").max(120),
+    name: z.string().trim().min(1, "validation.name.required").max(120),
     description: z.string().trim().max(5000).default(""),
     price: priceString,
     imageUrl: z
       .string()
       .trim()
       .max(2000)
-      .refine(isImageUrl, { message: "Must be an http(s) URL, or empty" }),
+      .refine(isImageUrl, { message: "validation.image.mustBeUrl" }),
     images: z.array(z.object({
       id: z.string().optional(),
-      url: z.string().trim().max(2000).refine(isImageUrl, { message: "Must be an http(s) URL, or empty" }),
+      url: z.string().trim().max(2000).refine(isImageUrl, { message: "validation.image.mustBeUrl" }),
       altText: z.string().trim().max(100).optional(),
-    })).max(10, "At most 10 images").default([]),
+    })).max(10, "validation.images.tooMany").default([]),
     isBestSeller: z.boolean().default(false),
     /** "" = no category. */
     categoryId: z
@@ -224,7 +230,7 @@ export const productFormSchema = z
       .trim()
       .max(64)
       .transform((v) => (v === "" ? null : v)),
-    variants: z.array(variantInputSchema).max(100, "At most 100 variants"),
+    variants: z.array(variantInputSchema).max(100, "validation.variants.tooMany"),
   })
   .superRefine((product, ctx) => {
     for (const issue of variantSetIssues(
@@ -263,7 +269,7 @@ const optionalIsoDate = z
     if (value === "") return null;
     const date = new Date(value);
     if (Number.isNaN(date.getTime())) {
-      ctx.addIssue({ code: "custom", message: "Enter a valid date and time" });
+      ctx.addIssue({ code: "custom", message: "validation.date.invalid" });
       return z.NEVER;
     }
     return date;
@@ -271,9 +277,9 @@ const optionalIsoDate = z
 
 export const discountFormSchema = z
   .object({
-    name: z.string().trim().min(1, "Name is required").max(120, "At most 120 characters"),
+    name: z.string().trim().min(1, "validation.name.required").max(120, "validation.discount.nameTooLong"),
     type: z.enum(["PERCENTAGE", "FIXED_AMOUNT"]),
-    value: z.string().trim().min(1, "Discount value is required"),
+    value: z.string().trim().min(1, "validation.discount.valueRequired"),
     isEnabled: z.boolean().default(false),
     startsAt: optionalIsoDate,
     endsAt: optionalIsoDate,
@@ -284,7 +290,7 @@ export const discountFormSchema = z
         ctx.addIssue({
           code: "custom",
           path: ["value"],
-          message: "Enter a whole percentage from 1 to 100",
+          message: "validation.discount.percentageRange",
         });
       }
     } else {
@@ -293,7 +299,7 @@ export const discountFormSchema = z
         ctx.addIssue({
           code: "custom",
           path: ["value"],
-          message: "Enter an amount like 5.00",
+          message: "validation.discount.amountInvalid",
         });
       }
     }
@@ -301,7 +307,7 @@ export const discountFormSchema = z
       ctx.addIssue({
         code: "custom",
         path: ["endsAt"],
-        message: "End time must be after the start time",
+        message: "validation.discount.endBeforeStart",
       });
     }
   })
@@ -328,16 +334,16 @@ export const contentSchema = z.object({
     z
       .object({
         key: z.string().refine((k) => CONTENT_KEY_NAMES.includes(k), {
-          message: "Unknown content key",
+          message: "validation.content.unknownKey",
         }),
-        value: z.string().trim().max(2000, "At most 2000 characters"),
+        value: z.string().trim().max(2000, "validation.content.tooLong"),
       })
       .superRefine((entry, ctx) => {
         if (IMAGE_CONTENT_KEYS.includes(entry.key) && !isImageUrl(entry.value)) {
           ctx.addIssue({
             code: "custom",
             path: ["value"],
-            message: "Must be an http(s) URL, a /path, or empty",
+            message: "validation.content.imageInvalid",
           });
         }
       }),
@@ -351,7 +357,7 @@ export type FormState = {
 };
 
 export const categorySchema = z.object({
-  name: z.string().trim().min(1, "Name is required").max(80, "At most 80 characters"),
+  name: z.string().trim().min(1, "validation.name.required").max(80, "validation.category.nameTooLong"),
   // "" (top level) becomes null
   parentId: z
     .string()

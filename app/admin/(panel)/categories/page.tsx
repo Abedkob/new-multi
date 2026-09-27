@@ -16,6 +16,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { listCategoriesPage } from "@/lib/data/categories";
+import { getT } from "@/lib/i18n/locale";
 import { requireOwner } from "@/lib/session";
 import { DeleteCategoryButton } from "./delete-category-button";
 
@@ -23,6 +24,7 @@ const first = (value: string | string[] | undefined) => (Array.isArray(value) ? 
 
 export default async function CategoriesPage({ searchParams }: PageProps<"/admin/categories">) {
   const { tenantId } = await requireOwner();
+  const t = await getT();
   const query = await searchParams;
   const requestedPage = Number.parseInt(first(query.page) ?? "1", 10) || 1;
   const requestedPageSize = Number.parseInt(first(query.perPage) ?? "25", 10) || 25;
@@ -34,42 +36,43 @@ export default async function CategoriesPage({ searchParams }: PageProps<"/admin
 
   const addButton = (
     <Link href="/admin/categories/new" className={buttonVariants()}>
-      <Plus className="size-4" aria-hidden /> New category
+      <Plus className="size-4" aria-hidden /> {t("categories.page.newCategory")}
     </Link>
   );
 
   return (
     <div className="grid gap-4">
       <PageHeader
-        title="Categories"
-        description="Group your products so shoppers can browse, e.g. Men → Shoes. A category shows its own products plus everything inside it."
+        title={t("categories.page.title")}
+        description={t("categories.page.description")}
         actions={addButton}
       />
-      <AdminPageSizeControl page={page} pageSize={pageSize} total={total} noun="categories" />
+      <AdminPageSizeControl page={page} pageSize={pageSize} total={total} noun={t("categories.page.noun")} />
       <Card className="gap-0 overflow-hidden py-0">
         {tree.length === 0 ? (
-          <EmptyState icon={FolderTree} title="No categories yet." action={addButton}>
-            Categories appear in your store&apos;s menu. Create one, then pick it when adding a
-            product.
+          <EmptyState icon={FolderTree} title={t("categories.empty.title")} action={addButton}>
+            {t("categories.empty.body")}
           </EmptyState>
         ) : (
           <Table>
             <TableHeader>
               <TableRow className="bg-muted/50">
-                <TableHead className="pl-4">Category</TableHead>
-                <TableHead>Web address</TableHead>
-                <TableHead className="text-right">Products</TableHead>
-                <TableHead className="pr-4 text-right">
-                  <span className="sr-only">Actions</span>
+                <TableHead className="ps-4">{t("categories.table.category")}</TableHead>
+                <TableHead>{t("categories.table.webAddress")}</TableHead>
+                <TableHead className="text-end">{t("categories.table.products")}</TableHead>
+                <TableHead className="pe-4 text-end">
+                  <span className="sr-only">{t("common.actionsSr")}</span>
                 </TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {tree.map((c) => (
                 <TableRow key={c.id} data-depth={c.depth}>
-                  <TableCell className="pl-4 font-medium">
-                    <span className="flex items-center gap-3" style={{ paddingLeft: `${c.depth * 1.5}rem` }}>
-                      {c.depth > 0 && <CornerDownRight className="size-4 shrink-0 text-muted-foreground" aria-hidden />}
+                  <TableCell className="ps-4 font-medium">
+                    <span className="flex items-center gap-3" style={{ paddingInlineStart: `${c.depth * 1.5}rem` }}>
+                      {c.depth > 0 && (
+                        <CornerDownRight className="size-4 shrink-0 text-muted-foreground rtl:-scale-x-100" aria-hidden />
+                      )}
                       <Thumb src={c.imageUrl} className="size-8" />
                       <span className="min-w-0">
                         <span className="block truncate" data-testid="category-name">{c.name}</span>
@@ -82,14 +85,14 @@ export default async function CategoriesPage({ searchParams }: PageProps<"/admin
                     </span>
                   </TableCell>
                   <TableCell className="font-mono text-xs text-muted-foreground">/category/{c.slug}</TableCell>
-                  <TableCell className="text-right tabular-nums">{c._count.products}</TableCell>
-                  <TableCell className="pr-4">
+                  <TableCell className="text-end tabular-nums">{c._count.products}</TableCell>
+                  <TableCell className="pe-4">
                     <div className="flex items-start justify-end gap-2">
                       <Link
                         href={`/admin/categories/${c.id}/edit`}
                         className={buttonVariants({ variant: "outline", size: "sm" })}
                       >
-                        Edit
+                        {t("common.edit")}
                       </Link>
                       <DeleteCategoryButton id={c.id} name={c.name} />
                     </div>
@@ -105,7 +108,7 @@ export default async function CategoriesPage({ searchParams }: PageProps<"/admin
         page={page}
         pages={pages}
         total={total}
-        noun="categories"
+        noun={t("categories.page.noun")}
         params={pageSize === 25 ? {} : { perPage: String(pageSize) }}
       />
     </div>

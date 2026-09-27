@@ -1,16 +1,17 @@
 import { z } from "zod";
 
+// Admin-only schema: messages are i18n dictionary keys (see lib/i18n/dictionaries), not English text.
 const feeInput = z
   .string()
   .trim()
-  .min(1, "Enter a delivery fee, or 0 for free delivery")
-  .regex(/^\d+(?:\.\d{1,2})?$/, "Enter a valid amount with up to 2 decimal places")
-  .refine((value) => Number(value) <= 9999.99, "Delivery fee must be $9,999.99 or less")
+  .min(1, "validation.delivery.feeRequired")
+  .regex(/^\d+(?:\.\d{1,2})?$/, "validation.delivery.feeInvalid")
+  .refine((value) => Number(value) <= 9999.99, "validation.delivery.feeTooLarge")
   .transform((value) => Math.round(Number(value) * 100));
 
 export const deliverySettingsSchema = z.object({
   deliveryFee: feeInput,
-  deliveryNote: z.string().trim().max(200, "Keep the delivery note under 200 characters"),
+  deliveryNote: z.string().trim().max(200, "validation.delivery.noteTooLong"),
 });
 
 export type DeliverySettings = {

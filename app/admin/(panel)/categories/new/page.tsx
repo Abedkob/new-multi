@@ -1,5 +1,6 @@
 import { flattenCategories } from "@/lib/categories";
 import { listCategories } from "@/lib/data/categories";
+import { getT } from "@/lib/i18n/locale";
 import { requireOwner } from "@/lib/session";
 import { createCategoryAction } from "../actions";
 import { CategoryForm } from "../category-form";
@@ -7,6 +8,7 @@ import { PageHeader } from "@/components/admin/page-header";
 
 export default async function NewCategoryPage() {
   const { tenantId } = await requireOwner();
+  const t = await getT();
   const parents = flattenCategories(await listCategories(tenantId)).map((c) => ({
     id: c.id,
     label: c.name,
@@ -15,11 +17,11 @@ export default async function NewCategoryPage() {
   return (
     <div className="grid">
       <PageHeader
-        title="New category"
-        back={{ href: "/admin/categories", label: "Categories" }}
-        description="Give it a name. Pick a parent to put it inside another category (e.g. Shoes inside Men)."
+        title={t("categories.new.title")}
+        back={{ href: "/admin/categories", label: t("nav.categories") }}
+        description={t("categories.new.description")}
       />
-      <CategoryForm action={createCategoryAction} parents={parents} submitLabel="Create category" />
+      <CategoryForm action={createCategoryAction} parents={parents} submitLabel={t("categories.form.createSubmit")} />
     </div>
   );
 }

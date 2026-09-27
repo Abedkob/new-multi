@@ -2,6 +2,7 @@ import { withTenant, type TxClient } from "@/lib/prisma";
 import { descendantIds } from "@/lib/categories";
 import { normalizeAdminPageSize } from "@/lib/admin-pagination";
 import { isUniqueViolation } from "@/lib/data/tenants";
+import { encodeMessage } from "@/lib/i18n/types";
 import { slugCandidate, slugify } from "@/lib/slug";
 
 /**
@@ -11,8 +12,18 @@ import { slugCandidate, slugify } from "@/lib/slug";
  * layer on top of the database policies.
  */
 
-/** A problem the owner can fix; the message is safe to show. */
-export class CategoryError extends Error {}
+/**
+ * A problem the owner can fix. `message` stays English (logs/scripts); `code` is the admin i18n
+ * dictionary key (or an encodeMessage()-built raw string) shown to the owner.
+ */
+export class CategoryError extends Error {
+  constructor(
+    message: string,
+    public readonly code: string = message,
+  ) {
+    super(message);
+  }
+}
 
 // Runs on a transaction the caller already opened (see loadStorefrontData).
 export function categoriesQuery(db: TxClient, tenantId: string) {
@@ -143,7 +154,7 @@ async function assertParent(db: TxClient, tenantId: string, parentId: string | n
     where: { id: parentId, tenantId },
     select: { id: true },
   });
-  if (!parent) throw new CategoryError("That parent category doesn't exist.");
+  if (!parent) throw new CategoryError("That parent category doesn't exist.", "categories.error.parentNotFound");
 }
 
 export async function createCategory(
@@ -182,7 +193,10 @@ export async function createCategory(
       if (!isUniqueViolation(e)) throw e;
     }
   }
-  throw new CategoryError("Could not allocate a unique category URL, please retry.");
+  throw new CategoryError(
+    "Could not allocate a unique category URL, please retry.",
+    "categories.error.slugAllocationFailed",
+  );
 }
 
 /** The slug stays the same on rename so storefront links keep working. */
@@ -196,7 +210,7 @@ export async function updateCategory(
       where: { tenantId },
       select: { id: true, name: true, slug: true, parentId: true, imageUrl: true },
     });
-    if (!all.some((c) => c.id === id)) throw new CategoryError("Category not found.");
+    if (!all.some((c) => c.id === id)) throw new CategoryError("Category not found.", "categories.error.notFound");
 
     if (input.parentId !== null) {
       await assertParent(db, tenantId, input.parentId);
@@ -204,6 +218,7 @@ export async function updateCategory(
       if (descendantIds(all, id).has(input.parentId)) {
         throw new CategoryError(
           "A category can't be moved inside itself or one of its own subcategories.",
+          "categories.error.cannotMoveIntoSelf",
         );
       }
     }
@@ -212,7 +227,7 @@ export async function updateCategory(
       where: { id, tenantId },
       data: { name: input.name, parentId: input.parentId, imageUrl: input.imageUrl },
     });
-    if (count === 0) throw new CategoryError("Category not found.");
+    if (count === 0) throw new CategoryError("Category not found.", "categories.error.notFound");
   });
 }
 
@@ -220,7 +235,7 @@ export async function updateCategory(
 export async function deleteCategory(tenantId: string, id: string) {
   return withTenant(tenantId, async (db) => {
     const category = await db.category.findFirst({ where: { id, tenantId } });
-    if (!category) throw new CategoryError("Category not found.");
+    if (!category) throw new CategoryError("Category not found.", "categories.error.notFound");
 
     // Sequential, not Promise.all: both run on this one transaction's connection, which can
     // only execute one query at a time.
@@ -229,11 +244,21 @@ export async function deleteCategory(tenantId: string, id: string) {
     if (children > 0) {
       throw new CategoryError(
         `"${category.name}" has ${children} ${children === 1 ? "subcategory" : "subcategories"}. Move or delete ${children === 1 ? "it" : "them"} first.`,
+        encodeMessage(
+          children === 1 ? "categories.error.hasSubcategoryOne" : "categories.error.hasSubcategoriesMany",
+          category.name,
+          children,
+        ),
       );
     }
     if (products > 0) {
       throw new CategoryError(
         `"${category.name}" has ${products} ${products === 1 ? "product" : "products"} assigned. Move ${products === 1 ? "it" : "them"} to another category first.`,
+        encodeMessage(
+          products === 1 ? "categories.error.hasProductOne" : "categories.error.hasProductsMany",
+          category.name,
+          products,
+        ),
       );
     }
     await db.category.deleteMany({ where: { id, tenantId } });

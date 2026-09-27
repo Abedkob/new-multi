@@ -37,10 +37,11 @@ export type SocialLinkKey = (typeof SOCIAL_LINK_FIELDS)[number]["key"];
 export type SocialPlatform = (typeof SOCIAL_LINK_FIELDS)[number]["platform"];
 export type StoreSocialLinks = Record<SocialLinkKey, string | null>;
 
+// Admin-only schema: messages are i18n dictionary keys (see lib/i18n/dictionaries), not English text.
 const optionalPublicUrl = z
   .string()
   .trim()
-  .max(2048, "Use a link shorter than 2,048 characters")
+  .max(2048, "validation.socialLinks.urlTooLong")
   .transform((value) => (value === "" ? null : value))
   .refine((value) => {
     if (value === null) return true;
@@ -50,16 +51,16 @@ const optionalPublicUrl = z
     } catch {
       return false;
     }
-  }, "Enter a full link beginning with https:// or http://");
+  }, "validation.socialLinks.urlInvalid");
 
 const optionalWhatsappNumber = z
   .string()
   .trim()
-  .max(32, "Use a phone number shorter than 32 characters")
+  .max(32, "validation.socialLinks.phoneTooLong")
   .transform((value, context) => {
     if (value === "") return null;
     if (!/^[+\d().\s-]+$/.test(value)) {
-      context.addIssue({ code: "custom", message: "Enter a valid WhatsApp phone number" });
+      context.addIssue({ code: "custom", message: "validation.socialLinks.phoneInvalid" });
       return z.NEVER;
     }
 
@@ -71,7 +72,7 @@ const optionalWhatsappNumber = z
       digits = `961${digits}`;
     }
     if (digits.length < 8 || digits.length > 15) {
-      context.addIssue({ code: "custom", message: "Include a valid number with its country code" });
+      context.addIssue({ code: "custom", message: "validation.socialLinks.phoneNeedsCountryCode" });
       return z.NEVER;
     }
     return digits;

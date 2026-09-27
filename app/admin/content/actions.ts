@@ -40,7 +40,7 @@ export async function saveContentAction(
       if (key) (fieldErrors[key] ??= []).push(issue.message);
     }
     return {
-      error: "Some fields need attention.",
+      error: "validation.someFieldsNeedAttention",
       fieldErrors,
       values: submitted,
     };

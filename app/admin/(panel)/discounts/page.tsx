@@ -8,6 +8,7 @@ import { buttonVariants } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { listDiscountsPage } from "@/lib/data/discounts";
+import { getT } from "@/lib/i18n/locale";
 import { requireOwner } from "@/lib/session";
 import { DiscountCampaignActions } from "./discount-actions";
 import { DiscountScheduleLabel, DiscountStatusBadge, DiscountValueLabel } from "./discount-summary";
@@ -20,6 +21,7 @@ export default async function DiscountsPage({
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
   const { tenantId } = await requireOwner();
+  const t = await getT();
   const query = await searchParams;
   const requested = Number.parseInt(first(query.page) ?? "1", 10) || 1;
   const requestedPageSize = Number.parseInt(first(query.perPage) ?? "25", 10) || 25;
@@ -33,24 +35,24 @@ export default async function DiscountsPage({
   const now = new Date();
   const newButton = (
     <Link href="/admin/discounts/new" className={buttonVariants()}>
-      <Plus className="size-4" aria-hidden /> New discount
+      <Plus className="size-4" aria-hidden /> {t("discounts.page.newDiscount")}
     </Link>
   );
 
   return (
     <div className="grid gap-4">
       <PageHeader
-        title="Discounts"
-        description="Run automatic product discounts. Shoppers always receive the best eligible price."
+        title={t("discounts.page.title")}
+        description={t("discounts.page.description")}
         actions={newButton}
       />
-      <nav aria-label="Discount views" className="flex w-fit rounded-lg border bg-muted/30 p-1">
+      <nav aria-label={t("discounts.page.viewsAriaLabel")} className="flex w-fit rounded-lg border bg-muted/30 p-1">
         <Link
           href={pageSize === 25 ? "/admin/discounts" : `/admin/discounts?perPage=${pageSize}`}
           aria-current={!includeArchived ? "page" : undefined}
           className={buttonVariants({ variant: !includeArchived ? "secondary" : "ghost", size: "sm" })}
         >
-          Current
+          {t("discounts.page.current")}
         </Link>
         <Link
           href={`/admin/discounts?${new URLSearchParams({
@@ -60,14 +62,18 @@ export default async function DiscountsPage({
           aria-current={includeArchived ? "page" : undefined}
           className={buttonVariants({ variant: includeArchived ? "secondary" : "ghost", size: "sm" })}
         >
-          All discounts
+          {t("discounts.page.allDiscounts")}
         </Link>
       </nav>
-      <AdminPageSizeControl page={page} pageSize={pageSize} total={total} noun="discounts" />
+      <AdminPageSizeControl page={page} pageSize={pageSize} total={total} noun={t("discounts.page.noun")} />
       <Card className="gap-0 overflow-hidden py-0">
         {items.length === 0 ? (
-          <EmptyState icon={BadgePercent} title={includeArchived ? "No discounts found." : "No discounts yet."} action={includeArchived ? undefined : newButton}>
-            Create a percentage or fixed-amount discount, then choose which products receive it.
+          <EmptyState
+            icon={BadgePercent}
+            title={includeArchived ? t("discounts.empty.noneFound") : t("discounts.empty.title")}
+            action={includeArchived ? undefined : newButton}
+          >
+            {t("discounts.empty.body")}
           </EmptyState>
         ) : (
           <>
@@ -87,11 +93,11 @@ export default async function DiscountsPage({
                   </div>
                   <dl className="grid grid-cols-2 gap-3 text-sm">
                     <div className="col-span-2">
-                      <dt className="text-xs text-muted-foreground">Schedule</dt>
+                      <dt className="text-xs text-muted-foreground">{t("discounts.table.schedule")}</dt>
                       <dd className="mt-0.5"><DiscountScheduleLabel startsAt={discount.startsAt} endsAt={discount.endsAt} /></dd>
                     </div>
                     <div>
-                      <dt className="text-xs text-muted-foreground">Products</dt>
+                      <dt className="text-xs text-muted-foreground">{t("discounts.table.products")}</dt>
                       <dd className="mt-0.5 tabular-nums">{discount._count.products}</dd>
                     </div>
                   </dl>
@@ -105,17 +111,17 @@ export default async function DiscountsPage({
               <Table>
                 <TableHeader>
                   <TableRow className="bg-muted/50">
-                    <TableHead className="pl-4">Discount</TableHead>
-                    <TableHead>Status</TableHead>
-                    <TableHead>Schedule</TableHead>
-                    <TableHead className="text-right">Products</TableHead>
-                    <TableHead className="pr-4 text-right"><span className="sr-only">Actions</span></TableHead>
+                    <TableHead className="ps-4">{t("discounts.table.discount")}</TableHead>
+                    <TableHead>{t("discounts.table.status")}</TableHead>
+                    <TableHead>{t("discounts.table.schedule")}</TableHead>
+                    <TableHead className="text-end">{t("discounts.table.products")}</TableHead>
+                    <TableHead className="pe-4 text-end"><span className="sr-only">{t("common.actionsSr")}</span></TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {items.map((discount) => (
                   <TableRow key={discount.id}>
-                    <TableCell className="pl-4">
+                    <TableCell className="ps-4">
                       {discount.archivedAt ? <span className="font-medium">{discount.name}</span> : <Link href={`/admin/discounts/${discount.id}/edit`} className="font-medium hover:underline">{discount.name}</Link>}
                       <p className="text-xs text-muted-foreground">
                         <DiscountValueLabel type={discount.type} value={discount.value} />
@@ -125,8 +131,8 @@ export default async function DiscountsPage({
                     <TableCell className="text-sm text-muted-foreground">
                       <DiscountScheduleLabel startsAt={discount.startsAt} endsAt={discount.endsAt} />
                     </TableCell>
-                    <TableCell className="text-right tabular-nums">{discount._count.products}</TableCell>
-                    <TableCell className="pr-4">
+                    <TableCell className="text-end tabular-nums">{discount._count.products}</TableCell>
+                    <TableCell className="pe-4">
                       <DiscountCampaignActions id={discount.id} name={discount.name} archived={discount.archivedAt !== null} />
                     </TableCell>
                   </TableRow>
@@ -142,7 +148,7 @@ export default async function DiscountsPage({
         page={page}
         pages={pages}
         total={total}
-        noun="discounts"
+        noun={t("discounts.page.noun")}
         params={{
           ...(includeArchived ? { archived: "1" } : {}),
           ...(pageSize === 25 ? {} : { perPage: String(pageSize) }),

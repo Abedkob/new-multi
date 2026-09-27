@@ -16,7 +16,11 @@ import {
 } from "@/components/ui/table";
 import { expireStalePendingOrders, listOrdersPage } from "@/lib/data/orders";
 import { formatPrice } from "@/lib/format";
-import { ORDER_STATUSES, STATUS_LABEL, orderRef, orderTotal, type OrderStatusValue } from "@/lib/orders";
+import { resolveMessage } from "@/lib/i18n/context";
+import { getT } from "@/lib/i18n/locale";
+import type { DictionaryKey } from "@/lib/i18n/dictionaries/en";
+import { encodeMessage } from "@/lib/i18n/types";
+import { ORDER_STATUSES, orderRef, orderTotal, type OrderStatusValue } from "@/lib/orders";
 import { requireOwner } from "@/lib/session";
 import { timeAgo } from "@/lib/time-ago";
 import { cn } from "@/lib/utils";
@@ -24,17 +28,25 @@ import { STATUS_DOT, StatusBadge } from "./status-badge";
 
 const first = (v: string | string[] | undefined) => (Array.isArray(v) ? v[0] : v);
 
+const STATUS_LABEL_KEYS: Record<OrderStatusValue, DictionaryKey> = {
+  PENDING: "orders.status.PENDING",
+  CONFIRMED: "orders.status.CONFIRMED",
+  DELIVERED: "orders.status.DELIVERED",
+  CANCELLED: "orders.status.CANCELLED",
+};
+
 // What each tab means, in plain words, shown when it's empty.
-const EMPTY_TEXT: Record<OrderStatusValue | "ALL", string> = {
-  ALL: "When someone buys from your store, the order shows up here.",
-  PENDING: "Nothing waiting. New orders land here until you confirm them.",
-  CONFIRMED: "No confirmed orders on their way right now.",
-  DELIVERED: "Orders you've marked as delivered show up here.",
-  CANCELLED: "No cancelled orders.",
+const EMPTY_TEXT_KEYS: Record<OrderStatusValue | "ALL", DictionaryKey> = {
+  ALL: "orders.empty.all",
+  PENDING: "orders.empty.PENDING",
+  CONFIRMED: "orders.empty.CONFIRMED",
+  DELIVERED: "orders.empty.DELIVERED",
+  CANCELLED: "orders.empty.CANCELLED",
 };
 
 export default async function OrdersPage({ searchParams }: PageProps<"/admin/orders">) {
   const { tenantId } = await requireOwner();
+  const t = await getT();
   const sp = await searchParams;
   const requested = Number.parseInt(first(sp.page) ?? "1", 10) || 1;
   const requestedPageSize = Number.parseInt(first(sp.perPage) ?? "25", 10) || 25;
@@ -58,13 +70,13 @@ export default async function OrdersPage({ searchParams }: PageProps<"/admin/ord
   const tabs: { key: OrderStatusValue | "ALL"; label: string; count: number; href: string }[] = [
     {
       key: "ALL",
-      label: "All",
+      label: t("orders.status.all"),
       count: all,
       href: pageSize === 25 ? "/admin/orders" : `/admin/orders?perPage=${pageSize}`,
     },
     ...ORDER_STATUSES.map((s) => ({
       key: s,
-      label: STATUS_LABEL[s],
+      label: t(STATUS_LABEL_KEYS[s]),
       count: counts[s] ?? 0,
       href: `/admin/orders?${new URLSearchParams({
         status: s,
@@ -77,51 +89,58 @@ export default async function OrdersPage({ searchParams }: PageProps<"/admin/ord
   return (
     <div className="grid gap-4">
       <PageHeader
-        title="Orders"
-        description="Customers pay cash when their order arrives. Call to confirm new orders, then mark them delivered once they've been paid."
+        title={t("orders.page.title")}
+        description={t("orders.page.description")}
       />
 
-      <nav aria-label="Filter orders" className="-mx-1 flex gap-1 overflow-x-auto px-1 pb-1">
-        {tabs.map((t) => (
+      <nav aria-label={t("orders.page.filterAriaLabel")} className="-mx-1 flex gap-1 overflow-x-auto px-1 pb-1">
+        {tabs.map((tab) => (
           <Link
-            key={t.key}
-            href={t.href}
-            aria-current={t.key === current ? "page" : undefined}
+            key={tab.key}
+            href={tab.href}
+            aria-current={tab.key === current ? "page" : undefined}
             className={cn(
               "inline-flex shrink-0 items-center gap-2 rounded-full border px-3 py-1.5 text-sm transition-colors",
-              t.key === current
+              tab.key === current
                 ? "border-primary bg-primary text-primary-foreground"
                 : "bg-background text-muted-foreground hover:text-foreground",
             )}
           >
-            {t.key !== "ALL" && <span className={cn("size-2 rounded-full", STATUS_DOT[t.key])} aria-hidden />}
-            {t.label}
-            <span className="tabular-nums opacity-70">{t.count}</span>
+            {tab.key !== "ALL" && <span className={cn("size-2 rounded-full", STATUS_DOT[tab.key])} aria-hidden />}
+            {tab.label}
+            <span className="tabular-nums opacity-70">{tab.count}</span>
           </Link>
         ))}
       </nav>
 
-      <AdminPageSizeControl page={page} pageSize={pageSize} total={total} noun="orders" />
+      <AdminPageSizeControl page={page} pageSize={pageSize} total={total} noun={t("orders.page.noun")} />
 
       <Card className="gap-0 overflow-hidden py-0">
         {orders.length === 0 ? (
           <EmptyState
             icon={ShoppingBag}
-            title={status ? `No ${tabs.find((t) => t.key === status)!.label.toLowerCase()} orders` : "No orders yet."}
+            title={
+              status
+                ? resolveMessage(
+                    t,
+                    encodeMessage("orders.empty.noStatusOrders", tabs.find((tab) => tab.key === status)!.label.toLowerCase()),
+                  )
+                : t("orders.empty.noOrdersYet")
+            }
           >
-            {EMPTY_TEXT[current]}
+            {t(EMPTY_TEXT_KEYS[current])}
           </EmptyState>
         ) : (
           <Table>
             <TableHeader>
               <TableRow className="bg-muted/50">
-                <TableHead className="pl-4">Order</TableHead>
-                <TableHead>Customer</TableHead>
-                <TableHead className="text-right">Items</TableHead>
-                <TableHead className="text-right">Total</TableHead>
-                <TableHead>Status</TableHead>
-                <TableHead className="pr-4 text-right">
-                  <span className="sr-only">Details</span>
+                <TableHead className="ps-4">{t("orders.table.order")}</TableHead>
+                <TableHead>{t("orders.table.customer")}</TableHead>
+                <TableHead className="text-end">{t("orders.table.items")}</TableHead>
+                <TableHead className="text-end">{t("orders.table.total")}</TableHead>
+                <TableHead>{t("discounts.table.status")}</TableHead>
+                <TableHead className="pe-4 text-end">
+                  <span className="sr-only">{t("orders.table.detailsSr")}</span>
                 </TableHead>
               </TableRow>
             </TableHeader>
@@ -132,29 +151,29 @@ export default async function OrdersPage({ searchParams }: PageProps<"/admin/ord
                   data-testid="order-row"
                   className={cn(o.status === "PENDING" && "bg-amber-50/50 dark:bg-amber-950/20")}
                 >
-                  <TableCell className="pl-4">
+                  <TableCell className="ps-4">
                     <span className="block font-mono text-sm">{orderRef(o.id)}</span>
                     <span
                       className="block text-xs text-muted-foreground"
                       title={o.createdAt.toLocaleString("en-US", { dateStyle: "medium", timeStyle: "short" })}
                     >
-                      {timeAgo(o.createdAt)}
+                      {timeAgo(o.createdAt, t)}
                     </span>
                   </TableCell>
                   <TableCell>
                     {o.customerName}
                     <span className="block text-xs text-muted-foreground">{o.customerPhone}</span>
                   </TableCell>
-                  <TableCell className="text-right tabular-nums">
+                  <TableCell className="text-end tabular-nums">
                     {o.items.reduce((n, i) => n + i.quantity, 0)}
                   </TableCell>
-                  <TableCell className="text-right font-medium tabular-nums">
+                  <TableCell className="text-end font-medium tabular-nums">
                     {formatPrice(orderTotal(o.items, o.deliveryFeeCentsSnapshot))}
                   </TableCell>
                   <TableCell>
                     <StatusBadge status={o.status} />
                   </TableCell>
-                  <TableCell className="pr-4 text-right">
+                  <TableCell className="pe-4 text-end">
                     <Link
                       href={`/admin/orders/${o.id}`}
                       className={buttonVariants({
@@ -162,7 +181,7 @@ export default async function OrdersPage({ searchParams }: PageProps<"/admin/ord
                         size: "sm",
                       })}
                     >
-                      View
+                      {t("orders.table.view")}
                     </Link>
                   </TableCell>
                 </TableRow>
@@ -176,7 +195,7 @@ export default async function OrdersPage({ searchParams }: PageProps<"/admin/ord
         page={page}
         pages={pages}
         total={total}
-        noun="orders"
+        noun={t("orders.page.noun")}
         params={{
           ...(status ? { status } : {}),
           ...(pageSize === 25 ? {} : { perPage: String(pageSize) }),

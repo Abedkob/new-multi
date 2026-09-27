@@ -6,11 +6,26 @@ import { updateOrderStatusAction } from "../actions";
 import { ConfirmDialog } from "@/components/confirm-dialog";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
-import { STATUS_LABEL, nextStatuses, type OrderStatusValue } from "@/lib/orders";
+import { resolveMessage, useT } from "@/lib/i18n/context";
+import type { DictionaryKey } from "@/lib/i18n/dictionaries/en";
+import { nextStatuses, type OrderStatusValue } from "@/lib/orders";
+
+const STATUS_LABEL_KEYS: Record<OrderStatusValue, DictionaryKey> = {
+  PENDING: "orders.status.PENDING",
+  CONFIRMED: "orders.status.CONFIRMED",
+  DELIVERED: "orders.status.DELIVERED",
+  CANCELLED: "orders.status.CANCELLED",
+};
+
+const STATUS_NOTICE_KEYS: Partial<Record<OrderStatusValue, DictionaryKey>> = {
+  DELIVERED: "orders.status.notice.DELIVERED",
+  CANCELLED: "orders.status.notice.CANCELLED",
+};
 
 /** Only offers the statuses this order can actually move to. */
 export function StatusControl({ id, status }: { id: string; status: OrderStatusValue }) {
   const router = useRouter();
+  const t = useT();
   const options = nextStatuses(status);
   const [next, setNext] = useState<OrderStatusValue | "">(options[0] ?? "");
   const [error, setError] = useState<string>();
@@ -29,14 +44,14 @@ export function StatusControl({ id, status }: { id: string; status: OrderStatusV
   if (options.length === 0) {
     return (
       <p className="text-sm text-muted-foreground" data-testid="status-final">
-        This order is {STATUS_LABEL[status].toLowerCase()} and can&apos;t be changed any more.
+        {t(STATUS_NOTICE_KEYS[status] ?? "orders.status.notice.DELIVERED")}
       </p>
     );
   }
 
   return (
     <div className="grid max-w-sm gap-2">
-      <Label htmlFor="next-status">Change status</Label>
+      <Label htmlFor="next-status">{t("orders.status.changeLabel")}</Label>
       <div className="flex gap-2">
         <select
           id="next-status"
@@ -46,7 +61,7 @@ export function StatusControl({ id, status }: { id: string; status: OrderStatusV
         >
           {options.map((s) => (
             <option key={s} value={s}>
-              {STATUS_LABEL[s]}
+              {t(STATUS_LABEL_KEYS[s])}
             </option>
           ))}
         </select>
@@ -60,25 +75,25 @@ export function StatusControl({ id, status }: { id: string; status: OrderStatusV
             else save(next);
           }}
         >
-          {pending ? "Saving..." : "Update status"}
+          {pending ? t("orders.status.saving") : t("orders.status.updateButton")}
         </Button>
       </div>
       {options.includes("CANCELLED") && (
-        <p className="text-xs text-muted-foreground">Cancelling puts the items back into stock.</p>
+        <p className="text-xs text-muted-foreground">{t("orders.status.cancelRestocksNote")}</p>
       )}
       <ConfirmDialog
         open={confirmCancel}
         onOpenChange={setConfirmCancel}
-        title="Cancel this order?"
-        description="The items go back into stock and the order can't be changed afterwards."
-        confirmLabel="Cancel order"
-        cancelLabel="Keep order"
+        title={t("orders.status.cancelConfirmTitle")}
+        description={t("orders.status.cancelConfirmDescription")}
+        confirmLabel={t("orders.status.cancelConfirmLabel")}
+        cancelLabel={t("orders.status.keepOrder")}
         destructive
         onConfirm={() => save("CANCELLED")}
       />
       {error && (
         <p role="alert" className="text-sm text-destructive">
-          {error}
+          {resolveMessage(t, error)}
         </p>
       )}
     </div>

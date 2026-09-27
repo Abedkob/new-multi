@@ -6,8 +6,10 @@ import { Thumb } from "@/components/admin/thumb";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { formatPrice } from "@/lib/format";
+import { resolveMessage, useT } from "@/lib/i18n/context";
+import { encodeMessage } from "@/lib/i18n/types";
 import { cn } from "@/lib/utils";
-import { DiscountPricePreview } from "./discount-summary";
+import { DiscountPricePreview } from "./discount-price-preview";
 
 export type DiscountProductPickerItem = {
   id: string;
@@ -21,7 +23,8 @@ export type DiscountProductPickerItem = {
 
 function SaveSelectionButton() {
   const { pending } = useFormStatus();
-  return <Button type="submit" disabled={pending}>{pending ? "Saving selection…" : "Save product selection"}</Button>;
+  const t = useT();
+  return <Button type="submit" disabled={pending}>{pending ? t("discounts.picker.saving") : t("discounts.picker.saveSelection")}</Button>;
 }
 
 export function DiscountProductPicker({
@@ -33,6 +36,7 @@ export function DiscountProductPicker({
 }) {
   const [selected, setSelected] = useState(() => new Set(items.filter((item) => item.assigned).map((item) => item.id)));
   const selectedCount = selected.size;
+  const t = useT();
 
   const setItem = (id: string, checked: boolean) => {
     setSelected((current) => {
@@ -47,14 +51,14 @@ export function DiscountProductPicker({
     <form action={action} className="grid gap-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <p className="text-sm text-muted-foreground" aria-live="polite">
-          {selectedCount} of {items.length} selected on this page
+          {resolveMessage(t, encodeMessage("discounts.picker.selectedOfTotal", selectedCount, items.length))}
         </p>
         <div className="flex items-center gap-1">
           <Button type="button" size="sm" variant="ghost" onClick={() => setSelected(new Set(items.map((item) => item.id)))}>
-            Select all
+            {t("discounts.picker.selectAll")}
           </Button>
           <Button type="button" size="sm" variant="ghost" onClick={() => setSelected(new Set())}>
-            Clear page
+            {t("discounts.picker.clearPage")}
           </Button>
         </div>
       </div>
@@ -85,7 +89,7 @@ export function DiscountProductPicker({
                   <span className="block truncate font-medium">{item.name}</span>
                   {item.overlappingNames.length > 0 && (
                     <span className="block text-xs text-amber-700 dark:text-amber-400">
-                      Overlaps {item.overlappingNames.join(", ")}; the lowest price wins.
+                      {resolveMessage(t, encodeMessage("discounts.picker.overlaps", item.overlappingNames.join(", ")))}
                     </span>
                   )}
                 </span>
@@ -95,7 +99,7 @@ export function DiscountProductPicker({
                   ) : (
                     <span className="grid justify-items-start gap-0.5 sm:justify-items-end">
                       <span className="font-medium tabular-nums">{formatPrice(item.regularPriceCents)}</span>
-                      <span className="text-xs text-muted-foreground">Select to apply discount</span>
+                      <span className="text-xs text-muted-foreground">{t("discounts.picker.selectToApply")}</span>
                     </span>
                   )}
                 </span>
@@ -107,7 +111,7 @@ export function DiscountProductPicker({
 
       <div className="flex flex-wrap items-center gap-3">
         <SaveSelectionButton />
-        <p className="text-xs text-muted-foreground">Products on other pages stay unchanged.</p>
+        <p className="text-xs text-muted-foreground">{t("discounts.picker.otherPagesUnchanged")}</p>
       </div>
     </form>
   );

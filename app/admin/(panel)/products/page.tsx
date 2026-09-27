@@ -18,6 +18,7 @@ import {
 } from "@/components/ui/table";
 import { listProductsPage } from "@/lib/data/products";
 import { formatPrice } from "@/lib/format";
+import { getT } from "@/lib/i18n/locale";
 import { calculatePrice } from "@/lib/pricing";
 import { requireOwner } from "@/lib/session";
 import { deleteProductAction } from "./actions";
@@ -27,6 +28,7 @@ const first = (v: string | string[] | undefined) => (Array.isArray(v) ? v[0] : v
 
 export default async function ProductsPage({ searchParams }: PageProps<"/admin/products">) {
   const { tenantId } = await requireOwner();
+  const t = await getT();
   const sp = await searchParams;
   const q = (first(sp.q) ?? "").trim().slice(0, 100);
   const requested = Number.parseInt(first(sp.page) ?? "1", 10) || 1;
@@ -41,59 +43,58 @@ export default async function ProductsPage({ searchParams }: PageProps<"/admin/p
 
   const addButton = (
     <Link href="/admin/products/new" className={buttonVariants()}>
-      <Plus className="size-4" aria-hidden /> New product
+      <Plus className="size-4" aria-hidden /> {t("products.page.newProduct")}
     </Link>
   );
 
   return (
     <div className="grid gap-4">
       <PageHeader
-        title="Products"
-        description="Everything you sell. Click a product to change its photos, price or stock."
+        title={t("products.page.title")}
+        description={t("products.page.description")}
         actions={addButton}
       />
 
       {(total > 0 || q) && (
         <form method="get" className="relative max-w-sm" role="search">
           {pageSize !== 25 && <input type="hidden" name="perPage" value={pageSize} />}
-          <Search className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground" aria-hidden />
+          <Search className="pointer-events-none absolute top-1/2 start-3 size-4 -translate-y-1/2 text-muted-foreground" aria-hidden />
           <input
             type="search"
             name="q"
             defaultValue={q}
-            placeholder="Search products by name"
-            aria-label="Search products"
-            className="h-9 w-full rounded-lg border border-input bg-background pr-3 pl-9 text-sm shadow-xs outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50"
+            placeholder={t("products.page.searchPlaceholder")}
+            aria-label={t("products.page.searchAriaLabel")}
+            className="h-9 w-full rounded-lg border border-input bg-background pe-3 ps-9 text-sm shadow-xs outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50"
           />
         </form>
       )}
 
-      <AdminPageSizeControl page={page} pageSize={pageSize} total={total} noun="products" />
+      <AdminPageSizeControl page={page} pageSize={pageSize} total={total} noun={t("products.page.noun")} />
 
       <Card className="gap-0 overflow-hidden py-0">
         {products.length === 0 ? (
           q ? (
-            <EmptyState icon={Search} title={`No products match "${q}"`}>
+            <EmptyState icon={Search} title={`${t("products.page.noMatchPrefix")} "${q}"`}>
               <Link href="/admin/products" className="underline underline-offset-4">
-                Show all products
+                {t("products.page.showAllProducts")}
               </Link>
             </EmptyState>
           ) : (
-            <EmptyState icon={Package} title="No products yet." action={addButton}>
-              Add your first product: a name, a price and a photo is all you need. You can add
-              sizes or colours later.
+            <EmptyState icon={Package} title={t("products.empty.title")} action={addButton}>
+              {t("products.empty.body")}
             </EmptyState>
           )
         ) : (
           <Table>
             <TableHeader>
               <TableRow className="bg-muted/50">
-                <TableHead className="pl-4">Product</TableHead>
-                <TableHead>Category</TableHead>
-                <TableHead className="text-right">Price</TableHead>
-                <TableHead>Stock</TableHead>
-                <TableHead className="pr-4 text-right">
-                  <span className="sr-only">Actions</span>
+                <TableHead className="ps-4">{t("products.table.product")}</TableHead>
+                <TableHead>{t("products.table.category")}</TableHead>
+                <TableHead className="text-end">{t("products.table.price")}</TableHead>
+                <TableHead>{t("products.table.stock")}</TableHead>
+                <TableHead className="pe-4 text-end">
+                  <span className="sr-only">{t("products.table.actionsSr")}</span>
                 </TableHead>
               </TableRow>
             </TableHeader>
@@ -113,52 +114,59 @@ export default async function ProductsPage({ searchParams }: PageProps<"/admin/p
                 const soldOut = p.variants.filter((v) => v.stock <= 0).length;
                 return (
                   <TableRow key={p.id}>
-                    <TableCell className="pl-4">
+                    <TableCell className="ps-4">
                       <Link href={`/admin/products/${p.id}/edit`} className="flex items-center gap-3">
                         <Thumb src={p.imageUrl} />
                         <span className="min-w-0">
                           <span className="block font-medium hover:underline">
                             {p.name}
                             {p.isBestSeller && (
-                              <span className="ml-2 rounded-full bg-violet-50 px-2 py-0.5 text-xs font-medium text-violet-700 ring-1 ring-violet-200 ring-inset dark:bg-violet-950 dark:text-violet-300 dark:ring-violet-900">
-                                Best seller
+                              <span className="ms-2 rounded-full bg-violet-50 px-2 py-0.5 text-xs font-medium text-violet-700 ring-1 ring-violet-200 ring-inset dark:bg-violet-950 dark:text-violet-300 dark:ring-violet-900">
+                                {t("products.badge.bestSeller")}
                               </span>
                             )}
                           </span>
                           <span className="block text-xs text-muted-foreground">
-                            {p.variants.length > 1 ? `${p.variants.length} options` : "No options"}
+                            {p.variants.length > 1
+                              ? `${p.variants.length} ${t("products.variants.options")}`
+                              : t("products.variants.noOptions")}
                           </span>
                         </span>
                       </Link>
                     </TableCell>
                     <TableCell className="text-muted-foreground">{p.category?.name ?? "—"}</TableCell>
-                    <TableCell className="text-right tabular-nums">
+                    <TableCell className="text-end tabular-nums">
                       {onSale && (
-                        <span className="mr-2 text-xs text-muted-foreground line-through">
+                        <span className="me-2 text-xs text-muted-foreground line-through">
                           {formatPrice(minRegular)}
                         </span>
                       )}
                       {formatPrice(min)}
                       {max !== min && <span className="text-muted-foreground"> - {formatPrice(max)}</span>}
-                      {onSale && <span className="ml-2 text-xs font-medium text-destructive">Discounted</span>}
+                      {onSale && (
+                        <span className="ms-2 text-xs font-medium text-destructive">
+                          {t("products.badge.discounted")}
+                        </span>
+                      )}
                     </TableCell>
                     <TableCell>
                       <div className="grid justify-items-start gap-1">
                         <StockBadge stock={totalStock} />
                         {totalStock > 0 && soldOut > 0 && (
                           <span className="text-xs text-muted-foreground">
-                            {soldOut} {soldOut === 1 ? "option" : "options"} sold out
+                            {soldOut} {t(soldOut === 1 ? "products.variants.option" : "products.variants.options")}{" "}
+                            {t("products.stock.soldOut")}
                           </span>
                         )}
                       </div>
                     </TableCell>
-                    <TableCell className="pr-4">
+                    <TableCell className="pe-4">
                       <div className="flex justify-end gap-2">
                         <Link
                           href={`/admin/products/${p.id}/edit`}
                           className={buttonVariants({ variant: "outline", size: "sm" })}
                         >
-                          Edit
+                          {t("common.edit")}
                         </Link>
                         <form action={deleteProductAction.bind(null, p.id)}>
                           <DeleteButton name={p.name} />
@@ -177,7 +185,7 @@ export default async function ProductsPage({ searchParams }: PageProps<"/admin/p
         page={page}
         pages={pages}
         total={total}
-        noun="products"
+        noun={t("products.page.noun")}
         params={{ ...(q ? { q } : {}), ...(pageSize === 25 ? {} : { perPage: String(pageSize) }) }}
       />
     </div>

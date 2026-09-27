@@ -2,7 +2,18 @@ import type { DiscountType } from "@/generated/prisma/client";
 import { normalizeAdminPageSize } from "@/lib/admin-pagination";
 import { withTenant } from "@/lib/prisma";
 
-export class DiscountError extends Error {}
+/**
+ * A problem the owner can fix. `message` stays English (logs); `code` is the admin i18n
+ * dictionary key shown to the owner.
+ */
+export class DiscountError extends Error {
+  constructor(
+    message: string,
+    public readonly code: string = message,
+  ) {
+    super(message);
+  }
+}
 
 export type DiscountInput = {
   name: string;
@@ -14,15 +25,15 @@ export type DiscountInput = {
 };
 
 function assertDiscount(input: DiscountInput) {
-  if (!input.name.trim()) throw new DiscountError("Name is required.");
+  if (!input.name.trim()) throw new DiscountError("Name is required.", "validation.name.required");
   if (!Number.isInteger(input.value) || input.value < 1) {
-    throw new DiscountError("Enter a valid discount value.");
+    throw new DiscountError("Enter a valid discount value.", "discounts.error.invalidValue");
   }
   if (input.type === "PERCENTAGE" && input.value > 100) {
-    throw new DiscountError("Percentage discounts cannot exceed 100%.");
+    throw new DiscountError("Percentage discounts cannot exceed 100%.", "discounts.error.percentageOver100");
   }
   if (input.endsAt && input.startsAt && input.endsAt <= input.startsAt) {
-    throw new DiscountError("End time must be after the start time.");
+    throw new DiscountError("End time must be after the start time.", "discounts.error.endBeforeStart");
   }
 }
 
@@ -171,9 +182,12 @@ export async function setDiscountAssignmentsForProducts(
         select: { id: true },
       }),
     ]);
-    if (!discount) throw new DiscountError("Discount not found.");
+    if (!discount) throw new DiscountError("Discount not found.", "discounts.error.notFound");
     if (ownedProducts.length !== visible.length) {
-      throw new DiscountError("One or more products are no longer available.");
+      throw new DiscountError(
+        "One or more products are no longer available.",
+        "discounts.error.productsUnavailable",
+      );
     }
     await db.discountProduct.deleteMany({
       where: { tenantId, discountId, productId: { in: visible.filter((id) => !selected.includes(id)) } },

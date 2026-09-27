@@ -26,7 +26,7 @@ export async function saveSocialLinksAction(
 
   if (!parsed.success) {
     return {
-      error: "Check the highlighted links and try again.",
+      error: "socialLinks.error.checkHighlighted",
       fieldErrors: parsed.error.flatten().fieldErrors,
       values: submitted,
     };

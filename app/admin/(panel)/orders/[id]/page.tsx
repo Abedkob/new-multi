@@ -13,6 +13,10 @@ import {
 } from "@/components/ui/table";
 import { getOrder } from "@/lib/data/orders";
 import { formatPrice } from "@/lib/format";
+import { resolveMessage } from "@/lib/i18n/context";
+import { getT } from "@/lib/i18n/locale";
+import type { DictionaryKey } from "@/lib/i18n/dictionaries/en";
+import { encodeMessage } from "@/lib/i18n/types";
 import { orderRef, orderSubtotal, orderTotal, type OrderStatusValue } from "@/lib/orders";
 import { requireOwner } from "@/lib/session";
 import { cn } from "@/lib/utils";
@@ -31,21 +35,22 @@ function asSafeUrl(text: string) {
 }
 
 // What the owner should do next, in plain words, for each status.
-const NEXT_STEP: Record<OrderStatusValue, string> = {
-  PENDING: "Call or message the customer to confirm the order and the delivery address, then mark it Confirmed.",
-  CONFIRMED: "Deliver the order and collect the cash, then mark it Delivered.",
-  DELIVERED: "All done: this order was delivered and paid.",
-  CANCELLED: "This order was cancelled and its items went back into stock.",
+const NEXT_STEP_KEYS: Record<OrderStatusValue, DictionaryKey> = {
+  PENDING: "orders.detail.nextStep.PENDING",
+  CONFIRMED: "orders.detail.nextStep.CONFIRMED",
+  DELIVERED: "orders.detail.nextStep.DELIVERED",
+  CANCELLED: "orders.detail.nextStep.CANCELLED",
 };
 
-const STEPS: { status: OrderStatusValue; label: string }[] = [
-  { status: "PENDING", label: "Placed" },
-  { status: "CONFIRMED", label: "Confirmed" },
-  { status: "DELIVERED", label: "Delivered" },
+const STEPS: { status: OrderStatusValue; label: DictionaryKey }[] = [
+  { status: "PENDING", label: "orders.detail.steps.placed" },
+  { status: "CONFIRMED", label: "orders.status.CONFIRMED" },
+  { status: "DELIVERED", label: "orders.status.DELIVERED" },
 ];
 
 export default async function OrderDetailPage({ params }: PageProps<"/admin/orders/[id]">) {
   const { tenantId } = await requireOwner();
+  const t = await getT();
   const { id } = await params;
 
   // Scoped by tenantId: another store's order id is simply "not found".
@@ -59,14 +64,22 @@ export default async function OrderDetailPage({ params }: PageProps<"/admin/orde
   return (
     <div className="grid gap-6">
       <PageHeader
-        back={{ href: "/admin/orders", label: "All orders" }}
+        back={{ href: "/admin/orders", label: t("orders.detail.backLabel") }}
         title={
           <span className="flex flex-wrap items-center gap-3">
-            <span data-testid="order-title">Order {orderRef(order.id)}</span>
+            <span data-testid="order-title">
+              {t("orders.detail.orderRefPrefix")} {orderRef(order.id)}
+            </span>
             <StatusBadge status={order.status} />
           </span>
         }
-        description={`Placed ${order.createdAt.toLocaleString("en-US", { dateStyle: "long", timeStyle: "short" })}`}
+        description={resolveMessage(
+          t,
+          encodeMessage(
+            "orders.detail.placedOn",
+            order.createdAt.toLocaleString("en-US", { dateStyle: "long", timeStyle: "short" }),
+          ),
+        )}
       />
 
       {/* Progress: Placed -> Confirmed -> Delivered (or a cancelled note). */}
@@ -77,7 +90,7 @@ export default async function OrderDetailPage({ params }: PageProps<"/admin/orde
               <span className="grid size-8 place-items-center rounded-full bg-muted text-muted-foreground">
                 <X className="size-4" aria-hidden />
               </span>
-              <span className="font-medium">Cancelled</span>
+              <span className="font-medium">{t("orders.detail.cancelled")}</span>
             </div>
           ) : (
             <ol className="flex items-center">
@@ -94,7 +107,7 @@ export default async function OrderDetailPage({ params }: PageProps<"/admin/orde
                       >
                         {done ? <Check className="size-4" aria-hidden /> : i + 1}
                       </span>
-                      <span className={cn("text-sm", done ? "font-medium" : "text-muted-foreground")}>{s.label}</span>
+                      <span className={cn("text-sm", done ? "font-medium" : "text-muted-foreground")}>{t(s.label)}</span>
                     </span>
                     {i < STEPS.length - 1 && (
                       <span className={cn("mx-3 h-0.5 flex-1 rounded", i < reached ? "bg-emerald-500" : "bg-muted")} />
@@ -106,8 +119,8 @@ export default async function OrderDetailPage({ params }: PageProps<"/admin/orde
           )}
           <div className="grid gap-4 rounded-lg bg-muted/60 p-4">
             <p className="text-sm">
-              <span className="font-medium">Next step: </span>
-              {NEXT_STEP[order.status]}
+              <span className="font-medium">{t("orders.detail.nextStepLabel")} </span>
+              {t(NEXT_STEP_KEYS[order.status])}
             </p>
             <StatusControl id={order.id} status={order.status} />
           </div>
@@ -117,7 +130,7 @@ export default async function OrderDetailPage({ params }: PageProps<"/admin/orde
       <div className="grid gap-6 lg:grid-cols-5">
         <Card className="lg:col-span-2">
           <CardHeader>
-            <CardTitle>Customer</CardTitle>
+            <CardTitle>{t("orders.detail.customerTitle")}</CardTitle>
           </CardHeader>
           <CardContent className="grid gap-4">
             <div>
@@ -128,36 +141,36 @@ export default async function OrderDetailPage({ params }: PageProps<"/admin/orde
             </div>
             <div className="flex flex-wrap gap-2">
               <a href={`tel:${phoneDigits}`} className={buttonVariants({ variant: "outline", size: "sm" })}>
-                <Phone className="size-4" aria-hidden /> Call
+                <Phone className="size-4" aria-hidden /> {t("orders.detail.call")}
               </a>
               <a
                 href={`https://wa.me/${phoneDigits.replace(/^\+/, "")}`}
                 target="_blank"
                 rel="noopener noreferrer"
-                title="Works when the number includes the country code"
+                title={t("orders.detail.whatsappTitle")}
                 className={buttonVariants({ variant: "outline", size: "sm" })}
               >
-                <MessageCircle className="size-4" aria-hidden /> WhatsApp
+                <MessageCircle className="size-4" aria-hidden /> {t("orders.detail.whatsapp")}
               </a>
               {mapUrl && (
                 <a href={mapUrl} target="_blank" rel="noopener noreferrer" className={buttonVariants({ variant: "outline", size: "sm" })}>
-                  <MapPin className="size-4" aria-hidden /> Open map
+                  <MapPin className="size-4" aria-hidden /> {t("orders.detail.openMap")}
                 </a>
               )}
             </div>
             <dl className="grid gap-3 text-sm">
               <div>
-                <dt className="text-muted-foreground">Address</dt>
+                <dt className="text-muted-foreground">{t("orders.detail.address")}</dt>
                 <dd className="whitespace-pre-line">{order.customerAddress}</dd>
               </div>
               <div>
-                <dt className="text-muted-foreground">Delivery location</dt>
+                <dt className="text-muted-foreground">{t("orders.detail.deliveryLocation")}</dt>
                 {/* A map link opens from the "Open map" button above. */}
                 <dd className="break-words">{order.deliveryLocation}</dd>
               </div>
               {order.notes && (
                 <div>
-                  <dt className="text-muted-foreground">Order notes</dt>
+                  <dt className="text-muted-foreground">{t("orders.detail.notes")}</dt>
                   <dd className="rounded-md bg-amber-50 px-3 py-2 whitespace-pre-line text-amber-900 dark:bg-amber-950 dark:text-amber-200">
                     {order.notes}
                   </dd>
@@ -169,15 +182,15 @@ export default async function OrderDetailPage({ params }: PageProps<"/admin/orde
 
         <Card className="gap-0 overflow-hidden pb-0 lg:col-span-3">
           <CardHeader className="pb-4">
-            <CardTitle>Items</CardTitle>
+            <CardTitle>{t("orders.detail.itemsTitle")}</CardTitle>
           </CardHeader>
           <Table>
             <TableHeader>
               <TableRow className="bg-muted/50">
-                <TableHead className="pl-6">Product</TableHead>
-                <TableHead className="text-right">Price</TableHead>
-                <TableHead className="text-right">Qty</TableHead>
-                <TableHead className="pr-6 text-right">Total</TableHead>
+                <TableHead className="ps-6">{t("products.table.product")}</TableHead>
+                <TableHead className="text-end">{t("products.table.price")}</TableHead>
+                <TableHead className="text-end">{t("orders.detail.table.qty")}</TableHead>
+                <TableHead className="pe-6 text-end">{t("orders.detail.table.total")}</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -185,11 +198,11 @@ export default async function OrderDetailPage({ params }: PageProps<"/admin/orde
                 const label = variantLabel(parseAttributes(i.variantAttributesSnapshot), "");
                 return (
                   <TableRow key={i.id}>
-                    <TableCell className="pl-6">
+                    <TableCell className="ps-6">
                       <span className="font-medium">{i.productNameSnapshot}</span>
                       {label && <span className="block text-xs text-muted-foreground">{label}</span>}
                     </TableCell>
-                    <TableCell className="text-right tabular-nums">
+                    <TableCell className="text-end tabular-nums">
                       {i.discountCentsSnapshot > 0 && (
                         <span className="block text-xs text-muted-foreground line-through">
                           {formatPrice(i.regularPriceCentsSnapshot)}
@@ -200,34 +213,34 @@ export default async function OrderDetailPage({ params }: PageProps<"/admin/orde
                         <span className="block text-xs text-destructive">{i.discountNameSnapshot}</span>
                       )}
                     </TableCell>
-                    <TableCell className="text-right tabular-nums">{i.quantity}</TableCell>
-                    <TableCell className="pr-6 text-right tabular-nums">
+                    <TableCell className="text-end tabular-nums">{i.quantity}</TableCell>
+                    <TableCell className="pe-6 text-end tabular-nums">
                       {formatPrice(i.priceCentsSnapshot * i.quantity)}
                     </TableCell>
                   </TableRow>
                 );
               })}
               <TableRow className="bg-muted/50 hover:bg-muted/50">
-                <TableCell colSpan={3} className="pl-6 text-right">
-                  Subtotal
+                <TableCell colSpan={3} className="ps-6 text-end">
+                  {t("orders.detail.subtotal")}
                 </TableCell>
-                <TableCell className="pr-6 text-right tabular-nums">
+                <TableCell className="pe-6 text-end tabular-nums">
                   {formatPrice(orderSubtotal(order.items))}
                 </TableCell>
               </TableRow>
               <TableRow className="bg-muted/50 hover:bg-muted/50">
-                <TableCell colSpan={3} className="pl-6 text-right">
-                  Delivery
+                <TableCell colSpan={3} className="ps-6 text-end">
+                  {t("orders.detail.delivery")}
                 </TableCell>
-                <TableCell className="pr-6 text-right tabular-nums">
-                  {order.deliveryFeeCentsSnapshot === 0 ? "Free" : formatPrice(order.deliveryFeeCentsSnapshot)}
+                <TableCell className="pe-6 text-end tabular-nums">
+                  {order.deliveryFeeCentsSnapshot === 0 ? t("orders.detail.free") : formatPrice(order.deliveryFeeCentsSnapshot)}
                 </TableCell>
               </TableRow>
               <TableRow className="bg-muted/50 hover:bg-muted/50">
-                <TableCell colSpan={3} className="pl-6 text-right font-semibold">
-                  Total to collect (cash on delivery)
+                <TableCell colSpan={3} className="ps-6 text-end font-semibold">
+                  {t("orders.detail.totalToCollect")}
                 </TableCell>
-                <TableCell className="pr-6 text-right text-base font-semibold tabular-nums" data-testid="order-total">
+                <TableCell className="pe-6 text-end text-base font-semibold tabular-nums" data-testid="order-total">
                   {formatPrice(orderTotal(order.items, order.deliveryFeeCentsSnapshot))}
                 </TableCell>
               </TableRow>

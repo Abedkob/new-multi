@@ -5,6 +5,9 @@ import { AdminPagination } from "@/components/admin-pagination";
 import { PageHeader } from "@/components/admin/page-header";
 import { buttonVariants } from "@/components/ui/button";
 import { getDiscount, listDiscountProductsPage } from "@/lib/data/discounts";
+import { resolveMessage } from "@/lib/i18n/context";
+import { getT } from "@/lib/i18n/locale";
+import { encodeMessage } from "@/lib/i18n/types";
 import { applyDiscount, discountSchedulesOverlap } from "@/lib/pricing";
 import { requireOwner } from "@/lib/session";
 import { updateDiscountAction, updateDiscountProductsAction } from "../../actions";
@@ -22,6 +25,7 @@ export default async function EditDiscountPage({
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
   const { tenantId } = await requireOwner();
+  const t = await getT();
   const { id } = await params;
   const query = await searchParams;
   const section = first(query.section) === "products" ? "products" : "details";
@@ -73,37 +77,39 @@ export default async function EditDiscountPage({
             <DiscountStatusBadge discount={discount} at={now} />
           </span>
         )}
-        back={{ href: "/admin/discounts", label: "Discounts" }}
-        description="Manage how this discount works and which products receive it."
+        back={{ href: "/admin/discounts", label: t("nav.discounts") }}
+        description={t("discounts.edit.description")}
       >
         <div className="mt-2 flex flex-wrap gap-x-5 gap-y-1 text-xs text-muted-foreground">
           <span><DiscountValueLabel type={discount.type} value={discount.value} /></span>
           <span><DiscountScheduleLabel startsAt={discount.startsAt} endsAt={discount.endsAt} /></span>
-          <span>{discount._count.products} {discount._count.products === 1 ? "product" : "products"}</span>
+          <span>
+            {discount._count.products} {t(discount._count.products === 1 ? "discounts.product" : "discounts.products")}
+          </span>
         </div>
       </PageHeader>
 
-      <nav aria-label="Discount editor sections" className="flex w-fit rounded-lg border bg-muted/30 p-1">
+      <nav aria-label={t("discounts.edit.sectionsAriaLabel")} className="flex w-fit rounded-lg border bg-muted/30 p-1">
         <Link
           href={detailsHref}
           aria-current={section === "details" ? "page" : undefined}
           className={buttonVariants({ variant: section === "details" ? "secondary" : "ghost", size: "sm" })}
         >
-          Details
+          {t("discounts.edit.detailsTab")}
         </Link>
         <Link
           href={productsHref}
           aria-current={section === "products" ? "page" : undefined}
           className={buttonVariants({ variant: section === "products" ? "secondary" : "ghost", size: "sm" })}
         >
-          Products ({discount._count.products})
+          {resolveMessage(t, encodeMessage("discounts.edit.productsTab", discount._count.products))}
         </Link>
       </nav>
 
       {section === "details" ? (
         <DiscountForm
           action={updateDiscountAction.bind(null, discount.id)}
-          submitLabel="Save changes"
+          submitLabel={t("common.saveChanges")}
           defaults={{
             name: discount.name,
             type: discount.type,
@@ -116,21 +122,32 @@ export default async function EditDiscountPage({
       ) : products ? (
         <section aria-labelledby="discount-products" className="grid gap-4">
           <div>
-            <h2 id="discount-products" className="text-xl font-semibold tracking-tight">Choose products</h2>
-            <p className="mt-1 text-sm text-muted-foreground">Selections on other pages stay unchanged until you visit and save those pages.</p>
+            <h2 id="discount-products" className="text-xl font-semibold tracking-tight">{t("discounts.products.chooseHeading")}</h2>
+            <p className="mt-1 text-sm text-muted-foreground">{t("discounts.products.otherPagesNote")}</p>
           </div>
           <form method="get" className="relative max-w-sm" role="search">
             <input type="hidden" name="section" value="products" />
-            <Search className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground" aria-hidden />
-            <input name="q" type="search" defaultValue={q} placeholder="Search products" aria-label="Search products" className="h-9 w-full rounded-lg border border-input bg-background pr-3 pl-9 text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50" />
+            <Search className="pointer-events-none absolute top-1/2 start-3 size-4 -translate-y-1/2 text-muted-foreground" aria-hidden />
+            <input
+              name="q"
+              type="search"
+              defaultValue={q}
+              placeholder={t("products.page.searchPlaceholder")}
+              aria-label={t("products.page.searchAriaLabel")}
+              className="h-9 w-full rounded-lg border border-input bg-background pe-3 ps-9 text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50"
+            />
           </form>
 
-          {first(query.assignmentError) === "1" && <p role="alert" className="text-sm text-destructive">The product selection could not be saved. Refresh and try again.</p>}
+          {first(query.assignmentError) === "1" && (
+            <p role="alert" className="text-sm text-destructive">{t("discounts.products.assignmentError")}</p>
+          )}
 
           {products.items.length === 0 ? (
             <div className="grid justify-items-center gap-2 rounded-xl border px-6 py-12 text-center">
-              <p className="font-medium">No products match this search.</p>
-              <Link href={productsHref} className="text-sm underline underline-offset-4">Show all products</Link>
+              <p className="font-medium">{t("discounts.products.noMatch")}</p>
+              <Link href={productsHref} className="text-sm underline underline-offset-4">
+                {t("products.page.showAllProducts")}
+              </Link>
             </div>
           ) : (
             <DiscountProductPicker
@@ -144,7 +161,7 @@ export default async function EditDiscountPage({
             page={products.page}
             pages={products.pages}
             total={products.total}
-            noun="products"
+            noun={t("products.page.noun")}
             params={{ section: "products", ...(q ? { q } : {}) }}
           />
         </section>

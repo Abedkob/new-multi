@@ -29,6 +29,7 @@ export default async function ContentPage() {
     fields: CONTENT_KEYS.filter((k) => k.section === s.id).map((k) => ({
       key: k.key,
       label: k.label,
+      labelSuffix: "labelSuffix" in k ? k.labelSuffix : undefined,
       kind: k.kind,
       value: stored.get(k.key) ?? "",
       placeholder: k.default,

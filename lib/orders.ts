@@ -3,13 +3,6 @@
 export const ORDER_STATUSES = ["PENDING", "CONFIRMED", "DELIVERED", "CANCELLED"] as const;
 export type OrderStatusValue = (typeof ORDER_STATUSES)[number];
 
-export const STATUS_LABEL: Record<OrderStatusValue, string> = {
-  PENDING: "Pending",
-  CONFIRMED: "Confirmed",
-  DELIVERED: "Delivered",
-  CANCELLED: "Cancelled",
-};
-
 /**
  * Pending -> Confirmed -> Delivered, and Cancelled from Pending or Confirmed. Delivered and
  * Cancelled are both final: cancelling restores stock, which is wrong once the goods have left

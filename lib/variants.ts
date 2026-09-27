@@ -1,3 +1,5 @@
+import { encodeMessage } from "@/lib/i18n/types";
+
 /**
  * Pure variant logic shared by the admin form, the data layer and the storefront picker.
  *
@@ -73,9 +75,12 @@ export function attributeOptions(variants: VariantDraft[]): { key: string; value
 export function variantSetIssues(
   variants: VariantDraft[],
 ): { index: number | null; message: string }[] {
+  // Messages here are admin i18n dictionary keys (see lib/i18n/dictionaries), not English text —
+  // this function is only ever reached from the admin product form's validation path.
+  // "key|param" encodes an interpolated message, resolved by lib/i18n/context.tsx's resolveMessage.
   const issues: { index: number | null; message: string }[] = [];
   if (variants.length === 0) {
-    return [{ index: null, message: "A product needs at least one variant." }];
+    return [{ index: null, message: "products.variant.needAtLeastOne" }];
   }
   if (variants.length === 1) return issues;
 
@@ -85,14 +90,14 @@ export function variantSetIssues(
     if (Object.keys(v.attributes).length === 0) {
       issues.push({
         index: i,
-        message: "With several variants, each one needs at least one attribute (like size).",
+        message: "products.variant.needAttribute",
       });
       return;
     }
     if (keySignature(v.attributes) !== first) {
       issues.push({
         index: i,
-        message: "Every variant must use the same attribute names as the first one.",
+        message: "products.variant.sameAttributeNames",
       });
     }
     const sig = attributeSignature(v.attributes);
@@ -100,7 +105,7 @@ export function variantSetIssues(
     if (dup !== undefined) {
       issues.push({
         index: i,
-        message: `Same attributes as variant ${dup + 1}. Each variant must be different.`,
+        message: encodeMessage("products.variant.duplicateOf", dup + 1),
       });
     } else {
       seen.set(sig, i);

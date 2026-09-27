@@ -23,7 +23,7 @@ export async function saveDeliverySettingsAction(
 
   if (!parsed.success) {
     return {
-      error: "Check the highlighted delivery settings and try again.",
+      error: "delivery.error.checkHighlighted",
       fieldErrors: parsed.error.flatten().fieldErrors,
       values: submitted,
     };

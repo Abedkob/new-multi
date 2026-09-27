@@ -1,6 +1,7 @@
 import { notFound } from "next/navigation";
 import { descendantIds, flattenCategories } from "@/lib/categories";
 import { getCategory, listCategories } from "@/lib/data/categories";
+import { getT } from "@/lib/i18n/locale";
 import { requireOwner } from "@/lib/session";
 import { updateCategoryAction } from "../../actions";
 import { CategoryForm } from "../../category-form";
@@ -10,6 +11,7 @@ export default async function EditCategoryPage({
   params,
 }: PageProps<"/admin/categories/[id]/edit">) {
   const { tenantId } = await requireOwner();
+  const t = await getT();
   const { id } = await params;
 
   // Scoped by tenantId: another store's category id is simply "not found".
@@ -27,14 +29,14 @@ export default async function EditCategoryPage({
   return (
     <div className="grid">
       <PageHeader
-        title="Edit category"
-        back={{ href: "/admin/categories", label: "Categories" }}
-        description="Changes show in your store straight away."
+        title={t("categories.edit.title")}
+        back={{ href: "/admin/categories", label: t("nav.categories") }}
+        description={t("categories.edit.description")}
       />
       <CategoryForm
         action={updateCategoryAction.bind(null, category.id)}
         parents={parents}
-        submitLabel="Save changes"
+        submitLabel={t("common.saveChanges")}
         defaults={{ name: category.name, parentId: category.parentId ?? "", imageUrl: category.imageUrl ?? "" }}
       />
     </div>

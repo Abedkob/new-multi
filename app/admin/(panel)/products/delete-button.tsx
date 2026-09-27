@@ -2,19 +2,22 @@
 
 import { useFormStatus } from "react-dom";
 import { ConfirmSubmitButton } from "@/components/confirm-dialog";
+import { useT } from "@/lib/i18n/context";
 
 export function DeleteButton({ name }: { name: string }) {
   const { pending } = useFormStatus();
+  const t = useT();
   return (
     <ConfirmSubmitButton
       variant="destructive"
       size="sm"
       disabled={pending}
-      title={`Delete "${name}"?`}
-      description="It disappears from your store straight away. Past orders keep their details. This can't be undone."
-      confirmLabel="Delete product"
+      title={`${t("common.delete")} "${name}"?`}
+      description={t("products.delete.description")}
+      confirmLabel={t("products.delete.confirmLabel")}
+      cancelLabel={t("common.cancel")}
     >
-      {pending ? "Deleting..." : "Delete"}
+      {pending ? t("products.delete.deleting") : t("common.delete")}
     </ConfirmSubmitButton>
   );
 }

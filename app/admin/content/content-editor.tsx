@@ -10,13 +10,17 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { resolveMessage, useT } from "@/lib/i18n/context";
+import type { DictionaryKey } from "@/lib/i18n/dictionaries/en";
+import { encodeMessage } from "@/lib/i18n/types";
 import type { ContentKind } from "@/lib/content";
 import type { OptionalSection, SectionVisibility } from "@/lib/sections";
 import { cn } from "@/lib/utils";
 
 export type ContentField = {
   key: string;
-  label: string;
+  label: DictionaryKey;
+  labelSuffix?: number;
   kind: ContentKind;
   value: string;
   placeholder: string;
@@ -24,16 +28,16 @@ export type ContentField = {
 
 export type ContentSectionView = {
   id: string;
-  title: string;
-  description: string;
+  title: DictionaryKey;
+  description: DictionaryKey;
   optional?: OptionalSection;
   fields: ContentField[];
 };
 
 const DEVICES = [
-  { id: "desktop", label: "Desktop", width: "100%" },
-  { id: "tablet", label: "Tablet", width: "820px" },
-  { id: "mobile", label: "Mobile", width: "390px" },
+  { id: "desktop", label: "content.editor.device.desktop" satisfies DictionaryKey, width: "100%" },
+  { id: "tablet", label: "content.editor.device.tablet" satisfies DictionaryKey, width: "820px" },
+  { id: "mobile", label: "content.editor.device.mobile" satisfies DictionaryKey, width: "390px" },
 ] as const;
 
 const same = (a: Record<string, string>, b: Record<string, string>) =>
@@ -65,6 +69,7 @@ export function ContentEditor({
   const [errors, setErrors] = useState<Record<string, string[] | undefined>>({});
   const [message, setMessage] = useState<{ text: string; error: boolean }>();
   const [pending, startTransition] = useTransition();
+  const t = useT();
 
   const dirty =
     !same(values, saved) ||
@@ -127,10 +132,10 @@ export function ContentEditor({
         setValues(res.values);
         setSavedVisibility(visibility);
         setErrors({});
-        setMessage({ text: "Saved. Your storefront is updated.", error: false });
+        setMessage({ text: t("content.editor.saved"), error: false });
       } else {
         setErrors(res.fieldErrors ?? {});
-        setMessage({ text: res.error ?? "Could not save.", error: true });
+        setMessage({ text: res.error ? resolveMessage(t, res.error) : t("content.editor.couldNotSave"), error: true });
         // Open the first section that has a problem.
         const bad = sections.find((s) => s.fields.some((f) => res.fieldErrors?.[f.key]));
         if (bad) setOpenId(bad.id);
@@ -144,24 +149,27 @@ export function ContentEditor({
     <div className="flex h-screen flex-col bg-muted/40">
       <header className="flex flex-wrap items-center gap-x-4 gap-y-2 border-b bg-background px-4 py-2.5">
         <Link href="/admin" className="text-sm text-muted-foreground hover:text-foreground">
-          &larr; Dashboard
+          <span aria-hidden className="inline-block rtl:-scale-x-100">
+            &larr;
+          </span>{" "}
+          {t("content.editor.dashboardLink")}
         </Link>
         <h1 className="font-semibold">{storeName}</h1>
-        <span className="text-sm text-muted-foreground">Content</span>
+        <span className="text-sm text-muted-foreground">{t("content.editor.label")}</span>
         <nav className="flex gap-3 text-sm">
           <Link href="/admin/products" className="text-muted-foreground hover:text-foreground">
-            Products
+            {t("nav.products")}
           </Link>
           <Link href="/admin/categories" className="text-muted-foreground hover:text-foreground">
-            Categories
+            {t("nav.categories")}
           </Link>
           <Link href="/admin/orders" className="text-muted-foreground hover:text-foreground">
-            Orders
+            {t("nav.orders")}
           </Link>
         </nav>
-        <div className="ml-auto flex items-center gap-3">
+        <div className="ms-auto flex items-center gap-3">
           {dirty && !pending && (
-            <span className="text-sm text-amber-600 dark:text-amber-400">Unsaved changes</span>
+            <span className="text-sm text-amber-600 dark:text-amber-400">{t("content.editor.unsavedChanges")}</span>
           )}
           {message && (
             <span
@@ -180,21 +188,17 @@ export function ContentEditor({
             rel="noopener noreferrer"
             className="text-sm underline underline-offset-4"
           >
-            View live storefront
+            {t("content.editor.viewLiveStorefront")}
           </a>
           <Button onClick={save} disabled={!dirty || pending}>
-            {pending ? "Saving..." : "Save content"}
+            {pending ? t("content.editor.saving") : t("content.editor.saveContent")}
           </Button>
         </div>
       </header>
 
       <div className="flex min-h-0 flex-1">
-        <aside className="w-[26rem] shrink-0 overflow-y-auto border-r bg-background">
-          <p className="border-b p-4 text-xs text-muted-foreground">
-            Edit any section, even while it is switched off. Changes appear in the preview
-            straight away; press Save to publish them. Leave a field empty to use its default
-            (shown as the placeholder).
-          </p>
+        <aside className="w-[26rem] shrink-0 overflow-y-auto border-e bg-background">
+          <p className="border-b p-4 text-xs text-muted-foreground">{t("content.editor.sidebarIntro")}</p>
           {sections.map((s, i) => {
             const open = openId === s.id;
             const sectionHasError = s.fields.some((f) => errors[f.key]?.length);
@@ -210,7 +214,7 @@ export function ContentEditor({
                     type="button"
                     aria-expanded={open}
                     onClick={() => (open ? setOpenId(null) : openSection(s.id))}
-                    className="flex flex-1 items-center gap-2 text-left text-sm font-medium"
+                    className="flex flex-1 items-center gap-2 text-start text-sm font-medium"
                   >
                     <span
                       aria-hidden
@@ -219,16 +223,16 @@ export function ContentEditor({
                       &#9654;
                     </span>
                     <span>
-                      {i + 1}. {s.title}
+                      {i + 1}. {t(s.title)}
                     </span>
                     {sectionHasError && (
-                      <span className="size-2 rounded-full bg-destructive" title="Needs attention" />
+                      <span className="size-2 rounded-full bg-destructive" title={t("content.editor.needsAttention")} />
                     )}
                   </button>
                   {s.optional && (
                     <SectionToggle
                       section={s.optional}
-                      title={s.title}
+                      title={t(s.title)}
                       checked={visibility[s.optional]}
                       onCheckedChange={(next) =>
                         setVisibility((v) => ({ ...v, [s.optional!]: next }))
@@ -239,7 +243,7 @@ export function ContentEditor({
 
                 {/* Kept in the DOM when closed so nothing is lost; just not displayed. */}
                 <div className={cn("grid gap-3.5 px-4 pb-5", !open && "hidden")}>
-                  <p className="text-xs text-muted-foreground">{s.description}</p>
+                  <p className="text-xs text-muted-foreground">{t(s.description)}</p>
                   {s.fields.map((f) => {
                     const id = `content:${f.key}`;
                     const fieldErrors = errors[f.key];
@@ -256,7 +260,8 @@ export function ContentEditor({
                     return (
                       <div key={f.key} className="grid gap-1">
                         <Label htmlFor={id} className="text-xs">
-                          {f.label}
+                          {t(f.label)}
+                          {f.labelSuffix !== undefined ? ` ${f.labelSuffix}` : ""}
                         </Label>
                         {f.kind === "textarea" ? (
                           <Textarea rows={3} {...common} />
@@ -277,7 +282,7 @@ export function ContentEditor({
                         )}
                         {fieldErrors?.map((e) => (
                           <p key={e} className="text-xs text-destructive">
-                            {e}
+                            {resolveMessage(t, e)}
                           </p>
                         ))}
                       </div>
@@ -291,25 +296,23 @@ export function ContentEditor({
 
         <main className="flex min-w-0 flex-1 flex-col">
           <div className="flex flex-wrap items-center gap-3 border-b bg-background px-4 py-2">
-            <span className="text-sm font-medium">Live preview</span>
+            <span className="text-sm font-medium">{t("content.editor.livePreview")}</span>
             <Segmented
               className="w-56"
               value={view}
               onChange={(v) => setView(v as "home" | "product")}
               options={[
-                { id: "home", label: "Homepage" },
-                { id: "product", label: "Product page" },
+                { id: "home", label: t("content.editor.homepage") },
+                { id: "product", label: t("content.editor.productPage") },
               ]}
             />
             <Segmented
               className="w-56"
               value={device}
               onChange={(v) => setDevice(v as (typeof DEVICES)[number]["id"])}
-              options={DEVICES.map((d) => ({ id: d.id, label: d.label }))}
+              options={DEVICES.map((d) => ({ id: d.id, label: t(d.label) }))}
             />
-            <span className="text-xs text-muted-foreground">
-              Template and colors are set by your platform admin.
-            </span>
+            <span className="text-xs text-muted-foreground">{t("content.editor.templateColorsNote")}</span>
           </div>
           <div className="flex min-h-0 flex-1 justify-center overflow-auto p-4">
             <div
@@ -319,7 +322,7 @@ export function ContentEditor({
               <iframe
                 ref={iframeRef}
                 src="/admin/preview"
-                title={`Live preview of ${storeName}`}
+                title={resolveMessage(t, encodeMessage("content.editor.livePreviewOf", storeName))}
                 className="h-full w-full border-0"
                 onLoad={sendState}
               />

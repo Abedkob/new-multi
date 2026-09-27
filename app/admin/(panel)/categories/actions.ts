@@ -32,7 +32,7 @@ export async function createCategoryAction(
   try {
     await createCategory(tenantId, parsed.data);
   } catch (e) {
-    if (e instanceof CategoryError) return { error: e.message, values: raw };
+    if (e instanceof CategoryError) return { error: e.code, values: raw };
     throw e;
   }
   redirect("/admin/categories");
@@ -51,7 +51,7 @@ export async function updateCategoryAction(
   try {
     await updateCategory(tenantId, id, parsed.data);
   } catch (e) {
-    if (e instanceof CategoryError) return { error: e.message, values: raw };
+    if (e instanceof CategoryError) return { error: e.code, values: raw };
     throw e;
   }
   redirect("/admin/categories");
@@ -67,7 +67,7 @@ export async function deleteCategoryAction(
   try {
     await deleteCategory(tenantId, id);
   } catch (e) {
-    if (e instanceof CategoryError) return { error: e.message };
+    if (e instanceof CategoryError) return { error: e.code };
     throw e;
   }
   redirect("/admin/categories");

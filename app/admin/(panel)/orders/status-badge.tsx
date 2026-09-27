@@ -1,4 +1,5 @@
-import { STATUS_LABEL, type OrderStatusValue } from "@/lib/orders";
+import { getT } from "@/lib/i18n/locale";
+import type { OrderStatusValue } from "@/lib/orders";
 import { cn } from "@/lib/utils";
 
 // One colour per step, used everywhere an order status appears: amber = needs you,
@@ -17,7 +18,8 @@ export const STATUS_DOT: Record<OrderStatusValue, string> = {
   CANCELLED: "bg-muted-foreground/50",
 };
 
-export function StatusBadge({ status }: { status: OrderStatusValue }) {
+export async function StatusBadge({ status }: { status: OrderStatusValue }) {
+  const t = await getT();
   return (
     <span
       data-testid="order-status"
@@ -27,7 +29,7 @@ export function StatusBadge({ status }: { status: OrderStatusValue }) {
       )}
     >
       <span className={cn("size-1.5 rounded-full", STATUS_DOT[status])} aria-hidden />
-      {STATUS_LABEL[status]}
+      {t(`orders.status.${status}`)}
     </span>
   );
 }

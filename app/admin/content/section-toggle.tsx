@@ -1,6 +1,8 @@
 "use client";
 
 import { Switch } from "@/components/ui/switch";
+import { resolveMessage, useT } from "@/lib/i18n/context";
+import { encodeMessage } from "@/lib/i18n/types";
 import type { OptionalSection } from "@/lib/sections";
 
 /**
@@ -18,16 +20,17 @@ export function SectionToggle({
   checked: boolean;
   onCheckedChange: (next: boolean) => void;
 }) {
+  const t = useT();
   return (
     <div className="flex items-center gap-2 text-xs">
       <Switch
         size="sm"
         checked={checked}
-        aria-label={`Show ${title} on your storefront`}
+        aria-label={resolveMessage(t, encodeMessage("content.editor.showOnStorefront", title))}
         data-testid={`toggle-${section}`}
         onCheckedChange={onCheckedChange}
       />
-      <span className="text-muted-foreground">{checked ? "Shown" : "Hidden"}</span>
+      <span className="text-muted-foreground">{checked ? t("content.editor.shown") : t("content.editor.hidden")}</span>
     </div>
   );
 }

@@ -2,6 +2,7 @@ import { notFound } from "next/navigation";
 import { flattenCategories } from "@/lib/categories";
 import { listCategories } from "@/lib/data/categories";
 import { getProduct } from "@/lib/data/products";
+import { getT } from "@/lib/i18n/locale";
 import { requireOwner } from "@/lib/session";
 import { parseAttributes } from "@/lib/variants";
 import { updateProductAction } from "../../actions";
@@ -12,6 +13,7 @@ export default async function EditProductPage({
   params,
 }: PageProps<"/admin/products/[id]/edit">) {
   const { tenantId } = await requireOwner();
+  const t = await getT();
   const { id } = await params;
 
   // Scoped by tenantId: another store's product id is simply "not found".
@@ -28,14 +30,14 @@ export default async function EditProductPage({
   return (
     <div className="grid">
       <PageHeader
-        title="Edit product"
-        back={{ href: "/admin/products", label: "Products" }}
-        description="Changes show in your store as soon as you save."
+        title={t("products.edit.title")}
+        back={{ href: "/admin/products", label: t("nav.products") }}
+        description={t("products.edit.description")}
       />
       <ProductForm
         action={updateProductAction.bind(null, product.id)}
         categories={categories}
-        submitLabel="Save changes"
+        submitLabel={t("common.saveChanges")}
         defaults={{
           name: product.name,
           description: product.description,

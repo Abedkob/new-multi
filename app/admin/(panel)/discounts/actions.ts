@@ -36,13 +36,13 @@ export async function createDiscountAction(
   const { tenantId } = await requireOwner();
   const parsed = discountFormSchema.safeParse(input);
   if (!parsed.success) {
-    return { error: "Some fields need attention.", fieldErrors: flatten(parsed.error) };
+    return { error: "validation.someFieldsNeedAttention", fieldErrors: flatten(parsed.error) };
   }
   try {
     const discount = await createDiscount(tenantId, parsed.data);
     redirect(`/admin/discounts/${discount.id}/edit?section=products`);
   } catch (error) {
-    if (error instanceof DiscountError) return { error: error.message };
+    if (error instanceof DiscountError) return { error: error.code };
     throw error;
   }
 }
@@ -54,12 +54,12 @@ export async function updateDiscountAction(
   const { tenantId } = await requireOwner();
   const parsed = discountFormSchema.safeParse(input);
   if (!parsed.success) {
-    return { error: "Some fields need attention.", fieldErrors: flatten(parsed.error) };
+    return { error: "validation.someFieldsNeedAttention", fieldErrors: flatten(parsed.error) };
   }
   try {
     if (!(await updateDiscount(tenantId, id, parsed.data))) notFound();
   } catch (error) {
-    if (error instanceof DiscountError) return { error: error.message };
+    if (error instanceof DiscountError) return { error: error.code };
     throw error;
   }
   redirect("/admin/discounts");
