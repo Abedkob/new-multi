@@ -5,9 +5,8 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import { resolveMessage } from "@/lib/i18n/context";
 import { getT } from "@/lib/i18n/locale";
-import { encodeMessage } from "@/lib/i18n/types";
+import { encodeMessage, resolveMessage } from "@/lib/i18n/types";
 import { requireOwner } from "@/lib/session";
 import { ChangePasswordForm } from "./change-password-form";
 

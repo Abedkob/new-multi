@@ -13,10 +13,9 @@ import {
 } from "@/components/ui/table";
 import { getOrder } from "@/lib/data/orders";
 import { formatPrice } from "@/lib/format";
-import { resolveMessage } from "@/lib/i18n/context";
 import { getT } from "@/lib/i18n/locale";
 import type { DictionaryKey } from "@/lib/i18n/dictionaries/en";
-import { encodeMessage } from "@/lib/i18n/types";
+import { encodeMessage, resolveMessage } from "@/lib/i18n/types";
 import { orderRef, orderSubtotal, orderTotal, type OrderStatusValue } from "@/lib/orders";
 import { requireOwner } from "@/lib/session";
 import { cn } from "@/lib/utils";

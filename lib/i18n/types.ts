@@ -17,3 +17,14 @@ export const MSG_SEP = "\u0001";
 export function encodeMessage(key: DictionaryKey, ...params: (string | number)[]): string {
   return [key, ...params].join(MSG_SEP);
 }
+
+/**
+ * Resolves a plain key or an encodeMessage()-built raw string, filling in {0}, {1}...
+ * Lives here (not context.tsx, which is "use client") so Server Components can call it directly
+ * — a "use client" module's exports can only be rendered as JSX or passed as props from a Server
+ * Component, never invoked as a plain function.
+ */
+export function resolveMessage(t: (key: DictionaryKey) => string, raw: string): string {
+  const [key, ...params] = raw.split(MSG_SEP);
+  return params.reduce((s, p, i) => s.replaceAll(`{${i}}`, p), t(key as DictionaryKey));
+}

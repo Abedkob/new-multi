@@ -3,7 +3,13 @@
 import { createContext, useContext, useMemo, useState, type ReactNode } from "react";
 import { en, type DictionaryKey } from "./dictionaries/en";
 import { ar } from "./dictionaries/ar";
-import { MSG_SEP, type Locale } from "./types";
+import type { Locale } from "./types";
+
+// Re-exported so existing client-file imports (`from "@/lib/i18n/context"`) keep working
+// unchanged. Server Components must import it from "@/lib/i18n/types" instead — this module is
+// "use client", so a Server Component may only pass its exports as props/JSX, never call them
+// directly (that's the "Attempted to call resolveMessage() from the server" runtime error).
+export { resolveMessage } from "./types";
 
 const DICTIONARIES = { en, ar } as const;
 
@@ -54,10 +60,4 @@ export function useT() {
 export function useLocale() {
   const { locale, setLocale } = useLocaleContext();
   return { locale, setLocale };
-}
-
-/** Resolves a plain key or an encodeMessage()-built raw string, filling in {0}, {1}... */
-export function resolveMessage(t: (key: DictionaryKey) => string, raw: string): string {
-  const [key, ...params] = raw.split(MSG_SEP);
-  return params.reduce((s, p, i) => s.replaceAll(`{${i}}`, p), t(key as DictionaryKey));
 }
