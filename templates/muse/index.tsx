@@ -773,7 +773,7 @@ export const museTemplate: Template = {
   ProductGrid,
   filterLayout: "sidebar",
   pageStyle,
-  homeSectionOrder: ["hero", "brandStory", "featuredCategories", "newArrivals", "promoBanner", "bestSellers", "reviews"],
+  homeSectionOrder: ["hero", "brandStory", "featuredCategories", "newArrivals", "promoBanner", "bestSellers", "reviews", "faqSection"],
   Announcement,
   Navbar,
   Hero,

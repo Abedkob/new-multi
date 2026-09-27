@@ -499,7 +499,7 @@ export const pearlTemplate: Template = {
   pageStyle,
   // New arrivals right after the hero (before the category mosaic), matching the reference
   // department-store layout this template is built from.
-  homeSectionOrder: ["hero", "newArrivals", "featuredCategories", "bestSellers", "promoBanner", "brandStory", "reviews"],
+  homeSectionOrder: ["hero", "newArrivals", "featuredCategories", "bestSellers", "promoBanner", "brandStory", "reviews", "faqSection"],
   Announcement,
   Navbar,
   Hero,
