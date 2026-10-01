@@ -2,7 +2,7 @@ import Link from "next/link";
 import { ArrowDown, ArrowUpRight } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { CartLink } from "../nav-client";
-import { AddToCart, ProductPrice, ProductProvider, StockStatus, VariantPicker } from "../product-client";
+import { AddToCart, ProductPrice, ProductProvider, ProductShare, StockStatus, VariantPicker } from "../product-client";
 import { HeroPicture, Picture, StoreBrand, StoreMenuButton, cardPrice, productHref, sectionHref, shopHref, storeHref } from "../shared";
 import { StoreFAQ } from "../store-faq";
 import { StoreFooter } from "../store-footer";
@@ -41,7 +41,7 @@ const Navbar: SectionComponent = ({ data }) => (
         <StoreMenuButton data={data} />
         <StoreBrand store={data.store} content={data.content} className="truncate text-2xl font-semibold tracking-tight" logoClassName="h-9" />
       </div>
-      <nav aria-label="Main navigation" className="hidden items-center gap-8 lg:flex">
+      <nav aria-label="Main navigation" className="whitespace-nowrap hidden items-center gap-8 lg:flex">
         <Link href={shopHref(data.store)} className="py-3 text-sm">{data.content["navbar.shopLabel"]}</Link>
         {data.categoryTiles.slice(0, 3).map((category) => <Link key={category.id} href={category.href} className="py-3 text-sm">{category.label}</Link>)}
       </nav>
@@ -166,7 +166,7 @@ const ProductPage: Template["ProductPage"] = ({ data, product, related }) => (
         <PrismGallery />
         <div className={styles.purchase}>
           <h1 className={styles.title}>{product.name}</h1><div className="mt-6 text-2xl"><ProductPrice /></div>
-          <PurchaseControls><VariantPicker look="kinetic" labelClassName="mb-3 block text-sm font-semibold" /><StockStatus look="dot" /><AddToCart look="kinetic" basePath={data.store.basePath} /></PurchaseControls>
+          <PurchaseControls><VariantPicker look="kinetic" labelClassName="mb-3 block text-sm font-semibold" /><StockStatus look="dot" /><AddToCart look="kinetic" basePath={data.store.basePath}><ProductShare look="kinetic" store={data.store} socialLinks={data.socialLinks} /></AddToCart></PurchaseControls>
           {product.description && <div className="mt-10 border-t border-border pt-8"><h2 className="font-semibold">{data.content["product.descriptionHeading"]}</h2><p className="mt-4 whitespace-pre-line leading-relaxed text-muted-foreground">{product.description}</p></div>}
         </div>
       </div>

@@ -5,6 +5,7 @@ import { cn } from "@/lib/utils";
 import { CartLink } from "../nav-client";
 import {
   AddToCart,
+  ProductShare,
   ProductGallery,
   ProductImage,
   ProductPrice,
@@ -108,7 +109,7 @@ const Navbar: SectionComponent = ({ data }) => {
           <StoreMenuButton data={data} className="-ml-2 lg:hidden" />
           <StoreBrand store={store} content={content} className="truncate text-xl font-semibold tracking-[-0.045em] sm:text-2xl" logoClassName="h-9" />
         </div>
-        <nav aria-label="Main navigation" className="hidden items-center gap-8 lg:flex">
+        <nav aria-label="Main navigation" className="whitespace-nowrap hidden items-center gap-8 lg:flex">
           <Link href={shopHref(store)} className="text-sm transition-opacity hover:opacity-55">{content["navbar.shopLabel"]}</Link>
           {categoryTiles.slice(0, 4).map((category) => (
             <Link key={category.id} href={category.href} className="text-sm transition-opacity hover:opacity-55">{category.label}</Link>
@@ -398,7 +399,9 @@ const ProductPage: Template["ProductPage"] = ({ data, product, related }) => {
             <div className="mt-9 grid gap-7">
               <VariantPicker look="kinetic" labelClassName="mb-3 block text-sm font-semibold" />
               <StockStatus look="dot" />
-              <AddToCart look="kinetic" basePath={store.basePath} />
+              <AddToCart look="kinetic" basePath={store.basePath}>
+                <ProductShare look="kinetic" store={store} socialLinks={data.socialLinks} />
+              </AddToCart>
             </div>
             {product.description && <div className="mt-10"><h2 className="text-sm font-semibold">{content["product.descriptionHeading"]}</h2><p className="mt-4 whitespace-pre-line leading-relaxed text-muted-foreground">{product.description}</p></div>}
           </div>

@@ -608,6 +608,10 @@ export const en = {
   "content.field.product.selectOptions": "Prompt before options are chosen",
   "content.field.product.unavailable": "Unavailable combination message",
   "content.field.product.viewLabel": "View-product link text",
+  "content.field.product.share": "Share button",
+  "content.field.product.linkCopied": "Message after copying the product link",
+  "content.field.product.whatsapp": "WhatsApp button",
+  "content.field.product.whatsappMessage": "WhatsApp message opening line",
 } satisfies Record<string, string>;
 
 export type DictionaryKey = keyof typeof en;

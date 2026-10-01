@@ -19,7 +19,7 @@ import {
   storeHref,
 } from "../shared";
 import { CartLink, SearchBox } from "../nav-client";
-import { AddToCart, ProductGallery, ProductImage, ProductPrice, ProductProvider, StockStatus, VariantPicker } from "../product-client";
+import { AddToCart, ProductShare, ProductGallery, ProductImage, ProductPrice, ProductProvider, StockStatus, VariantPicker } from "../product-client";
 import type { SectionComponent, StoreInfo, StoreProduct, Template } from "../types";
 
 /**
@@ -105,14 +105,14 @@ const Navbar: SectionComponent = ({ data }) => {
   return (
     <header className="border-b border-border bg-background/90 backdrop-blur-md">
       <div className={cn(wrap, "flex h-16 items-center gap-4 lg:h-20 lg:gap-8")}>
-        <StoreMenuButton data={data} className="-ml-2 lg:hidden" />
+        <StoreMenuButton data={data} className="-ml-2 xl:hidden" />
         <StoreBrand
           store={store}
           content={content}
           className="min-w-0 truncate font-serif text-2xl italic tracking-tight lg:text-3xl"
           logoClassName="h-7 lg:h-9"
         />
-        <nav className="hidden flex-1 items-center justify-center gap-7 lg:flex">
+        <nav className="whitespace-nowrap hidden flex-1 items-center justify-center gap-7 xl:flex">
           <Link href={shopHref(store)} className={navLink}>
             {content["navbar.shopLabel"]}
           </Link>
@@ -127,7 +127,7 @@ const Navbar: SectionComponent = ({ data }) => {
             </Link>
           ))}
         </nav>
-        <div className="ml-auto flex items-center gap-5 lg:ml-0">
+        <div className="ml-auto flex items-center gap-5 xl:ml-0">
           <SearchBox
             slug={store.slug}
             basePath={store.basePath}
@@ -576,7 +576,9 @@ const ProductPage: Template["ProductPage"] = ({ data, product, related }) => {
             <div className="space-y-7">
               <VariantPicker look="atelier" labelClassName={cn(eyebrow, "mb-3 block")} />
               <StockStatus look="dot" className="block text-sm" />
-              <AddToCart look="atelier" basePath={store.basePath} />
+              <AddToCart look="atelier" basePath={store.basePath}>
+                <ProductShare look="atelier" store={store} socialLinks={data.socialLinks} />
+              </AddToCart>
             </div>
             {product.description && (
               <details open className="group mt-10 border-y border-border">

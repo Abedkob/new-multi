@@ -8,6 +8,7 @@ import { MotionDiv, MotionLi, MotionP, MotionSpan, MotionUl } from "../motion";
 import { CartLink } from "../nav-client";
 import {
   AddToCart,
+  ProductShare,
   ProductGallery,
   ProductImage,
   ProductPrice,
@@ -200,7 +201,7 @@ const Navbar: SectionComponent = ({ data }) => {
           <StoreMenuButton data={data} className="-ml-2 lg:hidden" buttonClassName="rounded-full" />
           <StoreBrand store={store} content={content} className={cn("min-w-0 truncate font-muse text-2xl sm:text-3xl", focus)} logoClassName="h-8" />
         </div>
-        <nav className="hidden items-center gap-8 text-muted-foreground lg:flex">
+        <nav className="whitespace-nowrap hidden items-center gap-8 text-muted-foreground lg:flex">
           <Link href={shopHref(store)} className={navLink}>
             {content["navbar.shopLabel"]}
           </Link>
@@ -734,7 +735,9 @@ const ProductPage: Template["ProductPage"] = ({ data, product, related }) => {
             </div>
             <StockStatus look="dot" className="mt-6 block" />
             <div className="mt-8">
-              <AddToCart look="muse" basePath={store.basePath} />
+              <AddToCart look="muse" basePath={store.basePath}>
+                <ProductShare look="muse" store={store} socialLinks={data.socialLinks} />
+              </AddToCart>
             </div>
             {product.description && (
               <div className="mt-10 border-t border-foreground/10 pt-8">

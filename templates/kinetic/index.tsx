@@ -6,6 +6,7 @@ import { cn } from "@/lib/utils";
 import { CartLink } from "../nav-client";
 import {
   AddToCart,
+  ProductShare,
   ProductGallery,
   ProductImage,
   ProductPrice,
@@ -128,7 +129,7 @@ const Navbar: SectionComponent = ({ data }) => {
           />
         </div>
 
-        <nav className="hidden items-center gap-7 lg:flex" aria-label="Main navigation">
+        <nav className="whitespace-nowrap hidden items-center gap-7 lg:flex" aria-label="Main navigation">
           <Link href={shopHref(store)} className="text-sm font-medium transition-opacity hover:opacity-55">
             {content["navbar.shopLabel"]}
           </Link>
@@ -422,7 +423,9 @@ const ProductPage: Template["ProductPage"] = ({ data, product, related }) => {
             <div className="grid gap-7">
               <VariantPicker look="kinetic" labelClassName="mb-3 block text-sm font-semibold" />
               <StockStatus look="dot" />
-              <AddToCart look="kinetic" basePath={store.basePath} />
+              <AddToCart look="kinetic" basePath={store.basePath}>
+                <ProductShare look="kinetic" store={store} socialLinks={data.socialLinks} />
+              </AddToCart>
             </div>
             {product.description && (
               <div className="mt-10 border-t border-border pt-7">

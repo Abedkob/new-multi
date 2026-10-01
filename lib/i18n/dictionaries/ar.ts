@@ -609,4 +609,8 @@ export const ar: Record<DictionaryKey, string> = {
   "content.field.product.selectOptions": "رسالة قبل اختيار الخيارات",
   "content.field.product.unavailable": "رسالة التركيبة غير المتوفرة",
   "content.field.product.viewLabel": "نص رابط عرض المنتج",
+  "content.field.product.share": "زر المشاركة",
+  "content.field.product.linkCopied": "رسالة بعد نسخ رابط المنتج",
+  "content.field.product.whatsapp": "زر واتساب",
+  "content.field.product.whatsappMessage": "بداية رسالة واتساب",
 };

@@ -6,7 +6,7 @@ import { Picture, StoreBrand, StoreMenuButton, cardPrice, heroSlides, productHre
 import { StoreFAQ } from "../store-faq";
 import { StoreFooter } from "../store-footer";
 import { CartLink, SearchBox } from "../nav-client";
-import { ProductGallery, ProductImage, ProductPrice, ProductProvider, StockStatus, VariantPicker, AddToCart } from "../product-client";
+import { ProductGallery, ProductImage, ProductPrice, ProductProvider, StockStatus, VariantPicker, AddToCart, ProductShare } from "../product-client";
 import { ArrowRight, Search, ShoppingCart } from "lucide-react";
 import { HeroSlider } from "./hero-slider-client";
 import type {
@@ -33,7 +33,7 @@ const Navbar: SectionComponent = ({ data }) => {
   return (
   <header className="border-b border-border/60 bg-background/90 backdrop-blur-md">
     <div className={cn(wrap, "flex items-center justify-between gap-3 py-4 md:py-5")}>
-      <StoreMenuButton data={data} className="-ml-2 md:hidden" />
+      <StoreMenuButton data={data} className="-ml-2 lg:hidden" />
       <StoreBrand
         store={store}
         content={content}
@@ -41,7 +41,7 @@ const Navbar: SectionComponent = ({ data }) => {
         logoClassName="h-8 sm:h-9"
       />
 
-      <nav className="hidden md:flex items-center gap-8 text-sm font-medium text-foreground">
+      <nav className="whitespace-nowrap hidden lg:flex items-center gap-8 text-sm font-medium text-foreground">
         <Link href={shopHref(store)} className="hover:opacity-70 transition">
           {content["navbar.shopLabel"]}
         </Link>
@@ -353,12 +353,14 @@ const ProductPage: Template["ProductPage"] = ({ data, product, related }) => {
               labelClassName="text-sm font-medium text-foreground mb-1 block"
             />
             
-            <div className="mt-8 grid grid-cols-[minmax(0,1fr)_auto] items-start gap-3 md:mt-10 md:gap-4">
-              <AddToCart look="tonkic" basePath={store.basePath} className="rounded-full h-14 bg-primary text-primary-foreground hover:bg-primary/90 transition-all hover:scale-[1.02] active:scale-95 shadow-md" />
+            <div className="mt-8 grid grid-cols-[minmax(0,1fr)] items-start gap-3 sm:grid-cols-[minmax(0,1fr)_auto] md:mt-10 md:gap-4">
+              <AddToCart look="tonkic" basePath={store.basePath} className="rounded-full h-14 bg-primary text-primary-foreground hover:bg-primary/90 transition-all hover:scale-[1.02] active:scale-95 shadow-md">
+                <ProductShare look="tonkic" store={store} socialLinks={data.socialLinks} />
+              </AddToCart>
               <Link
                 href={`${store.basePath}/cart`}
                 aria-label={content["product.viewCart"]}
-                className="w-14 h-14 rounded-full border border-border flex items-center justify-center hover:bg-muted text-foreground transition-all hover:scale-[1.05] active:scale-95"
+                className="hidden w-14 h-14 rounded-full border border-border sm:flex items-center justify-center hover:bg-muted text-foreground transition-all hover:scale-[1.05] active:scale-95"
               >
                 <ShoppingCart className="w-5 h-5" />
               </Link>

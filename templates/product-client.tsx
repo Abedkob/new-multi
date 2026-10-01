@@ -1,7 +1,10 @@
 "use client";
 
 import Link from "next/link";
-import { createContext, useContext, useEffect, useMemo, useState } from "react";
+import { Check, Share2 } from "lucide-react";
+import { createContext, useContext, useEffect, useMemo, useState, useSyncExternalStore } from "react";
+import { SocialPlatformIcon } from "@/components/social-platform-icon";
+import { whatsappBrandClass } from "@/components/whatsapp-contact-button";
 import { Badge } from "@/components/ui/badge";
 import { buttonVariants } from "@/components/ui/button";
 import { useTrack } from "@/lib/analytics";
@@ -10,8 +13,8 @@ import type { ContentMap } from "@/lib/content";
 import { formatPrice } from "@/lib/format";
 import { attributeOptions } from "@/lib/variants";
 import { cn } from "@/lib/utils";
-import { Picture } from "./shared";
-import type { StoreProduct, StoreVariant } from "./types";
+import { Picture, productHref } from "./shared";
+import type { SocialLink, StoreInfo, StoreProduct, StoreVariant } from "./types";
 
 /**
  * The interactive bits of a product page. Templates stay server components and drop these
@@ -403,7 +406,18 @@ const QTY_STYLES = {
  * product with several variants needs a choice first, and the quantity can never exceed what's
  * left of that variant's stock after what's already in the cart.
  */
-export function AddToCart({ look, basePath, className }: { look: keyof typeof ADD_STYLES; basePath: string; className?: string }) {
+export function AddToCart({
+  look,
+  basePath,
+  className,
+  children,
+}: {
+  look: keyof typeof ADD_STYLES;
+  basePath: string;
+  className?: string;
+  /** Extra controls placed at the end of the row, beside the button (e.g. <ProductShare>). */
+  children?: React.ReactNode;
+}) {
   const { product, variant, complete, content } = useProduct();
   const cart = useCart();
   const track = useTrack();
@@ -430,14 +444,22 @@ export function AddToCart({ look, basePath, className }: { look: keyof typeof AD
   const disabled = !variant || variant.stock === 0;
 
   return (
-    <div className="grid min-w-0 gap-2" data-testid="add-to-cart">
-      <div className="flex items-stretch gap-3">
+    <div className="@container grid min-w-0 gap-2" data-testid="add-to-cart">
+      {/* With extra controls (share, WhatsApp) a narrow column can't fit everything on one line:
+          the quantity stepper then gets its own line above the button and icons. */}
+      <div
+        className={cn(
+          "flex items-stretch gap-3",
+          children && "grid grid-cols-[minmax(0,1fr)_auto_auto] @md:flex",
+        )}
+      >
         <div
           role="group"
           aria-label={content["product.quantity"]}
           data-testid="quantity"
           className={cn(
             "flex shrink-0 items-center border border-border bg-background text-foreground",
+            children && "col-span-full justify-self-start",
             QTY_STYLES[look],
             disabled && "opacity-50",
           )}
@@ -497,6 +519,7 @@ export function AddToCart({ look, basePath, className }: { look: keyof typeof AD
         >
           {label}
         </button>
+        {children}
       </div>
       {note && (
         <p role="status" className="text-sm text-muted-foreground" data-testid="add-to-cart-note">
@@ -507,5 +530,118 @@ export function AddToCart({ look, basePath, className }: { look: keyof typeof AD
         </p>
       )}
     </div>
+  );
+}
+
+// The server has no origin to build an absolute link from; it renders "" and the client fills
+// it in right after hydration (useSyncExternalStore keeps that from being a hydration mismatch).
+const noSubscribe = () => () => {};
+const useOrigin = () => useSyncExternalStore(noSubscribe, () => window.location.origin, () => "");
+
+/** Last-resort copy for browsers without the async Clipboard API (e.g. plain-http hosts). */
+function legacyCopy(text: string) {
+  const field = document.createElement("textarea");
+  field.value = text;
+  field.setAttribute("readonly", "");
+  field.style.position = "fixed";
+  field.style.opacity = "0";
+  document.body.appendChild(field);
+  field.select();
+  try {
+    return document.execCommand("copy");
+  } finally {
+    field.remove();
+  }
+}
+
+/**
+ * Icon-only Share + WhatsApp buttons, placed inside <AddToCart>'s row. Share opens the device's
+ * share sheet where there is one (phones), else copies the product link. The WhatsApp button opens
+ * a chat with the store (its configured WhatsApp number) pre-filled with the product, the selected
+ * variant, its price and link; a store without a number gets WhatsApp's own "pick a contact" share.
+ */
+export function ProductShare({
+  look,
+  store,
+  socialLinks,
+}: {
+  look: keyof typeof QTY_STYLES;
+  store: StoreInfo;
+  socialLinks: SocialLink[];
+}) {
+  const { product, variant, content } = useProduct();
+  const origin = useOrigin();
+  const [copied, setCopied] = useState(false);
+
+  useEffect(() => {
+    if (!copied) return;
+    const timer = setTimeout(() => setCopied(false), 2500);
+    return () => clearTimeout(timer);
+  }, [copied]);
+
+  const url = `${origin}${productHref(store, product)}`;
+  const price =
+    !variant && product.hasPriceRange
+      ? `${content["product.fromLabel"]} ${formatPrice(product.priceCents)}`
+      : formatPrice(variant?.priceCents ?? product.priceCents);
+  const message = [
+    content["product.whatsappMessage"],
+    product.variants.length > 1 && variant ? `${product.name} (${variant.label})` : product.name,
+    price,
+    origin ? url : "",
+  ]
+    .filter(Boolean)
+    .join("\n");
+  const chat = socialLinks.find((link) => link.platform === "whatsapp")?.href ?? "https://wa.me/";
+  const whatsappHref = `${chat}?text=${encodeURIComponent(message)}`;
+
+  const share = async () => {
+    if (typeof navigator.share === "function") {
+      try {
+        await navigator.share({ title: product.name, url });
+        return;
+      } catch (error) {
+        // The shopper closing the share sheet isn't a failure, and shouldn't copy behind their back.
+        if (error instanceof DOMException && error.name === "AbortError") return;
+      }
+    }
+    try {
+      await navigator.clipboard.writeText(url);
+      setCopied(true);
+    } catch {
+      if (legacyCopy(url)) setCopied(true);
+    }
+  };
+
+  // Square, matching the look's quantity stepper in height and corner shape.
+  const square = cn("grid aspect-square shrink-0 place-items-center transition", QTY_STYLES[look]);
+
+  return (
+    <>
+      <button
+        type="button"
+        onClick={share}
+        aria-label={content["product.share"]}
+        title={copied ? content["product.linkCopied"] : content["product.share"]}
+        data-testid="share-button"
+        className={cn(square, "border border-border bg-background text-foreground hover:bg-muted")}
+      >
+        {copied ? <Check aria-hidden className="size-5" /> : <Share2 aria-hidden className="size-5" />}
+      </button>
+      <a
+        href={whatsappHref}
+        target="_blank"
+        rel="noopener noreferrer"
+        aria-label={content["product.whatsapp"]}
+        title={content["product.whatsapp"]}
+        data-testid="whatsapp-button"
+        className={cn(square, whatsappBrandClass)}
+      >
+        <SocialPlatformIcon platform="whatsapp" className="size-5" />
+      </a>
+      <span role="status" className="sr-only" data-testid="share-note">
+        {copied ? content["product.linkCopied"] : ""}
+      </span>
+    </>
   );
 }

@@ -8,7 +8,7 @@ import { StoreFAQ } from "../store-faq";
 import { StoreFooter } from "../store-footer";
 import { Picture, StoreBrand, StoreMenuButton, cardPrice, productHref, sectionHref, shopHref, storeHref } from "../shared";
 import { CartLink, SearchBox } from "../nav-client";
-import { ProductGallery, ProductImage, ProductPrice, ProductProvider, StockStatus, VariantPicker, AddToCart } from "../product-client";
+import { ProductGallery, ProductImage, ProductPrice, ProductProvider, StockStatus, VariantPicker, AddToCart, ProductShare } from "../product-client";
 import type {
   SectionComponent,
   StoreInfo,
@@ -46,10 +46,10 @@ const Navbar: SectionComponent = ({ data }) => {
   return (
   <header className="w-full border-b border-border bg-background">
     <div className={cn(wrap, "flex items-center justify-between py-5")}>
-      <div className="flex-1 md:hidden">
+      <div className="flex-1 lg:hidden">
         <StoreMenuButton data={data} className="-ml-2" />
       </div>
-      <nav className="hidden flex-1 items-center gap-8 md:flex">
+      <nav className="whitespace-nowrap hidden flex-1 items-center gap-8 lg:flex">
         <StoreMenuButton data={data} className="-ml-2" />
         <Link href={shopHref(store)} className="text-sm font-medium hover:text-primary">
           {content["navbar.shopLabel"]}
@@ -66,7 +66,7 @@ const Navbar: SectionComponent = ({ data }) => {
         ))}
       </nav>
       
-      <div className="min-w-0 flex-1 text-center md:flex-none">
+      <div className="min-w-0 flex-1 text-center lg:flex-none">
         <StoreBrand
           store={store}
           content={content}
@@ -447,7 +447,9 @@ const ProductPage: Template["ProductPage"] = ({ data, product, related }) => {
             </div>
             <StockStatus look="dot" className="mt-6 block" />
             <div className="mt-8">
-              <AddToCart look="solid" basePath={store.basePath} />
+              <AddToCart look="solid" basePath={store.basePath}>
+                <ProductShare look="solid" store={store} socialLinks={data.socialLinks} />
+              </AddToCart>
             </div>
             {product.description && (
               <div className="mt-12">

@@ -19,7 +19,7 @@ import {
   storeHref,
 } from "../shared";
 import { CartLink } from "../nav-client";
-import { ProductGallery, ProductImage, ProductPrice, ProductProvider, StockStatus, VariantPicker, AddToCart } from "../product-client";
+import { ProductGallery, ProductImage, ProductPrice, ProductProvider, StockStatus, VariantPicker, AddToCart, ProductShare } from "../product-client";
 import type { SectionComponent, StoreInfo, StoreProduct, Template } from "../types";
 import { CategoryShowcase } from "./category-showcase-client";
 import { Spotlight } from "./spotlight-client";
@@ -76,7 +76,7 @@ const Navbar: SectionComponent = ({ data }) => {
           <StoreBrand store={store} content={content} className={cn(display, "truncate text-xl sm:text-2xl")} logoClassName="h-8" />
         </div>
 
-        <nav className="hidden items-center gap-8 lg:flex">
+        <nav className="whitespace-nowrap hidden items-center gap-8 lg:flex">
           <Link href={shopHref(store)} className={navLink}>
             {content["navbar.shopLabel"]}
           </Link>
@@ -365,7 +365,9 @@ const ProductPage: Template["ProductPage"] = ({ data, product, related }) => {
             </div>
             <StockStatus look="dot" className="mt-6 block" />
             <div className="mt-8">
-              <AddToCart look="drop" basePath={store.basePath} />
+              <AddToCart look="drop" basePath={store.basePath}>
+                <ProductShare look="drop" store={store} socialLinks={data.socialLinks} />
+              </AddToCart>
             </div>
             {product.description && (
               <div className="mt-12 border-t border-border pt-8">

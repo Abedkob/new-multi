@@ -20,7 +20,7 @@ import {
   storeHref,
 } from "../shared";
 import { CartLink, SearchBox } from "../nav-client";
-import { AddToCart, ProductGallery, ProductImage, ProductPrice, ProductProvider, StockStatus, VariantPicker } from "../product-client";
+import { AddToCart, ProductShare, ProductGallery, ProductImage, ProductPrice, ProductProvider, StockStatus, VariantPicker } from "../product-client";
 import type { SectionComponent, StoreInfo, StoreProduct, Template } from "../types";
 
 /**
@@ -105,10 +105,10 @@ const Navbar: SectionComponent = ({ data }) => {
   return (
     <header className="border-b border-foreground bg-background">
       <div className={cn(wrap, "flex h-16 items-stretch")}>
-        <div className="flex items-center border-r border-border pr-3 md:hidden">
+        <div className="flex items-center border-r border-border pr-3 lg:hidden">
           <StoreMenuButton data={data} className="-ml-2" />
         </div>
-        <div className="flex min-w-0 items-center px-4 md:border-r md:border-border md:pl-0 md:pr-8">
+        <div className="flex min-w-0 items-center px-4 lg:border-r lg:border-border lg:pl-0 lg:pr-8">
           <StoreBrand
             store={store}
             content={content}
@@ -116,7 +116,7 @@ const Navbar: SectionComponent = ({ data }) => {
             logoClassName="h-8"
           />
         </div>
-        <nav className="hidden min-w-0 flex-1 items-stretch gap-7 overflow-hidden px-8 lg:flex">
+        <nav className="whitespace-nowrap hidden min-w-0 flex-1 items-stretch gap-7 overflow-hidden px-8 lg:flex">
           <Link href={shopHref(store)} className={navLink}>
             {content["navbar.shopLabel"]}
           </Link>
@@ -593,7 +593,9 @@ const ProductPage: Template["ProductPage"] = ({ data, product, related }) => {
               <StockStatus look="dot" className={cn(mono, "block [&_span]:text-[11px]", "mt-5")} />
             </div>
             <div className={row}>
-              <AddToCart look="atlas" basePath={store.basePath} />
+              <AddToCart look="atlas" basePath={store.basePath}>
+                <ProductShare look="atlas" store={store} socialLinks={data.socialLinks} />
+              </AddToCart>
             </div>
             {product.description && (
               <dl className={cn(row, "grid gap-3 sm:grid-cols-[8rem_minmax(0,1fr)]")}>

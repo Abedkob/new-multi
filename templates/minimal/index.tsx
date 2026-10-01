@@ -8,7 +8,7 @@ import { StoreFAQ } from "../store-faq";
 import { StoreFooter } from "../store-footer";
 import { HeroPicture, Picture, StoreBrand, StoreMenuButton, cardPrice, productHref, sectionHref, shopHref, storeHref } from "../shared";
 import { CartLink, SearchBox } from "../nav-client";
-import { ProductGallery, ProductImage, ProductPrice, ProductProvider, StockStatus, VariantPicker, AddToCart } from "../product-client";
+import { ProductGallery, ProductImage, ProductPrice, ProductProvider, StockStatus, VariantPicker, AddToCart, ProductShare } from "../product-client";
 import type {
   SectionComponent,
   StoreInfo,
@@ -55,8 +55,8 @@ const Navbar: SectionComponent = ({ data }) => {
   return (
   <header className="border-b border-border bg-background">
     <div className={cn(wrap, "grid grid-cols-[1fr_auto_1fr] items-center gap-4 py-4 md:py-6")}>
-      <StoreMenuButton data={data} className="-ml-2 md:hidden" />
-      <nav className="hidden flex-wrap gap-x-6 gap-y-1 md:flex">
+      <StoreMenuButton data={data} className="-ml-2 lg:hidden" />
+      <nav className="whitespace-nowrap hidden flex-wrap gap-x-6 gap-y-1 lg:flex">
         <Link href={shopHref(store)} className={cn(eyebrow, "hover:text-foreground")}>
           {content["navbar.shopLabel"]}
         </Link>
@@ -363,7 +363,9 @@ const ProductPage: Template["ProductPage"] = ({ data, product, related }) => {
             </div>
             <StockStatus look="dot" className="mt-6 block" />
             <div className="mt-6">
-              <AddToCart look="minimal" basePath={store.basePath} />
+              <AddToCart look="minimal" basePath={store.basePath}>
+                <ProductShare look="minimal" store={store} socialLinks={data.socialLinks} />
+              </AddToCart>
             </div>
             {product.description && (
               <div className="mt-10 border-t border-border pt-8">

@@ -310,6 +310,10 @@ export const CONTENT_KEYS = [
   { section: "productPage", key: "product.selectOptions", label: "content.field.product.selectOptions", kind: "text", default: "Select options" },
   { section: "productPage", key: "product.unavailable", label: "content.field.product.unavailable", kind: "text", default: "This combination isn't available" },
   { section: "productPage", key: "product.viewLabel", label: "content.field.product.viewLabel", kind: "text", default: "View product" },
+  { section: "productPage", key: "product.share", label: "content.field.product.share", kind: "text", default: "Share" },
+  { section: "productPage", key: "product.linkCopied", label: "content.field.product.linkCopied", kind: "text", default: "Link copied" },
+  { section: "productPage", key: "product.whatsapp", label: "content.field.product.whatsapp", kind: "text", default: "Order on WhatsApp" },
+  { section: "productPage", key: "product.whatsappMessage", label: "content.field.product.whatsappMessage", kind: "text", default: "Hi! I'm interested in this product:" },
 ] as const satisfies readonly KeyDef[];
 
 export type ContentKey = (typeof CONTENT_KEYS)[number]["key"];

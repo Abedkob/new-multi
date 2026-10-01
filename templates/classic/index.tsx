@@ -17,7 +17,7 @@ import { StoreFAQ } from "../store-faq";
 import { StoreFooter } from "../store-footer";
 import { HeroPicture, Picture, StoreBrand, StoreMenuButton, cardPrice, productHref, sectionHref, shopHref, storeHref } from "../shared";
 import { CartLink, SearchBox } from "../nav-client";
-import { ProductGallery, ProductImage, ProductPrice, ProductProvider, StockStatus, VariantPicker, AddToCart } from "../product-client";
+import { ProductGallery, ProductImage, ProductPrice, ProductProvider, StockStatus, VariantPicker, AddToCart, ProductShare } from "../product-client";
 import type {
   SectionComponent,
   StoreInfo,
@@ -66,7 +66,7 @@ const Navbar: SectionComponent = ({ data }) => {
   return (
   <header className="border-b border-border bg-background">
     <div className={cn(wrap, "flex items-center gap-x-4 py-3 md:gap-x-8 md:py-5")}>
-      <StoreMenuButton data={data} className="-ml-2 md:hidden" />
+      <StoreMenuButton data={data} className="-ml-2 lg:hidden" />
       <StoreBrand
         store={store}
         content={content}
@@ -78,7 +78,7 @@ const Navbar: SectionComponent = ({ data }) => {
         basePath={store.basePath}
         placeholder={content["search.placeholder"]}
         buttonLabel={content["search.button"]}
-        className="ml-auto hidden w-96 max-w-md md:flex"
+        className="ml-auto hidden w-64 max-w-md md:flex lg:w-96"
         inputClassName="w-full"
         buttonClassName="rounded-md bg-primary font-medium text-primary-foreground"
       />
@@ -87,7 +87,7 @@ const Navbar: SectionComponent = ({ data }) => {
         className="ml-auto rounded-md border border-border px-3 py-1.5 text-sm font-semibold hover:bg-muted md:ml-0"
       />
     </div>
-    <nav className="hidden bg-primary text-primary-foreground md:block">
+    <nav className="whitespace-nowrap hidden bg-primary text-primary-foreground lg:block">
       <ul className={cn(wrap, "flex gap-x-6 overflow-x-auto py-2.5 text-sm")}>
         <li>
           <Link href={shopHref(store)} className="font-semibold">
@@ -428,7 +428,9 @@ const ProductPage: Template["ProductPage"] = ({ data, product, related }) => {
               <VariantPicker look="classic" labelClassName={serif} />
             </div>
             <div className="mt-6">
-              <AddToCart look="classic" basePath={store.basePath} />
+              <AddToCart look="classic" basePath={store.basePath}>
+                <ProductShare look="classic" store={store} socialLinks={data.socialLinks} />
+              </AddToCart>
             </div>
             <Separator className="my-6" />
             {product.description && (

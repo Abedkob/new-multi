@@ -19,7 +19,7 @@ import {
   storeHref,
 } from "../shared";
 import { CartLink, SearchBox } from "../nav-client";
-import { ProductGallery, ProductImage, ProductPrice, ProductProvider, StockStatus, VariantPicker, AddToCart } from "../product-client";
+import { ProductGallery, ProductImage, ProductPrice, ProductProvider, StockStatus, VariantPicker, AddToCart, ProductShare } from "../product-client";
 import type { CategoryTile, SectionComponent, StoreInfo, StoreProduct, Template } from "../types";
 import { CarouselClient } from "./carousel-client";
 
@@ -63,7 +63,7 @@ const Navbar: SectionComponent = ({ data }) => {
       {/* Main row: logo on the left, nav on the right — not centered. */}
       <div className={cn(wrap, "flex items-center justify-between gap-6 py-5")}>
         <div className="flex min-w-0 items-center gap-3">
-          <StoreMenuButton data={data} className="-ml-2 lg:hidden" />
+          <StoreMenuButton data={data} className="-ml-2 xl:hidden" />
           <StoreBrand
             store={store}
             content={content}
@@ -72,7 +72,7 @@ const Navbar: SectionComponent = ({ data }) => {
           />
         </div>
 
-        <nav className="hidden items-center gap-7 lg:flex">
+        <nav className="whitespace-nowrap hidden items-center gap-7 xl:flex">
           <Link href={shopHref(store)} className={navLink}>
             {content["navbar.shopLabel"]}
           </Link>
@@ -438,7 +438,9 @@ const ProductPage: Template["ProductPage"] = ({ data, product, related }) => {
             </div>
             <StockStatus look="dot" className="mt-6 block" />
             <div className="mt-8">
-              <AddToCart look="pearl" basePath={store.basePath} />
+              <AddToCart look="pearl" basePath={store.basePath}>
+                <ProductShare look="pearl" store={store} socialLinks={data.socialLinks} />
+              </AddToCart>
             </div>
             {product.description && (
               <div className="mt-12 border-t border-border pt-8">

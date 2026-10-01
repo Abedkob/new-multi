@@ -18,7 +18,7 @@ import {
   storeHref,
 } from "../shared";
 import { CartLink, SearchBox } from "../nav-client";
-import { AddToCart, ProductGallery, ProductImage, ProductPrice, ProductProvider, StockStatus, VariantPicker } from "../product-client";
+import { AddToCart, ProductShare, ProductGallery, ProductImage, ProductPrice, ProductProvider, StockStatus, VariantPicker } from "../product-client";
 import type { SectionComponent, StoreInfo, StoreProduct, Template } from "../types";
 import { OrbitScroller } from "./orbit-scroller-client";
 
@@ -173,7 +173,7 @@ const Navbar: SectionComponent = ({ data }) => {
   return (
     <header className="relative border-b border-border/60 bg-background/90 backdrop-blur-md">
       <div className={cn(wrap, "grid h-20 grid-cols-[1fr_auto_1fr] items-center gap-4 lg:h-24")}>
-        <nav className="flex items-center gap-7">
+        <nav className="whitespace-nowrap flex items-center gap-7">
           <StoreMenuButton data={data} className="-ml-2" />
           <Link href={shopHref(store)} className={cn(navLink, "hidden lg:inline")}>
             {content["navbar.shopLabel"]}
@@ -652,7 +652,9 @@ const ProductPage: Template["ProductPage"] = ({ data, product, related }) => {
             <div className="space-y-8">
               <VariantPicker look="luxury" labelClassName={cn(eyebrow, "mb-3 block font-medium")} />
               <StockStatus look="dot" className="block text-sm font-light" />
-              <AddToCart look="luxury" basePath={store.basePath} />
+              <AddToCart look="luxury" basePath={store.basePath}>
+                <ProductShare look="luxury" store={store} socialLinks={data.socialLinks} />
+              </AddToCart>
             </div>
 
             {product.description && (
