@@ -79,7 +79,10 @@ export function CatalogPage({
         {filters && hasActiveFilters(filters.value) && total === 0 ? content["catalog.noMatch"] : emptyText}
       </p>
     ) : (
-      <template.ProductGrid data={data} products={products} />
+      // Keyed by the product set so paging/sorting/filtering (client-side navigations) remounts
+      // the grid: the templates' scroll-in reveals run once per mount, so a reused grid would
+      // leave the newly swapped-in cards stuck in their hidden state until a full refresh.
+      <template.ProductGrid key={products.map((p) => p.id).join(",")} data={data} products={products} />
     );
 
   return (
