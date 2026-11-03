@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { CookieSettingsLink } from "@/components/consent/cookie-settings-link";
 import { SocialPlatformIcon } from "@/components/social-platform-icon";
 import { fillTokens } from "@/lib/content";
 import { cn } from "@/lib/utils";
@@ -250,9 +251,16 @@ function FooterBottom({ data, style }: { data: StorefrontData; style: FooterStyl
       )}
     >
       <p>{fillTokens(data.content["footer.copyright"], data.store)}</p>
-      <Link href="#top" className={cn("inline-flex min-h-10 items-center transition-colors", style.link)}>
-        Back to top <span aria-hidden>&uarr;</span>
-      </Link>
+      <div className="flex flex-wrap items-center gap-x-5 gap-y-1">
+        {/* Every storefront footer has to expose this, and all three footer layouts render
+         * FooterBottom — so one entry here covers all 13 templates. It renders nothing outside a
+         * real storefront (no consent provider), which keeps it out of the admin and platform
+         * preview iframes. */}
+        <CookieSettingsLink className={style.link} />
+        <Link href="#top" className={cn("inline-flex min-h-10 items-center transition-colors", style.link)}>
+          Back to top <span aria-hidden>&uarr;</span>
+        </Link>
+      </div>
     </div>
   );
 }

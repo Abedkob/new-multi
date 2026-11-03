@@ -1,8 +1,11 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
+import { ConsentProvider } from "@/components/consent/consent-provider";
 import { ThemeScope } from "@/components/theme-scope";
 import { StoreAnalytics } from "@/lib/analytics";
 import { CartProvider } from "@/lib/cart/cart";
+import { readStoreConsent } from "@/lib/consent/read";
+import { getStoreBasePath } from "@/lib/store-url";
 import { letterFavicon } from "@/lib/favicon";
 import { loadStorefrontData, loadTenant } from "@/lib/data/storefront";
 import { storeIntegrations } from "@/lib/integrations";
@@ -92,6 +95,11 @@ export default async function StoreLayout({
     parseThemeOverrides(tenant.themeOverrides),
   );
 
+  // Decoded from the store's own signed cookie. Undecided means "ask", and until a visitor has
+  // answered, nothing non-essential runs — see StoreAnalytics below, which is only given the
+  // categories this decision actually granted.
+  const consent = await readStoreConsent(tenant);
+
   const shell = (
     // The cart lives in React state here; this layout stays mounted across page navigations.
     <CartProvider>
@@ -107,7 +115,20 @@ export default async function StoreLayout({
   // templates without it, so previewing never sends data into the store's analytics.
   return (
     <ThemeScope colors={colors} fonts={parseThemeFonts(tenant.themeOverrides)} className="min-h-screen">
-      {hasAnalytics ? <StoreAnalytics config={analytics}>{shell}</StoreAnalytics> : shell}
+      <ConsentProvider
+        slug={tenant.slug}
+        storeName={tenant.name}
+        privacyHref={`${getStoreBasePath(tenant)}/privacy`}
+        initialState={consent}
+      >
+        {hasAnalytics ? (
+          <StoreAnalytics config={analytics} grants={consent.grants}>
+            {shell}
+          </StoreAnalytics>
+        ) : (
+          shell
+        )}
+      </ConsentProvider>
     </ThemeScope>
   );
 }
