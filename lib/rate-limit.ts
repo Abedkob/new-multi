@@ -87,6 +87,13 @@ export const RATE_LIMITS = {
   coupon: { limit: 20, windowMs: 10 * 60_000 },
   // Public search endpoint: generous enough for real typing, bounded against scraping.
   search: { limit: 30, windowMs: 60_000 },
+  // Recording a storefront consent decision, keyed per IP. Generous: a visitor may legitimately
+  // accept, reopen Cookie settings, change their mind and withdraw within one session, and a
+  // shared office connection multiplies that. Note what being blocked does and does not do —
+  // the decision is still honoured (the cookie is always written, because losing a visitor's
+  // choice to a rate limit would be the worst possible failure here); only the receipt insert
+  // is skipped, so the limit protects the table, never the visitor.
+  consent: { limit: 30, windowMs: 10 * 60_000 },
   // Importing an image from a pasted link makes the server fetch an outside URL: keyed per
   // tenant, so an owner account can't be used as a download proxy.
   imageImport: { limit: 40, windowMs: 10 * 60_000 },
