@@ -92,6 +92,13 @@ export function listCouponProductChoices(tenantId: string) {
   }));
 }
 
+export function getSelectedAnnouncedCoupon(tenantId: string, excludeId?: string) {
+  return withTenant(tenantId, (db) => db.coupon.findFirst({
+    where: { tenantId, isAnnounced: true, archivedAt: null, ...(excludeId ? { id: { not: excludeId } } : {}) },
+    select: { id: true, name: true, code: true },
+  }));
+}
+
 export async function createCoupon(tenantId: string, input: CouponInput) {
   try {
     return await withTenant(tenantId, async (db) => {
