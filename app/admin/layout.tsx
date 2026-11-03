@@ -1,3 +1,4 @@
+import { PlatformAnalytics } from "@/components/platform-analytics";
 import { getLocale } from "@/lib/i18n/locale";
 import { LocaleProvider } from "@/lib/i18n/context";
 
@@ -13,6 +14,7 @@ export default async function AdminRootLayout({ children }: { children: React.Re
   return (
     <div dir={locale === "ar" ? "rtl" : "ltr"} lang={locale} className="contents">
       <LocaleProvider initialLocale={locale}>{children}</LocaleProvider>
+      <PlatformAnalytics />
     </div>
   );
 }

@@ -5,6 +5,7 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import { PlatformAnalytics } from "@/components/platform-analytics";
 import { LoginForm } from "./login-form";
 
 export default function LoginPage() {
@@ -21,6 +22,7 @@ export default function LoginPage() {
           <LoginForm />
         </CardContent>
       </Card>
+      <PlatformAnalytics />
     </main>
   );
 }

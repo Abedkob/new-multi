@@ -1,4 +1,5 @@
 import { DashboardNav } from "@/components/dashboard-nav";
+import { PlatformAnalytics } from "@/components/platform-analytics";
 import { requirePlatformAdmin } from "@/lib/session";
 
 export default async function PlatformLayout({
@@ -22,6 +23,7 @@ export default async function PlatformLayout({
       <main className="mx-auto w-full max-w-7xl flex-1 p-4 py-8">
         {children}
       </main>
+      <PlatformAnalytics />
     </div>
   );
 }
