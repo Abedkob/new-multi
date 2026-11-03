@@ -46,6 +46,20 @@ Master-plan sections covered: §2.2 (behavior that must change), §2.3 (launch c
 | **D5** | Cookie name key: slug or opaque id? | `store_consent_<tenantKey>` where `tenantKey` = first 12 chars of base32url HMAC(tenantId). Slugs are renameable (orphaning consent); raw tenant ids leak internal identifiers into a client-readable cookie name. |
 | **D6** | Fold the Redis fail-open fix (§8.1) into Phase 1? | No by default — it is Phase 2 and touches checkout. It is ~15 lines if you want it; say so and it goes in its own commit. |
 
+### 2.1 Approved additions (A1–A7)
+
+Approved with D1–D6 as recommended, plus seven additions. All are folded into §5–§7.
+
+| # | Addition | Where it lands |
+|---|---|---|
+| **A1** | Assert zero requests to our **own** `/analytics/` paths before consent, not just third-party hosts | New P1-33. Phase 1 ships no such endpoint, so this is a guard that stays true as Phase 2 lands. |
+| **A2** | Test custom-domain cookies and the privacy page against a real hostname; delete P1-32 if it passes | New P1-34/P1-35. Uses Chrome's `--host-resolver-rules="MAP consent-e2e.test 127.0.0.1"` rather than editing `C:\Windows\System32\drivers\etc\hosts` — same effect, no elevation, nothing left behind on your machine. Forces `lib/consent/cookie.ts` to set `Secure` conditionally (an `http://` custom host cannot receive a `Secure` cookie), so P1-13 splits: `Secure` asserted for https/production, omitted for a plaintext dev host. |
+| **A3** | `/privacy` must work on custom domains | `proxy.ts`'s `handleCustomDomainHost` already rewrites `<domain>/privacy` → `/store/<slug>/privacy`, so the route works once it exists; P1-35 asserts it rather than assuming it. |
+| **A4** | EN + AR mobile screenshots of the banner for 3+ templates | New P1-36. `e2e:consent` writes PNGs at 375px for minimal, fashion and atelier (centered, columns and columns-on-dark footer looks) in both locales, and they are attached to the report. |
+| **A5** | Banner opens in the store's default locale | `Tenant.defaultLocale` seeds the banner's initial language; the in-banner switch still overrides per visitor. New P1-37. |
+| **A6** | No banner in admin previews or the theme editor | The banner mounts only in `app/store/[slug]/layout.tsx`, so previews never render it. The footer `Cookie settings` entry *is* in shared template code that previews do render, so `useConsent()` returns null outside the provider and the entry renders nothing — the same no-op-outside-provider pattern `useTrack()` already uses. New P1-38. |
+| **A7** | Rate-limit `recordConsentAction` per IP | `RATE_LIMITS.consent` added to `lib/rate-limit.ts`, keyed `consent:<ip>` via `clientIp()`. A blocked request still writes the cookie (the visitor's choice must never be lost to a rate limit) but skips the receipt insert, and the skip is counted. New P1-39. |
+
 ---
 
 ## 3. Data model

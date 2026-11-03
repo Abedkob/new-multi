@@ -15,6 +15,17 @@ import { z } from "zod";
  * injected at run time).
  */
 
+/** True when the runtime's ICU data knows this zone, so a bad PLATFORM_TIMEZONE fails at
+ * startup instead of when the first daily report is bucketed (§3.7). */
+function isIanaTimeZone(value: string): boolean {
+  try {
+    new Intl.DateTimeFormat("en-US", { timeZone: value });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 const pgUrl = z
   .string()
   .min(1)
@@ -95,6 +106,43 @@ const schema = z
       return decoded.length === 32 && decoded.toString("base64") === value;
     }, "Must be a Base64-encoded 32-byte key"),
     LICENSE_HEARTBEAT_SECRET: z.string().min(32).optional(),
+    // --- Storefront analytics (STOREFRONT_ANALYTICS_MASTER_PLAN.md §14) -------------------
+    // How far first-party analytics COLLECTION has rolled out. The consent banner and the
+    // gating of third-party tags are deliberately NOT tied to this: they apply to every store
+    // from day one, or a store outside the pilot would keep firing GA/Ads/Meta with no consent.
+    ANALYTICS_ROLLOUT_MODE: z.enum(["off", "pilot", "all"]).default("off"),
+    // The single store collection runs for while ANALYTICS_ROLLOUT_MODE=pilot.
+    ANALYTICS_PILOT_TENANT_SLUG: z.string().trim().min(1).optional(),
+    // HMAC key for the signed consent cookie (and, from Phase 2, the ingestion bootstrap token).
+    // Required in production: without it consent decisions can't be signed, so they can't be
+    // trusted. Generate with: openssl rand -base64 32
+    ANALYTICS_SIGNING_SECRET: z.string().min(32, "Must be at least 32 characters").optional(),
+    // Bumped when the signing secret is rotated; cookies carrying an older version re-prompt.
+    ANALYTICS_SIGNING_KEY_VERSION: z.coerce.number().int().positive().max(999).default(1),
+    // The PLATFORM's side of the joint-controller arrangement (§4.1/§4.2), shown on every
+    // store's privacy page next to the merchant's own details.
+    PLATFORM_PRIVACY_NAME: z.string().trim().min(1).optional(),
+    PLATFORM_PRIVACY_EMAIL: z.string().trim().email("Must be an email address").optional(),
+    PLATFORM_PRIVACY_URL: z
+      .string()
+      .trim()
+      .url("Must be a full URL like https://example.com/privacy")
+      .optional(),
+    // Defaults a newly created store starts with (§4.2); each store can then differ.
+    PLATFORM_DEFAULT_LOCALE: z.enum(["en", "ar"]).default("en"),
+    PLATFORM_TIMEZONE: z
+      .string()
+      .trim()
+      .min(1)
+      .refine(isIanaTimeZone, "Must be an IANA time zone like Asia/Beirut")
+      .default("Asia/Beirut"),
+    // The platform owner's own GA4 property (this deployment's traffic, not a store's). Was
+    // hardcoded in app/layout.tsx, which also ran it on storefront routes — see §2.2.
+    PLATFORM_GA_ID: z
+      .string()
+      .trim()
+      .regex(/^G-[A-Z0-9]{4,20}$/, "Must be a GA4 measurement id like G-XXXXXXX")
+      .optional(),
   })
   .refine((v) => v.APP_DATABASE_URL || v.DATABASE_URL, {
     message: "Set APP_DATABASE_URL (preferred for the runtime) or DATABASE_URL",
@@ -127,6 +175,21 @@ const schema = z
   .refine((v) => v.NODE_ENV !== "production" || v.LICENSE_HEARTBEAT_SECRET, {
     message: "LICENSE_HEARTBEAT_SECRET is required in production to secure provider heartbeat checks",
     path: ["LICENSE_HEARTBEAT_SECRET"],
+  })
+  .refine((v) => v.ANALYTICS_ROLLOUT_MODE !== "pilot" || v.ANALYTICS_PILOT_TENANT_SLUG, {
+    message:
+      "ANALYTICS_PILOT_TENANT_SLUG is required when ANALYTICS_ROLLOUT_MODE=pilot (otherwise the pilot collects from no store)",
+    path: ["ANALYTICS_PILOT_TENANT_SLUG"],
+  })
+  .refine((v) => v.NODE_ENV !== "production" || v.ANALYTICS_SIGNING_SECRET, {
+    message:
+      "ANALYTICS_SIGNING_SECRET is required in production (consent cookies must be signed). Generate with: openssl rand -base64 32",
+    path: ["ANALYTICS_SIGNING_SECRET"],
+  })
+  .refine((v) => v.NODE_ENV !== "production" || (v.PLATFORM_PRIVACY_NAME && v.PLATFORM_PRIVACY_EMAIL), {
+    message:
+      "PLATFORM_PRIVACY_NAME and PLATFORM_PRIVACY_EMAIL are required in production (the platform is a joint controller and must be identifiable on every store's privacy page)",
+    path: ["PLATFORM_PRIVACY_NAME"],
   });
 
 function load() {
@@ -155,6 +218,17 @@ function load() {
       LICENSE_API_TIMEOUT_MS: Number(raw.LICENSE_API_TIMEOUT_MS) || 10_000,
       LICENSE_ENCRYPTION_KEY: raw.LICENSE_ENCRYPTION_KEY || undefined,
       LICENSE_HEARTBEAT_SECRET: raw.LICENSE_HEARTBEAT_SECRET || undefined,
+      ANALYTICS_ROLLOUT_MODE:
+        (raw.ANALYTICS_ROLLOUT_MODE as "off" | "pilot" | "all") || "off",
+      ANALYTICS_PILOT_TENANT_SLUG: raw.ANALYTICS_PILOT_TENANT_SLUG || undefined,
+      ANALYTICS_SIGNING_SECRET: raw.ANALYTICS_SIGNING_SECRET || undefined,
+      ANALYTICS_SIGNING_KEY_VERSION: Number(raw.ANALYTICS_SIGNING_KEY_VERSION) || 1,
+      PLATFORM_PRIVACY_NAME: raw.PLATFORM_PRIVACY_NAME || undefined,
+      PLATFORM_PRIVACY_EMAIL: raw.PLATFORM_PRIVACY_EMAIL || undefined,
+      PLATFORM_PRIVACY_URL: raw.PLATFORM_PRIVACY_URL || undefined,
+      PLATFORM_DEFAULT_LOCALE: (raw.PLATFORM_DEFAULT_LOCALE as "en" | "ar") || "en",
+      PLATFORM_TIMEZONE: raw.PLATFORM_TIMEZONE || "Asia/Beirut",
+      PLATFORM_GA_ID: raw.PLATFORM_GA_ID || undefined,
     };
   }
 
@@ -180,6 +254,16 @@ function load() {
         "LICENSE_API_TIMEOUT_MS",
         "LICENSE_ENCRYPTION_KEY",
         "LICENSE_HEARTBEAT_SECRET",
+        "ANALYTICS_ROLLOUT_MODE",
+        "ANALYTICS_PILOT_TENANT_SLUG",
+        "ANALYTICS_SIGNING_SECRET",
+        "ANALYTICS_SIGNING_KEY_VERSION",
+        "PLATFORM_PRIVACY_NAME",
+        "PLATFORM_PRIVACY_EMAIL",
+        "PLATFORM_PRIVACY_URL",
+        "PLATFORM_DEFAULT_LOCALE",
+        "PLATFORM_TIMEZONE",
+        "PLATFORM_GA_ID",
       ] as const
     ).map((k) => [k, process.env[k] === "" ? undefined : process.env[k]]),
   );
