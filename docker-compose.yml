@@ -63,16 +63,6 @@ services:
     labels:
       - "traefik.enable=true"
       - "traefik.docker.network=dokploy-network"
-      - "traefik.http.services.iloop-app.loadbalancer.server.port=3000"
-      - "traefik.http.routers.iloop-web.rule=Host(`iloop.store`)"
-      - "traefik.http.routers.iloop-web.entrypoints=web"
-      - "traefik.http.routers.iloop-web.middlewares=redirect-to-https@file"
-      - "traefik.http.routers.iloop-web.service=iloop-app"
-      - "traefik.http.routers.iloop-websecure.rule=Host(`iloop.store`)"
-      - "traefik.http.routers.iloop-websecure.entrypoints=websecure"
-      - "traefik.http.routers.iloop-websecure.tls=true"
-      - "traefik.http.routers.iloop-websecure.tls.certresolver=letsencrypt"
-      - "traefik.http.routers.iloop-websecure.service=iloop-app"
     depends_on:
       postgres:
         condition: service_healthy
