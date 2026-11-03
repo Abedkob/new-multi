@@ -25,8 +25,8 @@ WORKDIR /app
 ENV NODE_ENV=production
 ENV NODE_PATH=/usr/local/lib/node_modules
 
-# Make the Prisma CLI available for the startup migration step.
-RUN npm install -g prisma@7.10.0 dotenv@18.0.2
+# Make the Prisma CLI and the PostgreSQL client library available to the startup bootstrap.
+RUN npm install -g prisma@7.10.0 dotenv@18.0.2 pg@8.23.0
 
 # Standalone output contains only the traced runtime files and dependencies.
 COPY --from=builder /app/.next/standalone ./
@@ -34,6 +34,7 @@ COPY --from=builder /app/.next/static ./.next/static
 COPY --from=builder /app/public ./public
 COPY prisma ./prisma
 COPY prisma.config.ts ./prisma.config.ts
+COPY scripts/ensure-app-role.cjs ./scripts/ensure-app-role.cjs
 
 # Health check
 HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
@@ -41,4 +42,4 @@ HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
 
 EXPOSE 3000
 
-CMD ["sh", "-c", "prisma migrate deploy && node server.js"]
+CMD ["sh", "-c", "node scripts/ensure-app-role.cjs && prisma migrate deploy && node server.js"]
