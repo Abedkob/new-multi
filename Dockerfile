@@ -24,6 +24,8 @@ WORKDIR /app
 
 ENV NODE_ENV=production
 ENV NODE_PATH=/usr/local/lib/node_modules
+ENV HOSTNAME=0.0.0.0
+ENV PORT=3000
 
 # Make the Prisma CLI and the PostgreSQL client library available to the startup bootstrap.
 RUN npm install -g prisma@7.10.0 dotenv@18.0.2 pg@8.23.0
@@ -38,7 +40,7 @@ COPY scripts/ensure-app-role.cjs ./scripts/ensure-app-role.cjs
 
 # Health check
 HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
-  CMD node -e "require('http').get('http://localhost:3000/login', (r) => {if (r.statusCode !== 200) throw new Error(r.statusCode)})"
+  CMD node -e "require('http').get('http://127.0.0.1:3000/login', (r) => {if (r.statusCode !== 200) throw new Error(r.statusCode)})"
 
 EXPOSE 3000
 
