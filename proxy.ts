@@ -106,9 +106,22 @@ function withStoreSlugHeader(req: NextRequest, slug: string, url?: URL) {
   return url ? NextResponse.rewrite(url, { request: { headers } }) : NextResponse.next({ request: { headers } });
 }
 
-function isPlatformHost(hostname: string): boolean {
+function platformHostKind(hostname: string): "canonical" | "twin" | null {
   const platformHostname = new URL(env.baseUrl).hostname;
-  return hostname === platformHostname || hostname === "localhost" || hostname === "127.0.0.1";
+  if (hostname === platformHostname || hostname === "localhost" || hostname === "127.0.0.1") {
+    return "canonical";
+  }
+  return hostname === wwwTwin(platformHostname) ? "twin" : null;
+}
+
+/** Keep the platform on the single hostname configured by PLATFORM_BASE_URL. This mirrors the
+ * custom-domain www/apex behavior and prevents the platform's twin from being mistaken for an
+ * unconnected store domain. */
+function redirectToPlatform(req: NextRequest) {
+  const url = new URL(env.baseUrl);
+  url.pathname = req.nextUrl.pathname;
+  url.search = req.nextUrl.search;
+  return NextResponse.redirect(url, 308);
 }
 
 /** These two are the one place a dotted extension is exactly the page being asked for — each
@@ -163,8 +176,11 @@ async function maybeRedirectToDomain(pathname: string, search: string) {
 export default auth(async (req) => {
   const { pathname } = req.nextUrl;
   const hostname = normalizeHostname(req.headers.get("host") ?? "");
+  const platformHost = platformHostKind(hostname);
 
-  if (!isPlatformHost(hostname)) {
+  if (platformHost === "twin") return redirectToPlatform(req);
+
+  if (!platformHost) {
     return handleCustomDomainHost(req, pathname, hostname);
   }
 
