@@ -75,15 +75,77 @@ model Tenant {
   isPaused               Boolean        @default(false)
   pausedAt               DateTime?
   pauseReason            String?
+  // --- Storefront analytics: privacy identity, reporting basis, launch control --------------
+  // The platform and the merchant are JOINT CONTROLLERS for storefront analytics, so each store
+  // has to be able to name its own controller and privacy contact on its privacy page. Set by
+  // the platform admin at store creation; NULL means privacy setup is incomplete and the store
+  // must not be put into the analytics rollout (pnpm verify:consent fails while it is).
+  privacyControllerName     String?
+  privacyEmail              String?
+  privacyPolicyUrl          String?
+  // Which version of the joint-controller arrangement was recorded, when, and by which platform
+  // operator (a User id) — the audit trail behind the arrangement itself.
+  jointControllerVersion    String?
+  jointControllerRecordedAt DateTime?
+  jointControllerRecordedBy String?
+  // IANA zone the store's business day is resolved in (daily/hourly reports, weekly summaries).
+  // Timestamps are always stored in UTC; this only decides where the day boundary falls, so a
+  // viewer's own device timezone never redefines the store's day.
+  analyticsTimezone         String         @default("Asia/Beirut")
+  // Language the storefront consent notice opens in, and the fallback for owner notifications.
+  defaultLocale             String         @default("en")
+  // Bumping this asks every visitor for consent again (a changed notice needs a fresh decision).
+  consentNoticeVersion      Int            @default(1)
+  // Platform-only emergency stop for analytics. Deliberately NOT isPaused: that takes the whole
+  // storefront offline, this only silences measurement and leaves the store selling.
+  analyticsPausedAt         DateTime?
+  analyticsPauseReason      String?
   license                TenantLicense?
   createdAt              DateTime       @default(now())
 
-  contents   TenantContent[]
-  products   Product[]
-  categories Category[]
-  orders     Order[]
-  discounts  DiscountCampaign[]
-  coupons    Coupon[]
+  contents        TenantContent[]
+  products        Product[]
+  categories      Category[]
+  orders          Order[]
+  discounts       DiscountCampaign[]
+  coupons         Coupon[]
+  consentReceipts AnalyticsConsentReceipt[]
+}
+
+// One row per consent decision a storefront visitor makes. It records THAT a decision was made
+// and what it granted — never who made it. There is deliberately no IP, no user-agent string and
+// no visitor identifier here: a receipt is evidence the choice was honoured, not a profile. The
+// visitor's own copy of the decision is the signed cookie; this is ours.
+//
+// `publicRef` is the only part a visitor ever sees: Cookie settings shows it so they can quote it
+// in a privacy request without us having to identify them by anything else.
+model AnalyticsConsentReceipt {
+  id       String @id @default(cuid())
+  tenantId String
+  tenant   Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  // Shown to the visitor in Cookie settings; safe to disclose, meaningless without this table.
+  publicRef          String   @unique @default(cuid())
+  // Tenant.consentNoticeVersion at the moment of the decision.
+  noticeVersion      Int
+  analyticsGranted   Boolean
+  advertisingGranted Boolean
+  // The language the notice was actually shown in when the choice was made ("en" | "ar").
+  locale             String
+  // BANNER_ACCEPT_ALL | BANNER_REJECT | MANAGE | FOOTER_WITHDRAW — how the choice was expressed.
+  decisionMethod     String
+  // Country from trusted proxy metadata; coarse device class. Both optional, both non-identifying.
+  country            String?
+  deviceClass        String?
+  decidedAt          DateTime @default(now())
+  // Mirrors the cookie's own lifetime (~6 months). Retention deletes rows 24 months past this.
+  expiresAt          DateTime
+
+  // Composite key so future tenant-scoped children can carry a composite foreign key, the way
+  // CouponProduct references Coupon(id, tenantId).
+  @@unique([id, tenantId])
+  @@index([tenantId, decidedAt])
+  // Retention sweeps by expiry across every tenant (Phase 4's scheduled command).
+  @@index([expiresAt])
 }
 
 // Provider secrets stay encrypted at rest and are never selected into browser-facing props.
