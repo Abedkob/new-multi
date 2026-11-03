@@ -3,6 +3,8 @@ import { normalizeAdminPageSize } from "@/lib/admin-pagination";
 import { withTenant } from "@/lib/prisma";
 import { canTransition, type OrderStatusValue } from "@/lib/orders";
 import { calculatePrice } from "@/lib/pricing";
+import { calculateCouponDiscount, couponStatus } from "@/lib/pricing";
+import { findCouponForPricing, normalizeCouponCode } from "@/lib/data/coupons";
 import { parseAttributes, variantLabel } from "@/lib/variants";
 import { isLicenseActive } from "@/lib/license/status";
 
@@ -22,6 +24,8 @@ export type OrderErrorCode =
   | "CHANGED"
   | "PRICE_CHANGED"
   | "DELIVERY_CHANGED"
+  | "COUPON_INVALID"
+  | "COUPON_CHANGED"
   | "PAUSED";
 
 /** A problem the customer/owner can act on; the message is safe to show. */
@@ -54,6 +58,46 @@ export type OrderLineInput = {
 const MAX_LINES = 50;
 const MAX_QTY = 99;
 
+export async function previewCoupon(
+  tenantId: string,
+  code: string,
+  lines: Pick<OrderLineInput, "variantId" | "quantity">[],
+) {
+  const wanted = new Map<string, number>();
+  for (const line of lines) wanted.set(line.variantId, (wanted.get(line.variantId) ?? 0) + line.quantity);
+  const ids = [...wanted.keys()].sort();
+  return withTenant(tenantId, async (tx) => {
+    const [tenant, variants, coupon] = await Promise.all([
+      tx.tenant.findFirst({ where: { id: tenantId }, select: { deliveryFeeCents: true } }),
+      tx.productVariant.findMany({ where: { id: { in: ids }, product: { tenantId } }, include: { product: { include: { discounts: { include: { discount: true } } } } } }),
+      findCouponForPricing(tx, tenantId, code),
+    ]);
+    if (!tenant || variants.length !== ids.length) throw new OrderError("UNAVAILABLE", "Some items in your cart are no longer available.");
+    if (!coupon) throw new OrderError("COUPON_INVALID", "We couldn’t apply that code. Check it and try again.");
+    const status = couponStatus(coupon, new Date());
+    if (status === "SCHEDULED") throw new OrderError("COUPON_INVALID", "This coupon isn’t active yet.");
+    if (status === "EXPIRED") throw new OrderError("COUPON_INVALID", "This coupon has expired.");
+    if (status !== "ACTIVE") throw new OrderError("COUPON_INVALID", "We couldn’t apply that code. Check it and try again.");
+    const priced = variants.map((variant) => {
+      const price = calculatePrice(variant.product.basePriceCents, variant.priceCentsOverride, variant.product.discounts.map((item) => item.discount), new Date());
+      return { key: variant.id, productId: variant.productId, amountCents: price.finalPriceCents * (wanted.get(variant.id) ?? 0) };
+    });
+    const result = calculateCouponDiscount({ ...coupon, productIds: coupon.products.map((item) => item.productId) }, priced, tenant.deliveryFeeCents);
+    if (coupon.scope === "SELECTED_PRODUCTS" && result.eligibleSubtotalCents === 0) throw new OrderError("COUPON_INVALID", "This coupon doesn’t apply to the items in your cart.");
+    if (coupon.scope === "FREE_DELIVERY" && result.deliveryDiscountCents === 0) throw new OrderError("COUPON_INVALID", "Delivery is already free for this order.");
+    const merchandiseSubtotalCents = priced.reduce((sum, line) => sum + line.amountCents, 0);
+    return {
+      code: coupon.code,
+      name: coupon.name,
+      scope: coupon.scope,
+      merchandiseDiscountCents: result.merchandiseDiscountCents,
+      deliveryDiscountCents: result.deliveryDiscountCents,
+      discountCents: result.discountCents,
+      totalCents: merchandiseSubtotalCents + tenant.deliveryFeeCents - result.discountCents,
+    };
+  });
+}
+
 /**
  * Creates the order and its items and deducts stock, all in one transaction.
  *
@@ -65,7 +109,7 @@ export async function placeOrder(
   tenantId: string,
   customer: CustomerInput,
   lines: OrderLineInput[],
-  options: { expectedDeliveryFeeCents?: number } = {},
+  options: { expectedDeliveryFeeCents?: number; couponCode?: string; expectedTotalCents?: number } = {},
 ) {
   // Merge duplicate variant ids and sanity-check quantities.
   const wanted = new Map<string, number>();
@@ -154,6 +198,41 @@ export async function placeOrder(
       ]),
     );
 
+    let appliedCoupon: Awaited<ReturnType<typeof findCouponForPricing>> = null;
+    let couponResult = { eligibleSubtotalCents: 0, merchandiseDiscountCents: 0, deliveryDiscountCents: 0, discountCents: 0, allocations: {} as Record<string, number> };
+    if (options.couponCode?.trim()) {
+      const normalizedCode = normalizeCouponCode(options.couponCode);
+      await tx.$queryRaw`SELECT id FROM "Coupon" WHERE "tenantId" = ${tenantId} AND code = ${normalizedCode} FOR SHARE`;
+      appliedCoupon = await findCouponForPricing(tx, tenantId, normalizedCode);
+      if (!appliedCoupon || couponStatus(appliedCoupon, pricedAt) !== "ACTIVE") {
+        throw new OrderError("COUPON_INVALID", "We couldn’t apply that code. Check it and try again.");
+      }
+      couponResult = calculateCouponDiscount(
+        { ...appliedCoupon, productIds: appliedCoupon.products.map((item) => item.productId) },
+        ids.map((id) => {
+          const variant = byId.get(id)!;
+          return {
+            key: id,
+            productId: variant.productId,
+            amountCents: prices.get(id)!.finalPriceCents * wanted.get(id)!,
+          };
+        }),
+        deliveryFeeCents,
+      );
+      if (appliedCoupon.scope === "SELECTED_PRODUCTS" && couponResult.eligibleSubtotalCents === 0) {
+        throw new OrderError("COUPON_INVALID", "This coupon doesn’t apply to the items in your cart.");
+      }
+      if (appliedCoupon.scope === "FREE_DELIVERY" && couponResult.deliveryDiscountCents === 0) {
+        throw new OrderError("COUPON_INVALID", "Delivery is already free for this order.");
+      }
+    }
+
+    const merchandiseSubtotalCents = ids.reduce((sum, id) => sum + prices.get(id)!.finalPriceCents * wanted.get(id)!, 0);
+    const payableTotalCents = merchandiseSubtotalCents + deliveryFeeCents - couponResult.discountCents;
+    if (options.expectedTotalCents !== undefined && payableTotalCents > options.expectedTotalCents) {
+      throw new OrderError("COUPON_CHANGED", "Your coupon or order total changed. Review the updated total before placing your order.");
+    }
+
     for (const id of ids) {
       const displayed = expected.get(id);
       const current = prices.get(id)!;
@@ -196,6 +275,13 @@ export async function placeOrder(
         notes: customer.notes,
         deliveryFeeCentsSnapshot: deliveryFeeCents,
         deliveryNoteSnapshot: tenantRows[0].deliveryNote,
+        couponIdSnapshot: appliedCoupon?.id ?? null,
+        couponCodeSnapshot: appliedCoupon?.code ?? null,
+        couponNameSnapshot: appliedCoupon?.name ?? null,
+        couponScopeSnapshot: appliedCoupon?.scope ?? null,
+        couponMerchandiseDiscountCentsSnapshot: couponResult.merchandiseDiscountCents,
+        couponDeliveryDiscountCentsSnapshot: couponResult.deliveryDiscountCents,
+        couponDiscountCentsSnapshot: couponResult.discountCents,
         items: {
           create: ids.map((id) => {
             const v = byId.get(id)!;
@@ -210,6 +296,7 @@ export async function placeOrder(
               discountIdSnapshot: price.appliedDiscount?.id ?? null,
               discountNameSnapshot: price.appliedDiscount?.name ?? null,
               priceCentsSnapshot: price.finalPriceCents,
+              couponDiscountCentsSnapshot: couponResult.allocations[id] ?? 0,
               quantity: wanted.get(id)!,
             };
           }),

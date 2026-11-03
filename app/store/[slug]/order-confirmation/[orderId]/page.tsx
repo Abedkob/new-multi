@@ -46,6 +46,9 @@ export default async function OrderConfirmationPage({
         <PurchaseTracker
           orderId={order.id}
           deliveryFeeCents={order.deliveryFeeCentsSnapshot}
+          couponDiscountCents={order.couponDiscountCentsSnapshot}
+          deliveryCouponDiscountCents={order.couponDeliveryDiscountCentsSnapshot}
+          couponCode={order.couponCodeSnapshot ?? undefined}
           items={order.items.map((i) => {
             const label = variantLabel(parseAttributes(i.variantAttributesSnapshot), "");
             return {
@@ -88,6 +91,7 @@ export default async function OrderConfirmationPage({
             <dt>{content["cart.subtotal"]}</dt>
             <dd className="tabular-nums">{formatPrice(orderSubtotal(order.items))}</dd>
           </div>
+          {order.couponDiscountCentsSnapshot > 0 && <div className="flex justify-between gap-3 text-emerald-700"><dt>Coupon {order.couponCodeSnapshot}</dt><dd className="tabular-nums">−{formatPrice(order.couponDiscountCentsSnapshot)}</dd></div>}
           <div className="flex justify-between gap-3">
             <dt>Delivery</dt>
             <dd className="tabular-nums" data-testid="confirmation-delivery-fee">
@@ -97,7 +101,7 @@ export default async function OrderConfirmationPage({
           <div className="flex justify-between gap-3 pt-2 text-base font-semibold">
             <dt>{content["confirmation.total"]}</dt>
             <dd className="tabular-nums" data-testid="confirmation-total">
-              {formatPrice(orderTotal(order.items, order.deliveryFeeCentsSnapshot))}
+              {formatPrice(orderTotal(order.items, order.deliveryFeeCentsSnapshot, order.couponDiscountCentsSnapshot))}
             </dd>
           </div>
         </dl>

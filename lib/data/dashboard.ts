@@ -18,12 +18,16 @@ export function getDashboard(tenantId: string) {
       await Promise.all([
         db.order.groupBy({ by: ["status"], where: { tenantId }, _count: { _all: true } }),
         db.$queryRaw<{ cents: number; orders: number }[]>`
-          SELECT COALESCE(SUM(i."priceCentsSnapshot" * i."quantity"), 0)::int AS cents,
-                 COUNT(DISTINCT o."id")::int AS orders
-          FROM "Order" o JOIN "OrderItem" i ON i."orderId" = o."id"
-          WHERE o."tenantId" = ${tenantId}
-            AND o."status" IN ('CONFIRMED', 'DELIVERED')
-            AND o."createdAt" >= ${monthStart}`,
+          SELECT COALESCE(SUM(x.merchandise - x.coupon), 0)::int AS cents, COUNT(*)::int AS orders
+          FROM (
+            SELECT o.id, o."couponMerchandiseDiscountCentsSnapshot" AS coupon,
+                   SUM(i."priceCentsSnapshot" * i.quantity) AS merchandise
+            FROM "Order" o JOIN "OrderItem" i ON i."orderId" = o.id
+            WHERE o."tenantId" = ${tenantId}
+              AND o.status IN ('CONFIRMED', 'DELIVERED')
+              AND o."createdAt" >= ${monthStart}
+            GROUP BY o.id
+          ) x`,
         db.order.count({ where: { tenantId, createdAt: { gte: weekAgo }, status: { not: "CANCELLED" } } }),
         db.order.findMany({
           where: { tenantId },

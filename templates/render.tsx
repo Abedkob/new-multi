@@ -3,6 +3,7 @@ import { WhatsAppContactButton } from "@/components/whatsapp-contact-button";
 import { cn } from "@/lib/utils";
 import { HOME_SECTION_ORDER, type SectionId } from "@/lib/sections";
 import type { StorefrontData, Template } from "./types";
+import { CouponAnnouncementCopy } from "@/components/coupon-announcement-copy";
 
 /**
  * The one place that decides which sections appear and in what order, so every template
@@ -22,7 +23,7 @@ export function isSectionShown(id: SectionId, data: StorefrontData) {
       // stays. The section disappears only when the text is off and there's no image either.
       return data.visibility.heroText || c["hero.image"] !== "" || c["hero.imageMobile"] !== "";
     case "announcement":
-      return data.visibility.announcementBar && c["announcement.text"].trim() !== "";
+      return !!data.couponAnnouncement || (data.visibility.announcementBar && c["announcement.text"].trim() !== "");
     case "promoBanner":
       // Same rule as Hero: an image-only banner still counts as content.
       return data.visibility.promoBanner && (c["promoBanner.heading"].trim() !== "" || c["promoBanner.image"] !== "");
@@ -81,6 +82,7 @@ function Section({
       className={cn(
         // Anchor jumps (#new-arrivals) land below the sticky navbar, not under it.
         "scroll-mt-28",
+        id === "announcement" && "relative",
         // The navbar stays pinned to the top while scrolling, in every template. Sticky goes
         // on this wrapper, not the template's <header>: a sticky element only sticks inside
         // its parent, and this wrapper is exactly as tall as the header.
@@ -88,6 +90,7 @@ function Section({
       )}
     >
       <Component data={data} />
+      {id === "announcement" && data.couponAnnouncement && <CouponAnnouncementCopy code={data.couponAnnouncement.code} slug={data.store.slug} />}
     </div>
   );
 }

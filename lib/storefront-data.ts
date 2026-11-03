@@ -91,5 +91,6 @@ export function buildStorefrontData(input: {
     reviews,
     faqs,
     socialLinks: publicSocialLinks(input.socialLinks ?? {}),
+    couponAnnouncement: null,
   };
 }

@@ -51,6 +51,7 @@ import { deliverySettingsSchema } from "../lib/delivery";
 import { toStoreProduct } from "../lib/store-product";
 import { cartLinesSchema, checkoutSchema, productFormSchema } from "../lib/validation";
 import { variantSetIssues } from "../lib/variants";
+import { createCoupon } from "../lib/data/coupons";
 
 let passed = 0;
 async function check(name: string, fn: () => Promise<void>) {
@@ -600,6 +601,27 @@ async function main() {
       assert.ok(cartLinesSchema.safeParse([{ variantId: "a", quantity: 1 }]).success);
       assert.ok(!cartLinesSchema.safeParse([]).success);
       assert.ok(!cartLinesSchema.safeParse([{ variantId: "a", quantity: 0 }]).success);
+    });
+
+    await check("coupon pricing is snapshotted, allocated exactly, and never silently raises the total", async () => {
+      const coupon = await createCoupon(A, {
+        name: "Checkout ten", code: "CHECKOUT10", scope: "ORDER_SUBTOTAL", type: "PERCENTAGE", value: 10,
+        isEnabled: true, startsAt: null, endsAt: null, isAnnounced: false, announcementText: null, productIds: [],
+      });
+      const beforeStock = await stockOf(tS.id);
+      await orderErr(placeOrder(A, customer, [{ variantId: tS.id, quantity: 1 }], {
+        couponCode: coupon.code, expectedTotalCents: 1,
+      }), "COUPON_CHANGED");
+      assert.equal(await stockOf(tS.id), beforeStock, "stock changed after rejected repricing");
+      const order = await placeOrder(A, customer, [{ variantId: tS.id, quantity: 2 }], {
+        couponCode: "checkout10", expectedTotalCents: 3600,
+      });
+      assert.equal(order.couponCodeSnapshot, "CHECKOUT10");
+      assert.equal(order.couponMerchandiseDiscountCentsSnapshot, 400);
+      assert.equal(order.couponDiscountCentsSnapshot, 400);
+      assert.equal(order.items.reduce((sum, item) => sum + item.couponDiscountCentsSnapshot, 0), 400);
+      assert.equal(orderTotal(order.items, order.deliveryFeeCentsSnapshot, order.couponDiscountCentsSnapshot), 3600);
+      await prisma.productVariant.update({ where: { id: tS.id }, data: { stock: beforeStock } });
     });
 
     await check("order history is a snapshot: renaming, repricing and deleting the product don't change it", async () => {

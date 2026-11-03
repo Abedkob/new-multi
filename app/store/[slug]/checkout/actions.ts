@@ -2,7 +2,7 @@
 
 import { headers } from "next/headers";
 import { z } from "zod";
-import { OrderError, placeOrder } from "@/lib/data/orders";
+import { OrderError, placeOrder, previewCoupon } from "@/lib/data/orders";
 import { getTenantBySlug } from "@/lib/data/tenants";
 import { RATE_LIMITS, clientIp, rateLimit, retryAfterText } from "@/lib/rate-limit";
 import { cartLinesSchema, checkoutSchema } from "@/lib/validation";
@@ -24,7 +24,29 @@ export type PlaceOrderResult = {
   priceChanged?: boolean;
   /** Set when the store changed its delivery fee after this checkout page loaded. */
   deliveryChanged?: boolean;
+  couponChanged?: boolean;
 };
+
+export type CouponPreviewResult = {
+  ok?: true; error?: string; code?: string; name?: string | null; scope?: string;
+  merchandiseDiscountCents?: number; deliveryDiscountCents?: number; discountCents?: number; totalCents?: number;
+};
+
+export async function previewCouponAction(slug: string, code: string, inputLines: { variantId: string; quantity: number }[]): Promise<CouponPreviewResult> {
+  const tenant = typeof slug === "string" ? await getTenantBySlug(slug) : null;
+  if (!tenant || !canServeTenant(tenant)) return { error: "We couldn’t apply that code. Check it and try again." };
+  const lines = cartLinesSchema.safeParse(inputLines);
+  if (!lines.success || typeof code !== "string" || code.trim().length > 32) return { error: "We couldn’t apply that code. Check it and try again." };
+  const ip = clientIp(await headers());
+  const limit = await rateLimit(`coupon:${tenant.id}:${ip}`, RATE_LIMITS.coupon);
+  if (!limit.ok) return { error: `Too many attempts. Try again in ${retryAfterText(limit.retryAfterMs)}.` };
+  try {
+    return { ok: true, ...(await previewCoupon(tenant.id, code, lines.data)) };
+  } catch (error) {
+    if (error instanceof OrderError) return { error: error.message };
+    return { error: "We couldn’t apply that code. Check it and try again." };
+  }
+}
 
 export async function placeOrderAction(
   slug: string,
@@ -35,6 +57,8 @@ export async function placeOrderAction(
     deliveryLocation: string;
     notes: string;
     expectedDeliveryFeeCents?: number;
+    couponCode?: string;
+    expectedTotalCents?: number;
     lines: { variantId: string; quantity: number; expectedPriceCents?: number }[];
   },
 ): Promise<PlaceOrderResult> {
@@ -67,10 +91,15 @@ export async function placeOrderAction(
   ) {
     return { error: "The displayed delivery fee is invalid. Refresh and try again." };
   }
+  if (input.expectedTotalCents !== undefined && (!Number.isInteger(input.expectedTotalCents) || input.expectedTotalCents < 0 || input.expectedTotalCents > 100_000_000)) {
+    return { error: "The displayed total is invalid. Refresh and try again." };
+  }
 
   try {
     const order = await placeOrder(tenant.id, customer.data, lines.data, {
       expectedDeliveryFeeCents: input.expectedDeliveryFeeCents,
+      couponCode: input.couponCode?.trim() || undefined,
+      expectedTotalCents: input.expectedTotalCents,
     });
     return { ok: true, orderId: order.id };
   } catch (e) {
@@ -80,6 +109,7 @@ export async function placeOrderAction(
         stockChanged: e.code === "STOCK" || e.code === "UNAVAILABLE",
         priceChanged: e.code === "PRICE_CHANGED",
         deliveryChanged: e.code === "DELIVERY_CHANGED",
+        couponChanged: e.code === "COUPON_INVALID" || e.code === "COUPON_CHANGED",
       };
     }
     console.error("placeOrder failed:", e instanceof Error ? e.message : e);

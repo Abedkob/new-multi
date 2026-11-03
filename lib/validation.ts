@@ -329,6 +329,77 @@ export type DiscountFormInput = {
   endsAt: string;
 };
 
+export const couponFormSchema = z
+  .object({
+    name: z.string().trim().max(120, "coupons.validation.nameTooLong"),
+    code: z
+      .string()
+      .trim()
+      .toUpperCase()
+      .min(3, "coupons.validation.codeLength")
+      .max(32, "coupons.validation.codeLength")
+      .regex(/^[A-Z0-9][A-Z0-9_-]*$/, "coupons.validation.codeFormat"),
+    scope: z.enum(["ORDER_SUBTOTAL", "SELECTED_PRODUCTS", "FREE_DELIVERY"]),
+    type: z.enum(["PERCENTAGE", "FIXED_AMOUNT"]),
+    value: z.string().trim(),
+    isEnabled: z.boolean().default(true),
+    startsAt: optionalIsoDate,
+    endsAt: optionalIsoDate,
+    isAnnounced: z.boolean().default(false),
+    announcementText: z.string().trim().max(240, "coupons.validation.announcementTooLong"),
+    productIds: z.array(z.string().min(1).max(64)).max(1000, "coupons.validation.tooManyProducts"),
+    revision: z.number().int().min(0).optional(),
+  })
+  .superRefine((coupon, ctx) => {
+    if (coupon.scope === "SELECTED_PRODUCTS" && coupon.productIds.length === 0) {
+      ctx.addIssue({ code: "custom", path: ["productIds"], message: "coupons.validation.productsRequired" });
+    }
+    if (coupon.scope !== "FREE_DELIVERY") {
+      if (coupon.type === "PERCENTAGE") {
+        if (!/^\d+$/.test(coupon.value) || Number(coupon.value) < 1 || Number(coupon.value) > 100) {
+          ctx.addIssue({ code: "custom", path: ["value"], message: "validation.discount.percentageRange" });
+        }
+      } else {
+        const cents = parsePriceToCents(coupon.value);
+        if (cents === null || cents < 1 || cents > 100_000_000) {
+          ctx.addIssue({ code: "custom", path: ["value"], message: "validation.discount.amountInvalid" });
+        }
+      }
+    }
+    if (coupon.startsAt && coupon.endsAt && coupon.endsAt <= coupon.startsAt) {
+      ctx.addIssue({ code: "custom", path: ["endsAt"], message: "validation.discount.endBeforeStart" });
+    }
+  })
+  .transform((coupon) => ({
+    ...coupon,
+    isAnnounced: coupon.isEnabled && coupon.isAnnounced,
+    type: coupon.scope === "FREE_DELIVERY" ? null : coupon.type,
+    value: coupon.scope === "FREE_DELIVERY"
+      ? null
+      : coupon.type === "PERCENTAGE"
+        ? Number(coupon.value)
+        : (parsePriceToCents(coupon.value) ?? 0),
+    productIds: coupon.scope === "SELECTED_PRODUCTS" ? [...new Set(coupon.productIds)] : [],
+    announcementText: coupon.isEnabled && coupon.isAnnounced
+      ? (coupon.announcementText || "Use {code} at checkout")
+      : null,
+  }));
+
+export type CouponFormInput = {
+  name: string;
+  code: string;
+  scope: "ORDER_SUBTOTAL" | "SELECTED_PRODUCTS" | "FREE_DELIVERY";
+  type: "PERCENTAGE" | "FIXED_AMOUNT";
+  value: string;
+  isEnabled: boolean;
+  startsAt: string;
+  endsAt: string;
+  isAnnounced: boolean;
+  announcementText: string;
+  productIds: string[];
+  revision?: number;
+};
+
 export const contentSchema = z.object({
   entries: z.array(
     z

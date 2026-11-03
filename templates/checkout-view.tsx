@@ -2,9 +2,9 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useState, useSyncExternalStore, useTransition } from "react";
+import { useEffect, useRef, useState, useSyncExternalStore, useTransition } from "react";
 import { Check, LoaderCircle, MapPin } from "lucide-react";
-import { placeOrderAction } from "@/app/store/[slug]/checkout/actions";
+import { placeOrderAction, previewCouponAction, type CouponPreviewResult } from "@/app/store/[slug]/checkout/actions";
 import { buttonVariants, Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -125,6 +125,41 @@ export function CheckoutView({
   const [error, setError] = useState<string>();
   const [fieldErrors, setFieldErrors] = useState<Record<string, string[] | undefined>>({});
   const [pending, startTransition] = useTransition();
+  const [couponPending, startCouponTransition] = useTransition();
+  const [couponOpen, setCouponOpen] = useState(false);
+  const [couponCode, setCouponCode] = useState("");
+  const [couponError, setCouponError] = useState<string>();
+  const [coupon, setCoupon] = useState<CouponPreviewResult>();
+  const couponStorageKey = `coupon:${slug}`;
+  const rememberedCoupon = useSyncExternalStore(noSubscribe, () => sessionStorage.getItem(couponStorageKey) ?? "", () => "");
+  const effectiveCouponCode = couponCode || rememberedCoupon;
+  const couponLinesJson = JSON.stringify(items.map((item) => ({ variantId: item.variantId, quantity: item.quantity })));
+  const lastValidatedCart = useRef("");
+
+  useEffect(() => {
+    if (!rememberedCoupon || couponLinesJson === "[]" || lastValidatedCart.current === couponLinesJson) return;
+    lastValidatedCart.current = couponLinesJson;
+    let cancelled = false;
+    void previewCouponAction(slug, rememberedCoupon, JSON.parse(couponLinesJson) as { variantId: string; quantity: number }[]).then((result) => {
+      if (cancelled) return;
+      if (result.ok) { setCoupon(result); setCouponError(undefined); }
+      else { setCoupon(undefined); setCouponError(result.error); }
+    });
+    return () => { cancelled = true; };
+  }, [couponLinesJson, rememberedCoupon, slug]);
+
+  const applyCoupon = () => {
+    setCouponError(undefined);
+    startCouponTransition(async () => {
+      const result = await previewCouponAction(slug, effectiveCouponCode, items.map((item) => ({ variantId: item.variantId, quantity: item.quantity })));
+      if (!result.ok) { setCoupon(undefined); setCouponError(result.error); return; }
+      lastValidatedCart.current = couponLinesJson;
+      setCoupon(result);
+      setCouponCode(result.code ?? effectiveCouponCode.toUpperCase());
+      sessionStorage.setItem(couponStorageKey, result.code ?? effectiveCouponCode.toUpperCase());
+    });
+  };
+  const removeCoupon = () => { setCoupon(undefined); setCouponCode(""); setCouponError(undefined); sessionStorage.removeItem(couponStorageKey); };
   const set = (k: keyof typeof form) => (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) =>
     setForm((f) => ({ ...f, [k]: e.target.value }));
 
@@ -136,6 +171,8 @@ export function CheckoutView({
       const res = await placeOrderAction(slug, {
         ...form,
         expectedDeliveryFeeCents: deliveryFeeCents,
+        couponCode: coupon?.code,
+        expectedTotalCents: subtotal + deliveryFeeCents - (coupon?.discountCents ?? 0),
         lines: items.map((item) => ({
           variantId: item.variantId,
           quantity: item.quantity,
@@ -150,7 +187,8 @@ export function CheckoutView({
       setError(res.priceChanged ? content["cart.priceChanged"] : res.error);
       setFieldErrors(res.fieldErrors ?? {});
       // Someone else may have bought the last unit: show the shopper current stock.
-      if (res.stockChanged || res.priceChanged) await refresh();
+      if (res.couponChanged) setCoupon(undefined);
+      if (res.stockChanged || res.priceChanged || res.couponChanged) await refresh();
       if (res.deliveryChanged) router.refresh();
     });
   };
@@ -212,8 +250,8 @@ export function CheckoutView({
       <h1 className={style.title}>{content["checkout.heading"]}</h1>
       <p className="mt-2 text-sm text-muted-foreground">{content["checkout.cod"]}</p>
 
-      <div className="mt-8 grid gap-10 lg:grid-cols-[minmax(0,1fr)_22rem]">
-        <form onSubmit={submit} className="grid max-w-xl gap-5" noValidate>
+      <form onSubmit={submit} className="mt-8 grid gap-6 lg:grid-cols-[minmax(0,1fr)_22rem] lg:gap-10" noValidate>
+        <div className="grid max-w-xl gap-5">
           {field("customerName", content["checkout.name"], { autoComplete: "name" })}
           {field("customerPhone", content["checkout.phone"], { type: "tel", autoComplete: "tel" })}
           {field("customerAddress", content["checkout.address"], { textarea: true, autoComplete: "street-address" })}
@@ -227,17 +265,7 @@ export function CheckoutView({
           </div>
           {field("notes", content["checkout.notes"], { textarea: true })}
 
-          {error && (
-            <p role="alert" className="text-sm text-destructive" data-testid="checkout-error">
-              {error}
-            </p>
-          )}
-          <div>
-            <Button type="submit" size="lg" disabled={pending || items.length === 0} data-testid="place-order" className="h-12 w-full sm:h-10 sm:w-auto">
-              {pending ? content["checkout.placing"] : content["checkout.submit"]}
-            </Button>
-          </div>
-        </form>
+        </div>
 
         <aside className={cn(style.panel, "h-fit")}>
           <h2 className="font-semibold">{content["checkout.summary"]}</h2>
@@ -270,13 +298,17 @@ export function CheckoutView({
                 {deliveryFeeCents === 0 ? "Free" : formatPrice(deliveryFeeCents)}
               </dd>
             </div>
+            {coupon?.discountCents ? <div className="flex justify-between gap-3 text-primary"><dt>Coupon {coupon.code}</dt><dd className="tabular-nums">−{formatPrice(coupon.discountCents)}</dd></div> : null}
             <div className="flex justify-between gap-3 pt-2 text-base font-semibold">
               <dt>{content["confirmation.total"]}</dt>
               <dd className="tabular-nums" data-testid="checkout-total">
-                {formatPrice(subtotal + deliveryFeeCents)}
+                {formatPrice(subtotal + deliveryFeeCents - (coupon?.discountCents ?? 0))}
               </dd>
             </div>
           </dl>
+          <div className="mt-4 border-t border-border pt-4">
+            {!couponOpen && !rememberedCoupon && !coupon ? <button type="button" onClick={() => setCouponOpen(true)} className="text-sm font-medium underline underline-offset-4">Have a coupon?</button> : coupon ? <div className="flex items-center justify-between gap-3 rounded-lg border border-primary/30 bg-primary/5 p-3 text-sm"><div><p className="font-medium">Coupon {coupon.code} applied</p><p>You save {formatPrice(coupon.discountCents ?? 0)}.</p>{coupon.scope === "SELECTED_PRODUCTS" && <p className="text-xs">Applied to eligible items in this order.</p>}</div><Button type="button" variant="ghost" size="sm" onClick={removeCoupon}>Remove</Button></div> : <div className="grid gap-2"><Label htmlFor="checkout-coupon">Coupon code</Label><div className="flex gap-2"><Input id="checkout-coupon" dir="ltr" value={effectiveCouponCode} onChange={(event) => { setCouponCode(event.target.value.toUpperCase()); setCouponError(undefined); }} autoComplete="off" /><Button type="button" variant="outline" disabled={couponPending || !effectiveCouponCode.trim()} onClick={applyCoupon}>{couponPending ? "Applying…" : "Apply"}</Button></div>{couponError && <p role="alert" className="text-sm text-destructive">{couponError}</p>}</div>}
+          </div>
           {deliveryNote && (
             <p className="mt-3 text-sm text-muted-foreground">{deliveryNote}</p>
           )}
@@ -287,7 +319,11 @@ export function CheckoutView({
             {content["cart.heading"]}
           </Link>
         </aside>
-      </div>
+        <div className="grid max-w-xl gap-3 lg:col-start-1 lg:row-start-2">
+          {error && <p role="alert" className="text-sm text-destructive" data-testid="checkout-error">{error}</p>}
+          <div><Button type="submit" size="lg" disabled={pending || items.length === 0} data-testid="place-order" className="h-12 w-full sm:h-10 sm:w-auto">{pending ? content["checkout.placing"] : content["checkout.submit"]}</Button></div>
+        </div>
+      </form>
     </div>
   );
 }

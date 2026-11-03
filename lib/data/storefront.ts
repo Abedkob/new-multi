@@ -8,6 +8,7 @@ import { withTenant, type TxClient } from "@/lib/prisma";
 import { buildStorefrontData } from "@/lib/storefront-data";
 import { getStoreBasePath } from "@/lib/store-url";
 import { toStoreProduct } from "@/lib/store-product";
+import { couponStatus } from "@/lib/pricing";
 
 // Runs on a transaction the caller already opened (see loadStorefrontData).
 // Only the newest photo of each category (DISTINCT ON), newest first overall — one row per
@@ -49,27 +50,36 @@ export const loadStorefrontData = cache(async (slug: string) => {
   // A single shared transaction for all 5 reads instead of 5 independent withTenant() calls:
   // each one is an interactive transaction that holds a pooled connection for its duration, and
   // 5 of them firing concurrently per page load exhausts a small pool fast. See lib/prisma.ts.
-  const { content, newArrivals, bestSellers, categories, categoryProductImages } = await withTenant(
+  const { content, newArrivals, bestSellers, categories, categoryProductImages, announcedCoupon } = await withTenant(
     tenant.id,
     async (db) => {
-      const [rows, newArrivals, bestSellers, categories, categoryProductImages] = await Promise.all([
+      const [rows, newArrivals, bestSellers, categories, categoryProductImages, announcedCoupon] = await Promise.all([
         contentRowsQuery(db, tenant.id),
         newArrivalsQuery(db, tenant.id),
         bestSellersQuery(db, tenant.id),
         categoriesQuery(db, tenant.id),
         categoryProductImagesQuery(db, tenant.id),
+        db.coupon.findFirst({ where: { tenantId: tenant.id, isAnnounced: true }, select: { code: true, announcementText: true, isEnabled: true, startsAt: true, endsAt: true, archivedAt: true } }),
       ]);
-      return { content: resolveContent(rows), newArrivals, bestSellers, categories, categoryProductImages };
+      return { content: resolveContent(rows), newArrivals, bestSellers, categories, categoryProductImages, announcedCoupon };
     },
   );
-  return buildStorefrontData({
+  const activeCoupon = announcedCoupon && couponStatus(announcedCoupon, new Date()) === "ACTIVE" ? announcedCoupon : null;
+  const couponAnnouncement = activeCoupon ? {
+    code: activeCoupon.code,
+    text: (activeCoupon.announcementText || "Use {code} at checkout").includes("{code}")
+      ? (activeCoupon.announcementText || "Use {code} at checkout").replaceAll("{code}", activeCoupon.code)
+      : `${activeCoupon.announcementText} ${activeCoupon.code}`,
+  } : null;
+  const resolved = couponAnnouncement ? { ...content, "announcement.text": couponAnnouncement.text } : content;
+  return { ...buildStorefrontData({
     store: { name: tenant.name, slug: tenant.slug, basePath: getStoreBasePath(tenant) },
-    content,
+    content: resolved,
     sectionVisibility: tenant.sectionVisibility,
     newArrivals: newArrivals.map(toStoreProduct),
     bestSellers: bestSellers.map(toStoreProduct),
     categories,
     categoryProductImages,
     socialLinks: tenant,
-  });
+  }), couponAnnouncement };
 });

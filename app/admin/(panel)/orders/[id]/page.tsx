@@ -227,6 +227,7 @@ export default async function OrderDetailPage({ params }: PageProps<"/admin/orde
                   {formatPrice(orderSubtotal(order.items))}
                 </TableCell>
               </TableRow>
+              {order.couponDiscountCentsSnapshot > 0 && <TableRow className="bg-muted/50 hover:bg-muted/50"><TableCell colSpan={3} className="ps-6 text-end">Coupon <span dir="ltr">{order.couponCodeSnapshot}</span></TableCell><TableCell className="pe-6 text-end text-emerald-700 tabular-nums">−{formatPrice(order.couponDiscountCentsSnapshot)}</TableCell></TableRow>}
               <TableRow className="bg-muted/50 hover:bg-muted/50">
                 <TableCell colSpan={3} className="ps-6 text-end">
                   {t("orders.detail.delivery")}
@@ -240,7 +241,7 @@ export default async function OrderDetailPage({ params }: PageProps<"/admin/orde
                   {t("orders.detail.totalToCollect")}
                 </TableCell>
                 <TableCell className="pe-6 text-end text-base font-semibold tabular-nums" data-testid="order-total">
-                  {formatPrice(orderTotal(order.items, order.deliveryFeeCentsSnapshot))}
+                  {formatPrice(orderTotal(order.items, order.deliveryFeeCentsSnapshot, order.couponDiscountCentsSnapshot))}
                 </TableCell>
               </TableRow>
             </TableBody>

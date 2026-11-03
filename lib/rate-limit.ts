@@ -84,6 +84,7 @@ export const RATE_LIMITS = {
   login: { limit: 8, windowMs: 5 * 60_000 },
   // Guest checkout: stops one source tying up stock with a flood of pending orders.
   checkout: { limit: 10, windowMs: 10 * 60_000 },
+  coupon: { limit: 20, windowMs: 10 * 60_000 },
   // Public search endpoint: generous enough for real typing, bounded against scraping.
   search: { limit: 30, windowMs: 60_000 },
   // Importing an image from a pasted link makes the server fetch an outside URL: keyed per

@@ -90,6 +90,8 @@ export type StorefrontData = {
   faqs: FaqItem[];
   /** Only configured links; empty settings never produce blank footer controls. */
   socialLinks: SocialLink[];
+  /** Present only while the selected coupon is currently usable. */
+  couponAnnouncement: { code: string; text: string } | null;
 };
 
 export type SectionComponent = ComponentType<{ data: StorefrontData }>;

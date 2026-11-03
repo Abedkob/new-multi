@@ -33,7 +33,13 @@ export const orderSubtotal = (items: { priceCentsSnapshot: number; quantity: num
 export const orderTotal = (
   items: { priceCentsSnapshot: number; quantity: number }[],
   deliveryFeeCents = 0,
-) => orderSubtotal(items) + deliveryFeeCents;
+  couponDiscountCents = 0,
+) => orderSubtotal(items) + deliveryFeeCents - couponDiscountCents;
+
+export const orderNetMerchandise = (
+  items: { priceCentsSnapshot: number; quantity: number }[],
+  merchandiseCouponDiscountCents = 0,
+) => orderSubtotal(items) - merchandiseCouponDiscountCents;
 
 /**
  * Whether an order was placed recently enough that showing its confirmation page counts as "the

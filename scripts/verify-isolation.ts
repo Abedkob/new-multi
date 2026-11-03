@@ -25,6 +25,7 @@ import {
 } from "../lib/data/discounts";
 import { setSectionVisible } from "../lib/data/sections";
 import { parseSectionVisibility } from "../lib/sections";
+import { createCoupon, getCoupon, updateCoupon } from "../lib/data/coupons";
 
 const input = {
   description: "d",
@@ -120,6 +121,19 @@ async function main() {
         setDiscountAssignmentsForProducts(B, discount.id, [pa.id], [pa.id]),
       );
       assert.equal((await getDiscount(A, discount.id))!.name, "A only");
+    });
+    await check("coupon reads, edits, codes, and product assignments stay inside their store", async () => {
+      const baseCoupon = {
+        name: "Private offer", code: "SAMECODE", scope: "SELECTED_PRODUCTS" as const,
+        type: "PERCENTAGE" as const, value: 10, isEnabled: true, startsAt: null, endsAt: null,
+        isAnnounced: false, announcementText: null,
+      };
+      const couponA = await createCoupon(A, { ...baseCoupon, productIds: [pa.id] });
+      await createCoupon(B, { ...baseCoupon, productIds: [pb.id] });
+      assert.equal(await getCoupon(B, couponA.id), null);
+      await assert.rejects(updateCoupon(B, couponA.id, { ...baseCoupon, code: "HACKED", productIds: [pb.id], revision: couponA.revision }));
+      await assert.rejects(createCoupon(B, { ...baseCoupon, code: "CROSSPRODUCT", productIds: [pa.id] }));
+      assert.equal((await getCoupon(A, couponA.id))?.code, "SAMECODE");
     });
     await check("section visibility changes only touch the caller's tenant", async () => {
       await setSectionVisible(B, "reviews", false);

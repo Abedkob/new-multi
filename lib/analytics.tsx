@@ -156,14 +156,15 @@ function makeTracker(config: AnalyticsConfig) {
         currency: CURRENCY,
       });
     },
-    purchase(orderId: string, items: TrackItem[], deliveryFeeCents = 0) {
-      const value = dollars(sumCents(items) + deliveryFeeCents);
+    purchase(orderId: string, items: TrackItem[], deliveryFeeCents = 0, couponDiscountCents = 0, deliveryCouponDiscountCents = 0, couponCode?: string) {
+      const value = dollars(sumCents(items) + deliveryFeeCents - couponDiscountCents);
       // transaction_id lets GA4 and Google Ads drop a repeat of the same order.
       ga("purchase", {
         transaction_id: orderId,
         currency: CURRENCY,
         value,
-        shipping: dollars(deliveryFeeCents),
+        shipping: dollars(deliveryFeeCents - deliveryCouponDiscountCents),
+        ...(couponCode ? { coupon: couponCode } : {}),
         items: gaItems(items),
       });
       const gtag = gtagFor(config);
@@ -267,10 +268,16 @@ export function PurchaseTracker({
   orderId,
   items,
   deliveryFeeCents = 0,
+  couponDiscountCents = 0,
+  deliveryCouponDiscountCents = 0,
+  couponCode,
 }: {
   orderId: string;
   items: TrackItem[];
   deliveryFeeCents?: number;
+  couponDiscountCents?: number;
+  deliveryCouponDiscountCents?: number;
+  couponCode?: string;
 }) {
   const track = useTrack();
   useTrackOnce(true, () => {
@@ -281,7 +288,7 @@ export function PurchaseTracker({
     } catch {
       // Storage blocked: fall back to the server-side freshness window + platform dedupe.
     }
-    track.purchase(orderId, items, deliveryFeeCents);
+    track.purchase(orderId, items, deliveryFeeCents, couponDiscountCents, deliveryCouponDiscountCents, couponCode);
   });
   return null;
 }

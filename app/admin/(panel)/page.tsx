@@ -240,7 +240,7 @@ export default async function AdminHome() {
                           {orderRef(o.id)} · {timeAgo(o.createdAt, t)}
                         </span>
                       </span>
-                      <span className="text-sm font-medium tabular-nums">{formatPrice(orderTotal(o.items, o.deliveryFeeCentsSnapshot))}</span>
+                      <span className="text-sm font-medium tabular-nums">{formatPrice(orderTotal(o.items, o.deliveryFeeCentsSnapshot, o.couponDiscountCentsSnapshot))}</span>
                       <StatusBadge status={o.status} />
                     </Link>
                   </li>

@@ -83,6 +83,7 @@ model Tenant {
   categories Category[]
   orders     Order[]
   discounts  DiscountCampaign[]
+  coupons    Coupon[]
 }
 
 // Provider secrets stay encrypted at rest and are never selected into browser-facing props.
@@ -180,6 +181,7 @@ model Product {
   variants       ProductVariant[]
   images         ProductImage[]
   discounts      DiscountProduct[]
+  coupons        CouponProduct[]
   createdAt      DateTime          @default(now())
   updatedAt      DateTime          @updatedAt
 
@@ -194,6 +196,12 @@ model Product {
 enum DiscountType {
   PERCENTAGE
   FIXED_AMOUNT
+}
+
+enum CouponScope {
+  ORDER_SUBTOTAL
+  SELECTED_PRODUCTS
+  FREE_DELIVERY
 }
 
 // Reusable automatic product discounts. Status is derived at read time from these fields:
@@ -234,6 +242,45 @@ model DiscountProduct {
   @@index([tenantId, discountId])
 }
 
+model Coupon {
+  id               String          @id @default(cuid())
+  tenantId         String
+  tenant           Tenant          @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  name             String?
+  code             String
+  scope            CouponScope
+  type             DiscountType?
+  value            Int?
+  isEnabled        Boolean         @default(true)
+  startsAt         DateTime?
+  endsAt           DateTime?
+  isAnnounced      Boolean         @default(false)
+  announcementText String          @default("")
+  archivedAt       DateTime?
+  revision         Int             @default(0)
+  createdAt        DateTime        @default(now())
+  updatedAt        DateTime        @updatedAt
+  products         CouponProduct[]
+
+  @@unique([tenantId, code])
+  @@unique([id, tenantId])
+  @@index([tenantId, archivedAt, isEnabled])
+  @@index([tenantId, startsAt, endsAt])
+}
+
+model CouponProduct {
+  tenantId  String
+  couponId  String
+  productId String
+  coupon    Coupon   @relation(fields: [couponId, tenantId], references: [id, tenantId], onDelete: Cascade)
+  product   Product  @relation(fields: [productId, tenantId], references: [id, tenantId], onDelete: Cascade)
+  createdAt DateTime @default(now())
+
+  @@id([couponId, productId])
+  @@index([tenantId, productId])
+  @@index([tenantId, couponId])
+}
+
 model ProductImage {
   id        String   @id @default(cuid())
   productId String
@@ -256,20 +303,27 @@ enum OrderStatus {
 // Guest cash-on-delivery orders. Stock is deducted when the order is placed and restored if
 // it is cancelled.
 model Order {
-  id                       String      @id @default(cuid())
-  tenantId                 String
-  tenant                   Tenant      @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  customerName             String
-  customerPhone            String
-  customerAddress          String
+  id                                     String       @id @default(cuid())
+  tenantId                               String
+  tenant                                 Tenant       @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  customerName                           String
+  customerPhone                          String
+  customerAddress                        String
   // A Google Maps link or a description of where to deliver (free text).
-  deliveryLocation         String
-  notes                    String      @default("")
-  deliveryFeeCentsSnapshot Int         @default(0)
-  deliveryNoteSnapshot     String      @default("")
-  status                   OrderStatus @default(PENDING)
-  createdAt                DateTime    @default(now())
-  items                    OrderItem[]
+  deliveryLocation                       String
+  notes                                  String       @default("")
+  deliveryFeeCentsSnapshot               Int          @default(0)
+  deliveryNoteSnapshot                   String       @default("")
+  couponIdSnapshot                       String?
+  couponCodeSnapshot                     String?
+  couponNameSnapshot                     String?
+  couponScopeSnapshot                    CouponScope?
+  couponMerchandiseDiscountCentsSnapshot Int          @default(0)
+  couponDeliveryDiscountCentsSnapshot    Int          @default(0)
+  couponDiscountCentsSnapshot            Int          @default(0)
+  status                                 OrderStatus  @default(PENDING)
+  createdAt                              DateTime     @default(now())
+  items                                  OrderItem[]
 
   @@index([tenantId, createdAt])
 }
@@ -277,20 +331,21 @@ model Order {
 // Name, attributes and price are copied at order time, so later edits to (or deletion of) the
 // product never rewrite order history. `variantId` becomes null if the variant is deleted.
 model OrderItem {
-  id                        String          @id @default(cuid())
-  orderId                   String
-  order                     Order           @relation(fields: [orderId], references: [id], onDelete: Cascade)
-  variantId                 String?
-  variant                   ProductVariant? @relation(fields: [variantId], references: [id], onDelete: SetNull)
-  productNameSnapshot       String
-  variantAttributesSnapshot Json            @default("{}")
-  regularPriceCentsSnapshot Int
-  discountCentsSnapshot     Int             @default(0)
-  discountIdSnapshot        String?
-  discountNameSnapshot      String?
+  id                          String          @id @default(cuid())
+  orderId                     String
+  order                       Order           @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  variantId                   String?
+  variant                     ProductVariant? @relation(fields: [variantId], references: [id], onDelete: SetNull)
+  productNameSnapshot         String
+  variantAttributesSnapshot   Json            @default("{}")
+  regularPriceCentsSnapshot   Int
+  discountCentsSnapshot       Int             @default(0)
+  discountIdSnapshot          String?
+  discountNameSnapshot        String?
+  couponDiscountCentsSnapshot Int             @default(0)
   // The final unit price actually charged.
-  priceCentsSnapshot        Int
-  quantity                  Int
+  priceCentsSnapshot          Int
+  quantity                    Int
 
   @@index([orderId])
   @@index([variantId])

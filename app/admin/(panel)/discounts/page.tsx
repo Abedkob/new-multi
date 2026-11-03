@@ -11,6 +11,7 @@ import { listDiscountsPage } from "@/lib/data/discounts";
 import { getT } from "@/lib/i18n/locale";
 import { requireOwner } from "@/lib/session";
 import { DiscountCampaignActions } from "./discount-actions";
+import { DiscountTypeNav } from "./discount-type-nav";
 import { DiscountScheduleLabel, DiscountStatusBadge, DiscountValueLabel } from "./discount-summary";
 
 const first = (value: string | string[] | undefined) => Array.isArray(value) ? value[0] : value;
@@ -46,6 +47,7 @@ export default async function DiscountsPage({
         description={t("discounts.page.description")}
         actions={newButton}
       />
+      <DiscountTypeNav current="automatic" />
       <nav aria-label={t("discounts.page.viewsAriaLabel")} className="flex w-fit rounded-lg border bg-muted/30 p-1">
         <Link
           href={pageSize === 25 ? "/admin/discounts" : `/admin/discounts?perPage=${pageSize}`}
