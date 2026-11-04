@@ -71,12 +71,16 @@ const MAX_QTY = 99;
  * order records about itself, and commerce must not depend on analytics code to describe it.
  */
 export type OrderAttributionSnapshot = {
+  /** The session that placed it: the one reconciliation key, cleared by privacy erasure. */
   analyticsSessionId?: string | null;
-  analyticsVisitorId?: string | null;
+  /** "Had this shopper been here before", instead of an id that says who they are. */
+  isReturningVisitor?: boolean | null;
   attributionSource?: string | null;
   attributionMedium?: string | null;
   attributionCampaign?: string | null;
   firstTouchSource?: string | null;
+  firstTouchMedium?: string | null;
+  firstTouchCampaign?: string | null;
   analyticsCountry?: string | null;
   analyticsDeviceClass?: string | null;
 };
@@ -314,11 +318,13 @@ export async function placeOrder(
         // Written here, in the order's own transaction, so it commits with the order or not at
         // all. Nulls when there was nothing to attribute.
         analyticsSessionId: options.attribution?.analyticsSessionId ?? null,
-        analyticsVisitorId: options.attribution?.analyticsVisitorId ?? null,
+        isReturningVisitor: options.attribution?.isReturningVisitor ?? null,
         attributionSource: options.attribution?.attributionSource ?? null,
         attributionMedium: options.attribution?.attributionMedium ?? null,
         attributionCampaign: options.attribution?.attributionCampaign ?? null,
         firstTouchSource: options.attribution?.firstTouchSource ?? null,
+        firstTouchMedium: options.attribution?.firstTouchMedium ?? null,
+        firstTouchCampaign: options.attribution?.firstTouchCampaign ?? null,
         analyticsCountry: options.attribution?.analyticsCountry ?? null,
         analyticsDeviceClass: options.attribution?.analyticsDeviceClass ?? null,
         items: {
@@ -344,6 +350,31 @@ export async function placeOrder(
       include: { items: true },
     });
   });
+}
+
+/**
+ * Privacy erasure and retention: drop the link from orders to analytics sessions.
+ *
+ * Retention deletes sessions after 13 months while orders are kept for commercial and tax
+ * reasons, and an erasure request must be able to remove the identifier without touching the
+ * order. Since there is no foreign key (deliberately — see the schema), the link is a plain
+ * string, and clearing it is this one UPDATE.
+ *
+ * What is cleared is only the session id. The dimensions beside it — source, medium, campaign,
+ * country, device class, whether the shopper was returning — stay, because none of them
+ * identifies anyone and a report that silently loses them would start telling a merchant their
+ * campaigns stopped working. Erasure removes the thread back to a person, not the history of
+ * the business.
+ */
+export function forgetOrderAttributionLinks(tenantId: string, sessionIds: readonly string[]) {
+  const ids = [...new Set(sessionIds)].filter(Boolean);
+  if (ids.length === 0) return Promise.resolve({ count: 0 });
+  return withTenant(tenantId, (db) =>
+    db.order.updateMany({
+      where: { tenantId, analyticsSessionId: { in: ids } },
+      data: { analyticsSessionId: null },
+    }),
+  );
 }
 
 export function listOrders(tenantId: string) {

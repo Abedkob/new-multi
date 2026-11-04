@@ -398,14 +398,25 @@ model Order {
   // months while orders are kept for commercial and tax reasons, and a foreign key would either
   // block that deletion or cascade it into the order. These are references for reconciliation,
   // not relations.
+  // The session is the single reconciliation key, and privacy erasure clears it
+  // (forgetOrderAttributionLinks) while leaving the non-identifying dimensions below.
+  //
+  // There is deliberately NO visitor id here. A visitor id is a durable pseudonymous
+  // identifier, and an order is kept for years, outside the analytics retention sweep: storing
+  // one would let any order be tied back to a person's entire browsing history for this store,
+  // which is exactly what the privacy rules forbid. What a merchant actually needs from it is
+  // "had this shopper been here before", so that is what is stored — a boolean, which cannot be
+  // re-identified. Null means unknown (no consent, or no identity yet).
   analyticsSessionId                     String?
-  analyticsVisitorId                     String?
+  isReturningVisitor                     Boolean?
   // Last non-direct touch of the session that placed the order.
   attributionSource                      String?
   attributionMedium                      String?
   attributionCampaign                    String?
   // The visitor's first ever touch for this store.
   firstTouchSource                       String?
+  firstTouchMedium                       String?
+  firstTouchCampaign                     String?
   analyticsCountry                       String?
   analyticsDeviceClass                   String?
 

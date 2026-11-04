@@ -55,46 +55,62 @@ export async function resolveOrderAttribution(
 
     const requestHeaders = await headers();
 
-    // One transaction, two small reads, on the ingestion pool. RLS scopes both to this tenant,
-    // so a forged cookie naming another store's session resolves to nothing.
+    // One transaction, three small reads, on the ingestion pool. RLS scopes them all to this
+    // tenant, so a forged cookie naming another store's session resolves to nothing.
     const rows = await withAnalyticsTenant(tenant.id, async (db) => {
-      const [session, visitor] = await Promise.all([
-        sessionId
-          ? db.analyticsSession.findFirst({
-              where: { id: sessionId, tenantId: tenant.id },
-              select: {
-                id: true,
-                visitorId: true,
-                source: true,
-                medium: true,
-                campaign: true,
-                country: true,
-                deviceClass: true,
+      const session = sessionId
+        ? await db.analyticsSession.findFirst({
+            where: { id: sessionId, tenantId: tenant.id },
+            select: {
+              id: true,
+              visitorId: true,
+              source: true,
+              medium: true,
+              campaign: true,
+              country: true,
+              deviceClass: true,
+            },
+          })
+        : null;
+      // The session's own visitor when there is one: ingestion recorded it, so it cannot
+      // disagree with the session the way a cookie pair could.
+      const ownerId = session?.visitorId ?? visitorId;
+      const [visitor, earlierSessions] = await Promise.all([
+        ownerId
+          ? db.analyticsVisitor.findFirst({
+              where: { id: ownerId, tenantId: tenant.id },
+              select: { id: true, firstSource: true, firstMedium: true, firstCampaign: true },
+            })
+          : Promise.resolve(null),
+        // "Had this shopper been here before": any session of theirs other than this one.
+        // Counted here and reduced to a boolean, so no identifier leaves this function.
+        ownerId
+          ? db.analyticsSession.count({
+              where: {
+                tenantId: tenant.id,
+                visitorId: ownerId,
+                ...(session ? { id: { not: session.id } } : {}),
               },
             })
-          : Promise.resolve(null),
-        visitorId
-          ? db.analyticsVisitor.findFirst({
-              where: { id: visitorId, tenantId: tenant.id },
-              select: { id: true, firstSource: true },
-            })
-          : Promise.resolve(null),
+          : Promise.resolve(0),
       ]);
-      return { session, visitor };
+      return { session, visitor, earlierSessions };
     });
 
-    const { session, visitor } = rows;
+    const { session, visitor, earlierSessions } = rows;
     if (!session && !visitor) return undefined;
 
     return {
       analyticsSessionId: session?.id ?? null,
-      // The session's own visitor, when there is one: it was recorded by ingestion rather than
-      // read from a cookie, so it cannot disagree with the session.
-      analyticsVisitorId: session?.visitorId ?? visitor?.id ?? null,
+      // A boolean, never the visitor id: an order is kept for years, and an id on it would tie
+      // one purchase to a person's whole history with the store.
+      isReturningVisitor: visitor ? earlierSessions > 0 : null,
       attributionSource: session?.source ?? null,
       attributionMedium: session?.medium ?? null,
       attributionCampaign: session?.campaign ?? null,
       firstTouchSource: visitor?.firstSource ?? null,
+      firstTouchMedium: visitor?.firstMedium ?? null,
+      firstTouchCampaign: visitor?.firstCampaign ?? null,
       // Prefer what analytics already recorded for this visit; fall back to this request's own
       // headers so an order still carries a country when the session row predates them.
       analyticsCountry: session?.country ?? countryFrom(requestHeaders),
