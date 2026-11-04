@@ -153,6 +153,17 @@ export const envSchema = z
     // in front of the pool so a burst becomes an immediate refusal rather than hundreds of
     // handlers each waiting out connectionTimeoutMillis. Defaults to twice the pool.
     ANALYTICS_MAX_IN_FLIGHT: z.coerce.number().int().min(1).max(500).optional(),
+    // §11.10's ingestion alert: over this percentage of OPERATIONAL drops, with at least
+    // ANALYTICS_INGESTION_MIN_BATCHES attempted in the window.
+    ANALYTICS_INGESTION_FAILURE_PERCENT: z.coerce.number().min(0.1).max(100).default(5),
+    ANALYTICS_INGESTION_MIN_BATCHES: z.coerce.number().int().min(1).max(10_000).default(20),
+    // D29: contract rejections get their own, far lower threshold — a COUNT, not a percentage.
+    // A 400 is never load and never consent: it means our own code sent something the contract
+    // refuses, so a handful in a window is already a bug worth waking someone for.
+    ANALYTICS_CONTRACT_REJECTION_ALERT: z.coerce.number().int().min(1).max(10_000).default(5),
+    // How old an ingestion health window must be before a batch flushes it to
+    // AnalyticsOperationalMetric (D34). One row per instance per window, not one per batch.
+    ANALYTICS_HEALTH_FLUSH_MINUTES: z.coerce.number().int().min(0).max(60).default(5),
     // --- Phase 4: retention windows (§4.7, §14) -------------------------------------------
     // Deliberately env-driven rather than constants: §4.7's numbers are a policy decision that
     // a deployment in another jurisdiction may have to change without a code release.
@@ -258,6 +269,13 @@ function load() {
       ANALYTICS_DATABASE_POOL_MAX: Number(raw.ANALYTICS_DATABASE_POOL_MAX) || 5,
       ANALYTICS_MAX_BATCH_SIZE: Number(raw.ANALYTICS_MAX_BATCH_SIZE) || 20,
       ANALYTICS_MAX_IN_FLIGHT: Number(raw.ANALYTICS_MAX_IN_FLIGHT) || undefined,
+      ANALYTICS_INGESTION_FAILURE_PERCENT: Number(raw.ANALYTICS_INGESTION_FAILURE_PERCENT) || 5,
+      ANALYTICS_INGESTION_MIN_BATCHES: Number(raw.ANALYTICS_INGESTION_MIN_BATCHES) || 20,
+      ANALYTICS_CONTRACT_REJECTION_ALERT: Number(raw.ANALYTICS_CONTRACT_REJECTION_ALERT) || 5,
+      ANALYTICS_HEALTH_FLUSH_MINUTES:
+        raw.ANALYTICS_HEALTH_FLUSH_MINUTES === undefined
+          ? 5
+          : Number(raw.ANALYTICS_HEALTH_FLUSH_MINUTES),
       ANALYTICS_RAW_RETENTION_DAYS: Number(raw.ANALYTICS_RAW_RETENTION_DAYS) || 90,
       ANALYTICS_VISITOR_RETENTION_MONTHS: Number(raw.ANALYTICS_VISITOR_RETENTION_MONTHS) || 13,
       ANALYTICS_AGGREGATE_RETENTION_MONTHS: Number(raw.ANALYTICS_AGGREGATE_RETENTION_MONTHS) || 24,
@@ -304,6 +322,10 @@ function load() {
         "ANALYTICS_DATABASE_POOL_MAX",
         "ANALYTICS_MAX_BATCH_SIZE",
         "ANALYTICS_MAX_IN_FLIGHT",
+        "ANALYTICS_INGESTION_FAILURE_PERCENT",
+        "ANALYTICS_INGESTION_MIN_BATCHES",
+        "ANALYTICS_CONTRACT_REJECTION_ALERT",
+        "ANALYTICS_HEALTH_FLUSH_MINUTES",
         "ANALYTICS_RAW_RETENTION_DAYS",
         "ANALYTICS_VISITOR_RETENTION_MONTHS",
         "ANALYTICS_AGGREGATE_RETENTION_MONTHS",

@@ -835,3 +835,47 @@ model AnalyticsAuditLog {
   @@index([tenantId, at])
   @@index([action, at])
 }
+
+/// A flushed snapshot of one process's ingestion counters (§11.10, D34).
+///
+/// Not tenant-scoped and not under RLS: these are the platform's operational numbers about its
+/// own ingestion, not any store's data, and the point of them is to be comparable ACROSS
+/// stores and instances.
+///
+/// Written by the web process that owns the counters, because nothing else can: they live in
+/// that process's memory, the scheduled command runs in a different container, and an internal
+/// endpoint would reach one arbitrary instance behind the proxy. The scheduler only reads.
+///
+/// An instance that received no traffic writes no row. "No rows" therefore means silence, not
+/// failure, and an alert must never confuse the two.
+model AnalyticsOperationalMetric {
+  id String @id @default(cuid())
+
+  /// hostname:pid — enough to tell two instances apart without naming infrastructure.
+  instance String
+
+  windowStart DateTime
+  windowEnd   DateTime
+
+  attemptedBatches       Int @default(0)
+  acceptedBatches        Int @default(0)
+  storedEvents           Int @default(0)
+  rejectedOwnershipEvents Int @default(0)
+
+  /// The three kinds, kept apart on purpose (D29). A policy drop is the system working, an
+  /// operational drop is the system struggling, and a contract rejection is OUR OWN code
+  /// sending something the contract refuses — three different thresholds, never one rate.
+  policyDrops        Int @default(0)
+  operationalDrops   Int @default(0)
+  contractRejections Int @default(0)
+
+  /// Per-reason detail, for a platform admin looking at a spike rather than an alert deciding
+  /// whether to fire. JSON because the reasons are a closed list in code that may grow.
+  policyDetail      Json @default("{}")
+  operationalDetail Json @default("{}")
+
+  at DateTime @default(now())
+
+  @@index([at])
+  @@index([instance, at])
+}

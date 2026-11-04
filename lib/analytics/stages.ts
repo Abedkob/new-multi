@@ -32,6 +32,7 @@ import {
 import { localDayOf, previousLocalDay, recentLocalDays, type LocalDay } from "@/lib/analytics/local-day";
 import { describeRetention, runRetention } from "@/lib/analytics/retention";
 import type { Stage, StageContext } from "@/lib/analytics/scheduled";
+import { env } from "@/lib/env";
 import { jobPrisma, withJobBypass, withJobTenant } from "@/lib/prisma-job";
 
 /** How many stores one run will touch. A thousand stores must not become one unbounded query. */
@@ -43,6 +44,9 @@ const STATUS_SWEEP_MINUTES = 60;
 
 /** The backstop window (D33). 30 days matches the aggregate retention conversation in §4.7. */
 const BACKFILL_DAYS = 30;
+
+/** §11.10's evaluation window for the ingestion signals. */
+const HEALTH_WINDOW_MINUTES = 10;
 
 async function tenantsToProcess(): Promise<AggregateTenant[]> {
   // Tenant is not under RLS (it cannot be: the storefront resolves a store by slug before any
@@ -208,11 +212,95 @@ export const retention: Stage = {
   },
 };
 
+/**
+ * Reading the three health signals, each against its own threshold (§11.10, D29, D34).
+ *
+ * Evaluation only: this records what it found on the run, and Phase 6 decides who to wake and
+ * how often. Keeping those apart means the thresholds can be argued about without touching
+ * notification plumbing.
+ *
+ * The three signals are never one rate:
+ *
+ *  - POLICY drops are the system working. A visitor refused analytics; a store is outside the
+ *    rollout. Alerting on these pages someone because consent is being honoured.
+ *  - OPERATIONAL drops are the system struggling — a full pool, a limiter, a database timeout.
+ *    §11.10's "over 5% of at least 20 attempted batches" is written against these.
+ *  - CONTRACT REJECTIONS are our own code sending something the endpoint refuses. Not load, not
+ *    consent, and not a percentage: a handful in a window is already a bug. Phase 3 shipped
+ *    exactly that defect — every batch from a custom domain refused as malformed — while the
+ *    operational rate sat at zero throughout, which is why this is its own number with its own
+ *    threshold.
+ *
+ * And no rows in the window is SILENCE, not failure. An instance that received no traffic
+ * writes nothing, so a quiet night must never read as an outage.
+ */
+export const healthEvaluate: Stage = {
+  name: "health-evaluate",
+  run: async (ctx) => {
+    const since = new Date(ctx.now.getTime() - HEALTH_WINDOW_MINUTES * 60_000);
+    const rows = await withJobBypass((tx) =>
+      tx.analyticsOperationalMetric.findMany({
+        where: { at: { gte: since } },
+        select: {
+          instance: true,
+          attemptedBatches: true,
+          acceptedBatches: true,
+          policyDrops: true,
+          operationalDrops: true,
+          contractRejections: true,
+        },
+      }),
+    );
+
+    if (rows.length === 0) {
+      return {
+        items: 0,
+        detail: `no ingestion rows in the last ${HEALTH_WINDOW_MINUTES}m: silence, not failure`,
+      };
+    }
+
+    const sum = (pick: (row: (typeof rows)[number]) => number) =>
+      rows.reduce((total, row) => total + pick(row), 0);
+    const attempted = sum((r) => r.attemptedBatches);
+    const operational = sum((r) => r.operationalDrops);
+    const policy = sum((r) => r.policyDrops);
+    const rejections = sum((r) => r.contractRejections);
+    const instances = new Set(rows.map((r) => r.instance)).size;
+    const operationalPercent = attempted === 0 ? 0 : (operational / attempted) * 100;
+
+    const alerts: string[] = [];
+    if (
+      attempted >= env.ANALYTICS_INGESTION_MIN_BATCHES &&
+      operationalPercent > env.ANALYTICS_INGESTION_FAILURE_PERCENT
+    ) {
+      alerts.push(
+        `operational drops ${operationalPercent.toFixed(1)}% of ${attempted} batches ` +
+          `(threshold ${env.ANALYTICS_INGESTION_FAILURE_PERCENT}%)`,
+      );
+    }
+    if (rejections >= env.ANALYTICS_CONTRACT_REJECTION_ALERT) {
+      alerts.push(
+        `${rejections} contract rejection(s) — our own code is sending something the endpoint ` +
+          `refuses (threshold ${env.ANALYTICS_CONTRACT_REJECTION_ALERT})`,
+      );
+    }
+
+    return {
+      items: alerts.length,
+      detail:
+        `${instances} instance(s), ${attempted} batch(es): ` +
+        `operational ${operationalPercent.toFixed(1)}%, policy ${policy}, rejections ${rejections}` +
+        (alerts.length ? ` — ALERT: ${alerts.join("; ")}` : ""),
+    };
+  },
+};
+
 /** Everything the command runs, in order. */
 export const ANALYTICS_STAGES: Stage[] = [
   aggregateRecompute,
   orderStatusSweep,
   nightlyBackfill,
+  healthEvaluate,
   retention,
 ];
 

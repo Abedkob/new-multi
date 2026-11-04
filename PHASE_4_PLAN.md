@@ -29,7 +29,7 @@ Last worked on **2026-11-04**. Branch `analytics/phase-1`, which is also what
 | `5b3e305` | 4. The acquisition ladder and the D24 session-touch fix | done, `verify:acquisition` 8/8 |
 | `c82a3f2` + `196995d` | 5. Aggregates, the three stages, D33's two routes | done, `verify:aggregates` 18/18 |
 | "Delete what we should not keep…" | 6. Retention, privacy requests, the platform console | done, `verify:retention` 10/10, 3 browser legs |
-| — | 7. Health counters reaching the metric table (D34) | not started |
+| "Let the health numbers leave the process…" | 7. Health counters reaching the metric table (D34) | done, `verify:health` 11/11 |
 | — | 8. The movable link builder (D37) | not started |
 | — | 9. Verification scripts and the acceptance record | not started |
 
@@ -38,14 +38,16 @@ the visitor's **measurement id**, shown on `/privacy` in both languages beside t
 reference. The consent receipt's `publicRef` stays what it was — it identifies a decision — and
 the page now says which is which. The console takes the measurement id.
 
-**Where commit 7 starts.** Nothing of it is written. D34 is the whole of it: the ingestion
-endpoint flushes its own counters into `AnalyticsOperationalMetric` (a table that does **not
-exist yet**) when the window is older than `ANALYTICS_HEALTH_FLUSH_MINUTES`, keyed by
-`hostname:pid`, after the response and never awaited; the scheduler only reads. Then P4-28 to
-P4-31a, of which P4-28 is the regression test for Phase 3's defect: a forced 400 must raise the
-contract-rejection signal **alone** and leave the operational drop rate at zero.
+**Where commit 8 starts.** Nothing of it is written. D37 is the whole of it: a self-contained
+`components/analytics/link-builder.tsx` with no routing, layout or data loading of its own,
+mounted by a Phase 4 route at `/admin/analytics/links`, so Phase 5's Marketing section can mount
+the same component unchanged. P4-35 proves the property by mounting it at a second path.
 
-Commits 8 (the movable link builder, D37) and 9 (the acceptance record) follow.
+Then commit 9: the acceptance record, and the four suites that still need a run against a
+production build rather than `next dev`.
+
+`pnpm verify:health` needs a server started with `ANALYTICS_HEALTH_FLUSH_MINUTES=0`, so every
+batch flushes its window instead of waiting five minutes.
 
 **Known environment gotchas hit so far**, both worth remembering:
 

@@ -1,4 +1,4 @@
-import { NextResponse, type NextRequest } from "next/server";
+import { after, NextResponse, type NextRequest } from "next/server";
 import { MAX_BODY_BYTES, analyticsEnvelopeSchema } from "@/lib/analytics/contract";
 import {
   recordAccepted,
@@ -6,6 +6,7 @@ import {
   recordDrop,
   recordInvalidEnvelope,
 } from "@/lib/analytics/health";
+import { flushAnalyticsHealth } from "@/lib/analytics/health-flush";
 import { ingestBatch } from "@/lib/analytics/ingest";
 import {
   decodeIdentity,
@@ -53,6 +54,14 @@ const badRequest = () =>
 export async function POST(req: NextRequest, { params }: { params: Promise<{ slug: string }> }) {
   const { slug } = await params;
   recordAttempt();
+
+  // D34: the process that owns the counters is the only one that can write them, so it does —
+  // after the response, never awaited, and only when the window is due. A shopper's beacon is
+  // answered before any of this runs, and a failure here is swallowed: a health row that could
+  // break ingestion would be worse than no health row.
+  after(() => {
+    void flushAnalyticsHealth();
+  });
 
   // ---- step 4a: an abuse backstop, before any parsing ---------------------------------------
   // Loose on purpose: carrier-grade NAT puts hundreds of real shoppers behind one address, and
