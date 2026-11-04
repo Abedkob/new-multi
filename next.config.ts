@@ -8,7 +8,7 @@ const nextConfig: NextConfig = {
   // renders but its JavaScript never arrives, so nothing on it works. pnpm e2e:consent drives
   // exactly that path, resolving this hostname to 127.0.0.1 through Chrome itself.
   // Add your own test domains here if you need to exercise custom-domain behaviour locally.
-  allowedDevOrigins: ["consent-e2e.test"],
+  allowedDevOrigins: ["consent-e2e.test", "analytics-e2e.test"],
   experimental: {
     serverActions: {
       // Image uploads go through a Server Action (uploadImageAction) and allow up to 5MB

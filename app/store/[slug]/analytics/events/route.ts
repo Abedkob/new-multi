@@ -85,6 +85,17 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ slu
   const envelope = analyticsEnvelopeSchema.safeParse(parsedJson);
   if (!envelope.success) {
     recordInvalidEnvelope();
+    // A 400 is the one answer here that means "our own code sent something wrong", and until
+    // now it said so to nobody: the counter rose and the response body was generic. The field
+    // that failed is logged (never its value, which came from a browser) because this is the
+    // only refusal a developer is supposed to act on.
+    console.warn(
+      "[analytics] invalid envelope:",
+      envelope.error.issues
+        .slice(0, 3)
+        .map((issue) => `${issue.path.join(".") || "(root)"}: ${issue.code}`)
+        .join("; "),
+    );
     return badRequest();
   }
 

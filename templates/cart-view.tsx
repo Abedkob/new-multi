@@ -133,6 +133,7 @@ export function CartView({
 
                   <button
                     type="button"
+                    data-testid="cart-remove"
                     onClick={() => cart.remove(item.variantId)}
                     className="text-sm text-muted-foreground underline underline-offset-4 hover:text-foreground"
                   >
