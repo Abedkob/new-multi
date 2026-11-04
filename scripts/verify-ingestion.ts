@@ -246,8 +246,9 @@ async function main() {
     ok("P2-14", "tenant, visitor, session, country and money values are all refused from a client");
 
     // searchQuery is different: the contract allows it because only the browser knows what was
-    // typed, and Phase 4 will emit it. What must hold NOW is that Phase 2 stores nothing from
-    // it — sanitising search text is Phase 4's job and until then it is simply discarded.
+    // typed. Phase 2 discarded it outright; from Phase 4 it is stored, but only ever after the
+    // server has normalized and scrubbed it (lib/analytics/search-text.ts) — so what must hold
+    // here is the part that never changes: NOTHING a client sends is stored as sent.
     const withSearch = await send(
       a.endpoint,
       envelope(a.tenant.id, [
@@ -257,14 +258,23 @@ async function main() {
     );
     await settle();
     assert.equal(withSearch.status, 202, "the contract accepts search text for Phase 4");
+    const searchRows = await prisma.analyticsEvent.findMany({
+      where: { tenantId: a.tenant.id, searchQuery: { not: null } },
+      select: { searchQuery: true },
+    });
+    assert.deepEqual(
+      searchRows.map((r) => r.searchQuery),
+      ["[redacted]"],
+      "an email address typed into a search box must be stored as [redacted], never as itself",
+    );
     assert.equal(
       await prisma.analyticsEvent.count({
-        where: { tenantId: a.tenant.id, searchQuery: { not: null } },
+        where: { tenantId: a.tenant.id, searchQuery: { contains: "someone" } },
       }),
       0,
-      "Phase 2 must not store client-supplied search text",
+      "the raw text a client sent must appear nowhere",
     );
-    ok("P2-14", "client-supplied search text is accepted by the contract but stored nowhere yet");
+    ok("P2-14", "client-supplied search text is scrubbed server-side, never stored as sent");
 
     // ---------------------------------------------------------------- cross-store ownership
     const before = await prisma.analyticsEvent.count({ where: { tenantId: a.tenant.id } });

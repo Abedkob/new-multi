@@ -7,6 +7,7 @@ import { privatePageMeta } from "@/lib/seo";
 import { loadStorefrontData, loadTenant } from "@/lib/data/storefront";
 import { toStoreProduct } from "@/lib/store-product";
 import { getTemplate } from "@/templates";
+import { SearchResultsTracker } from "@/components/analytics/search-events";
 import { CatalogPage } from "@/templates/catalog-page";
 import { searchHref } from "@/templates/shared";
 
@@ -42,13 +43,20 @@ export default async function SearchPage({
       ])
     : [{ items: [], total: 0, page: 1, pages: 1 }, []];
 
+  const products = result.items.map(toStoreProduct);
   return (
+    <SearchResultsTracker
+      query={q}
+      resultCount={result.total}
+      page={result.page}
+      productIdBySlug={Object.fromEntries(products.map((p) => [p.slug, p.id]))}
+    >
     <CatalogPage
       template={getTemplate(tenant.templateId)}
       data={data}
       title={q ? `${data.content["search.heading"]}: ${q}` : data.content["search.heading"]}
       showSearch
-      products={result.items.map(toStoreProduct)}
+      products={products}
       total={result.total}
       page={result.page}
       pages={result.pages}
@@ -57,5 +65,6 @@ export default async function SearchPage({
       filters={q ? { value: filters, facets } : undefined}
       emptyText={q ? fillVars(data.content["search.empty"], { q }) : data.content["search.placeholder"]}
     />
+    </SearchResultsTracker>
   );
 }

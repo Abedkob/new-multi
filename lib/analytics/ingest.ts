@@ -22,13 +22,19 @@ import {
   MAX_EVENT_AGE_MS,
   type AnalyticsEnvelope,
   type AnalyticsEventInput,
+  type AnalyticsEventType,
 } from "@/lib/analytics/contract";
 import { resolveAttribution, type DeviceClass } from "@/lib/analytics/request";
 import { sessionExpired } from "@/lib/analytics/identity";
+import { normalizeSearchText } from "@/lib/analytics/search-text";
 import { resolveWhatsappValues } from "@/lib/analytics/whatsapp-value";
 import { withAnalyticsTenant } from "@/lib/prisma-analytics";
 
 export type IngestTenant = { id: string; slug: string };
+
+/** Only a search event may carry a phrase (§3.6). */
+const isSearch = (type: AnalyticsEventType) =>
+  type === "SEARCH_SUBMITTED" || type === "SEARCH_RESULT_CLICK";
 
 export type IngestFacts = {
   country: string | null;
@@ -201,8 +207,10 @@ export async function ingestBatch(
         productId: event.productId ?? null,
         variantId: event.variantId ?? null,
         quantity: event.quantity ?? null,
-        // Phase 4 emits searches. Never taken from a client.
-        searchQuery: null,
+        // §3.6: normalized for grouping, redacted if it looks like somebody's personal data,
+        // and only ever for a search event — a stray searchQuery on an ADD_TO_CART is dropped
+        // rather than stored, because nothing could have put it there honestly.
+        searchQuery: isSearch(event.type) ? normalizeSearchText(event.searchQuery).phrase || null : null,
         resultCount: event.resultCount ?? null,
         // Only a WhatsApp click has one, and only ever from the server's own pricing.
         valueCents: values.get(event.eventId) ?? null,

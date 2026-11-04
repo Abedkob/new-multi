@@ -26,6 +26,7 @@
     "verify:e2e-policy": "tsx scripts/verify-e2e-policy.ts",
     "verify:scheduled": "tsx scripts/verify-scheduled.ts",
     "verify:aggregates": "tsx scripts/verify-aggregates.ts",
+    "verify:search": "tsx scripts/verify-search.ts",
     "analytics:scheduled": "tsx scripts/analytics-scheduled.ts",
     "uploads:migrate": "tsx scripts/migrate-uploads-to-r2.ts",
     "e2e:categories": "tsx scripts/e2e/categories.ts",

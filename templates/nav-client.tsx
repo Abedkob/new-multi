@@ -5,6 +5,7 @@ import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { useState, useEffect, useRef } from "react";
 import { createPortal } from "react-dom";
+import { useAnalytics } from "@/components/analytics/tracker";
 import { useCart } from "@/lib/cart/cart";
 import { cn } from "@/lib/utils";
 import { Menu, ShoppingBag, X } from "lucide-react";
@@ -16,19 +17,42 @@ export type Suggestion = { id: string; slug: string; name: string; imageUrl: str
 /** Product suggestions for a search term, fetched (debounced) as the shopper types. */
 export function useSuggestions(slug: string, q: string) {
   const [suggestions, setSuggestions] = useState<Suggestion[]>([]);
+  const { track } = useAnalytics();
+  /** Phrases already reported while this control is mounted, so one word reports once. */
+  const reported = useRef(new Set<string>());
+
   useEffect(() => {
     const term = q.trim();
     if (!term) return;
+    let settled: ReturnType<typeof setTimeout> | undefined;
     const delay = setTimeout(async () => {
       try {
         const res = await fetch(`/api/store/${slug}/search?q=${encodeURIComponent(term)}`);
-        if (res.ok) setSuggestions(await res.json());
+        if (!res.ok) return;
+        const found: Suggestion[] = await res.json();
+        setSuggestions(found);
+        // §3.6 wants the no-result search, and D21 wants it STABILIZED: typing "nike" must not
+        // report "n", "ni" and "nik" as three phrases nobody searched for. This waits out
+        // another beat on top of the fetch's own debounce, and the effect's cleanup cancels it
+        // the moment another character arrives — so only a query the shopper stopped at, and
+        // which matched nothing, is ever reported. Nothing is reported when there ARE results:
+        // that search ends either at the results page or at a suggestion, both of which emit.
+        if (found.length === 0 && !reported.current.has(term)) {
+          settled = setTimeout(() => {
+            reported.current.add(term);
+            track({ type: "SEARCH_SUBMITTED", pageKind: "other", searchQuery: term, resultCount: 0 });
+          }, 550);
+        }
       } catch {
         // Suggestions are a nicety; the search page still works without them.
       }
     }, 250);
-    return () => clearTimeout(delay);
-  }, [q, slug]);
+    return () => {
+      clearTimeout(delay);
+      if (settled) clearTimeout(settled);
+    };
+  }, [q, slug, track]);
+
   return suggestions;
 }
 

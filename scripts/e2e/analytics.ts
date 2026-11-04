@@ -37,7 +37,7 @@ import {
   type AnalyticsEventType,
 } from "../../lib/analytics/contract";
 import { mintBootstrapToken } from "../../lib/analytics/token";
-import { PRODUCTION_BUILD_HINT, assertDevOriginAllowed } from "./custom-domain";
+import { PRODUCTION_BUILD_HINT, assertDevOriginAllowed, onCustomDomain } from "./custom-domain";
 import { ANALYTICS_APPLICATION_NAME } from "../../lib/prisma-analytics";
 import {
   buildStoredConsent,
@@ -413,11 +413,168 @@ async function phase3() {
   }
 }
 
+/**
+ * Phase 4's search legs (P4-09, P4-10, P4-13), in a real browser because every claim here is
+ * about what a shopper's typing does and nothing else can prove it.
+ *
+ *   PHASE4_ONLY=1 BASE_URL=http://localhost:3300 pnpm e2e:analytics
+ */
+async function phase4() {
+  const store = await makeStore("Search");
+  const T = store.tenant.id;
+  const slug = store.tenant.slug;
+
+  await prisma.tenant.update({
+    where: { id: T },
+    data: {
+      privacyControllerName: "Search Test Ltd",
+      privacyEmail: "privacy@search.test",
+      analyticsTimezone: "Asia/Beirut",
+      defaultLocale: "en",
+    },
+  });
+
+  const category = await createCategory(T, { name: "Search", parentId: null });
+  const product = await createProduct(T, {
+    name: "Searchable Jacket",
+    description: "For the search checks",
+    basePriceCents: 4000,
+    imageUrl: "",
+    images: [],
+    isBestSeller: false,
+    categoryId: category.id,
+    variants: [{ attributes: {}, stock: 10, priceCentsOverride: null, imageUrl: null }],
+  });
+
+  const searches = () =>
+    prisma.analyticsEvent.findMany({
+      where: { tenantId: T, type: { in: ["SEARCH_SUBMITTED", "SEARCH_RESULT_CLICK"] } },
+      select: { type: true, searchQuery: true, resultCount: true, productId: true },
+      orderBy: { receivedAt: "asc" },
+    });
+  const flush = (page: Page) => page.waitForTimeout(12_000);
+
+  const { browser, context } = await launch();
+  const page = await context.newPage();
+  const home = `${BASE}/store/${slug}`;
+
+  try {
+    await page.goto(home, { waitUntil: "load" });
+    await page.locator('[data-testid="consent-accept-all"]').click();
+    await page.locator('[data-testid="consent-banner"]').waitFor({ state: "detached" });
+
+    // ------------------------------------------------- P4-09: one submit, not one per keystroke
+    // Typed character by character, the way a shopper types, through the navbar's own control.
+    const box = page.locator('header input[type="search"]').first();
+    await box.waitFor();
+    // Character by character, with a human-ish gap: the claim is that the suggestion fetch
+    // firing per keystroke does NOT become an event per keystroke.
+    await box.pressSequentially("jacket", { delay: 120 });
+    await page.waitForTimeout(1_500); // long enough for the suggestion fetch AND its settle timer
+    await Promise.all([page.waitForURL(/\/search\?q=jacket/), box.press("Enter")]);
+    await page.locator('[data-testid="catalog-page"]').waitFor();
+    await flush(page);
+
+    const typed = await searches();
+    assert.equal(
+      typed.length,
+      1,
+      `typing "jacket" must emit exactly one search, not one per keystroke: ${JSON.stringify(typed)}`,
+    );
+    assert.equal(typed[0].type, "SEARCH_SUBMITTED");
+    assert.equal(typed[0].searchQuery, "jacket");
+    assert.equal(typed[0].resultCount, 1);
+    ok("P4-09", 'typing "jacket" one letter at a time emitted one SEARCH_SUBMITTED, with 1 result');
+
+    // ------------------------------------------------------- P4-13: which result was clicked
+    await Promise.all([
+      page.waitForURL(new RegExp(`/products/${product.slug}`)),
+      page.locator(`[data-testid="catalog-page"] a[href$="/products/${product.slug}"]`).first().click(),
+    ]);
+    await page.waitForTimeout(2_000); // the click beacons immediately
+    const clicked = (await searches()).find((e) => e.type === "SEARCH_RESULT_CLICK");
+    assert.ok(clicked, "a result click must be recorded");
+    assert.equal(clicked.productId, product.id, "the click must name the product that was clicked");
+    assert.equal(clicked.searchQuery, "jacket", "the click must carry the search it came from");
+    ok("P4-13", "clicking a result recorded the product and the phrase it was found by");
+
+    // ------------------------------------------ P4-10: a no-result phrase, reported once
+    // Typed and abandoned — never submitted. This is the search a merchant most wants to see,
+    // and the only one allowed to come from the suggestion panel.
+    await prisma.analyticsEvent.deleteMany({ where: { tenantId: T } });
+    const page2 = await context.newPage();
+    await page2.goto(home, { waitUntil: "load" });
+    const box2 = page2.locator('header input[type="search"]').first();
+    await box2.waitFor();
+    await box2.pressSequentially("umbrella", { delay: 120 });
+    await page2.waitForTimeout(2_000);
+    await flush(page2);
+
+    const none = await searches();
+    assert.equal(
+      none.length,
+      1,
+      `an abandoned no-result search must be reported exactly once: ${JSON.stringify(none)}`,
+    );
+    assert.equal(none[0].searchQuery, "umbrella");
+    assert.equal(none[0].resultCount, 0);
+    ok("P4-10", 'typing "umbrella" and never submitting reported one no-result search');
+    await page2.close();
+
+    // ----------------------------------------------------------- the same, on a custom domain
+    // Mandatory since 2026-11-04 (scripts/e2e/custom-domain.ts): a leg that cannot run FAILS.
+    const domain = "analytics-e2e.test";
+    assertDevOriginAllowed(domain);
+    await prisma.tenant.update({ where: { id: T }, data: { domain } });
+    await prisma.analyticsEvent.deleteMany({ where: { tenantId: T } });
+    try {
+      await onCustomDomain(domain, async ({ context: dContext, origin }) => {
+        const dPage = await dContext.newPage();
+        await dPage.goto(origin, { waitUntil: "load" });
+        await dPage.locator('[data-testid="consent-accept-all"]').click();
+        await dPage.waitForTimeout(1_000);
+        const decided = (await dContext.cookies(origin)).some((c: Cookie) =>
+          c.name.startsWith("store_consent_"),
+        );
+        assert.ok(decided, `P4-09 on ${domain}: ${PRODUCTION_BUILD_HINT}`);
+
+        const dBox = dPage.locator('header input[type="search"]').first();
+        await dBox.waitFor();
+        await dBox.pressSequentially("jacket", { delay: 120 });
+        await dPage.waitForTimeout(1_500);
+        await Promise.all([dPage.waitForURL(/\/search\?q=jacket/), dBox.press("Enter")]);
+        await dPage.locator('[data-testid="catalog-page"]').waitFor();
+        await flush(dPage);
+
+        const onDomain = await searches();
+        assert.equal(
+          onDomain.length,
+          1,
+          `one search on a custom domain too: ${JSON.stringify(onDomain)}`,
+        );
+        assert.equal(onDomain[0].searchQuery, "jacket");
+        assert.equal(onDomain[0].resultCount, 1);
+        ok("P4-09", `on ${domain} the same typing emitted one search, with cookies scoped to /`);
+      });
+    } finally {
+      await prisma.tenant.update({ where: { id: T }, data: { domain: null } });
+    }
+  } finally {
+    await context.close();
+    await browser.close();
+    await store.remove();
+  }
+}
+
 async function main() {
   // The Phase 3 legs alone, for iterating on one of them without paying for the saturation run:
   //   PHASE3_ONLY=1 BASE_URL=http://localhost:3300 pnpm e2e:analytics
   if (process.env.PHASE3_ONLY) {
     await phase3();
+    return;
+  }
+  if (process.env.PHASE4_ONLY) {
+    await phase4();
     return;
   }
 
@@ -571,6 +728,7 @@ async function main() {
     // On its own store and its own browser context, so event counts mean what they say and the
     // saturation leg below (which deliberately exhausts limits) cannot interfere.
     await phase3();
+    await phase4();
 
     // Clear the decision so the load section below starts from a clean synthetic identity.
     await context.clearCookies();

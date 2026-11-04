@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useEffect, useId, useRef, useState } from "react";
 import { Search, X, ArrowUpRight } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { useAnalytics } from "@/components/analytics/tracker";
 import { Picture, cardPrice, productHref, searchHref } from "../shared";
 import type { StorefrontData, StoreProduct } from "../types";
 import styles from "./prism.module.css";
@@ -16,6 +17,9 @@ export function PrismSearch({ data }: { data: StorefrontData }) {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
   const [result, setResult] = useState<{ term: string; products: StoreProduct[]; failed?: boolean } | null>(null);
+  const { track } = useAnalytics();
+  /** Phrases already reported while this dialog is mounted, so one word reports once. */
+  const reported = useRef(new Set<string>());
   const term = query.trim();
   const pending = !!term && result?.term !== term;
   const close = () => { dialog.current?.close(); setOpen(false); trigger.current?.focus(); };
@@ -32,18 +36,33 @@ export function PrismSearch({ data }: { data: StorefrontData }) {
   useEffect(() => {
     if (!open || !term) return;
     const controller = new AbortController();
+    let settled: ReturnType<typeof setTimeout> | undefined;
     const timer = setTimeout(async () => {
       try {
         const response = await fetch(`/api/store/${encodeURIComponent(data.store.slug)}/search?q=${encodeURIComponent(term)}`, { signal: AbortSignal.any([controller.signal, AbortSignal.timeout(8000)]) });
         if (!response.ok) throw new Error("Search failed");
         const products: StoreProduct[] = await response.json();
-        if (!controller.signal.aborted) setResult({ term, products });
+        if (controller.signal.aborted) return;
+        setResult({ term, products });
+        // The one per-keystroke report §3.6 asks for, and only once it has settled (D21): a
+        // phrase the shopper stopped at which matched nothing. See components/analytics/
+        // search-events.tsx for why every other search is reported from the results page.
+        if (products.length === 0 && !reported.current.has(term)) {
+          settled = setTimeout(() => {
+            reported.current.add(term);
+            track({ type: "SEARCH_SUBMITTED", pageKind: "other", searchQuery: term, resultCount: 0 });
+          }, 550);
+        }
       } catch {
         if (!controller.signal.aborted) setResult({ term, products: [], failed: true });
       }
     }, 250);
-    return () => { clearTimeout(timer); controller.abort(); };
-  }, [open, term, data.store.slug]);
+    return () => {
+      clearTimeout(timer);
+      if (settled) clearTimeout(settled);
+      controller.abort();
+    };
+  }, [open, term, data.store.slug, track]);
 
   return <>
     <button ref={trigger} type="button" onClick={() => setOpen(true)} aria-label={data.content["search.button"]} aria-haspopup="dialog" aria-expanded={open} data-testid="search-toggle" className="grid size-11 place-items-center rounded-full bg-secondary"><Search className="size-5" aria-hidden /></button>

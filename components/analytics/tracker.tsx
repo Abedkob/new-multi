@@ -46,6 +46,13 @@ export type TrackInput = {
   quantity?: number;
   resultCount?: number;
   /**
+   * What the shopper typed. Sent raw because it is already in the URL the browser is on, and
+   * then NORMALIZED AND SCRUBBED SERVER-SIDE (lib/analytics/search-text.ts) — the raw text is
+   * never stored. Doing it here instead would put the decision about what counts as personal
+   * data in a place a visitor can edit.
+   */
+  searchQuery?: string;
+  /**
    * Send this event now, by beacon, instead of waiting for the next flush. For a click that
    * takes the shopper off the page (the WhatsApp button), where the next flush may never come.
    * Never put on the wire — the envelope is strict.
