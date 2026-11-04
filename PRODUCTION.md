@@ -230,10 +230,25 @@ To run multiple app instances behind a load balancer:
    - Round-robin to all app instances
    - Health checks on each
 
-3. **Database Connection Pooling** (already handled):
-   - PostgreSQL: `max: 30` per instance
-   - At 3 instances: 90 max connections (within Postgres limit of 100)
-   - For >3 instances, add PgBouncer or increase Postgres `max_connections`
+3. **Database Connection Pooling**:
+   - Application pool: `max: 30` per instance (`lib/prisma.ts`)
+   - Analytics ingestion pool: `max: 5` per instance, deliberately small so analytics can never
+     starve checkout — **35 per instance in total**
+   - `postgres:16-alpine` ships `max_connections = 100` with 3 reserved for superusers, so
+     **97 are usable**. Budget roughly 4 more for the scheduled command, migrations on deploy
+     and an operator's psql session:
+
+     | App instances | Peak app connections | With overhead | Verdict |
+     |---|---|---|---|
+     | 1 | 35 | ~39 / 97 | comfortable |
+     | 2 | 70 | ~74 / 97 | tight but workable |
+     | 3 | 105 | ~109 / 97 | **exceeds the limit** |
+
+   - **For more than 2 instances, add PgBouncer or raise `max_connections`.** (This was ">3"
+     before the ingestion pool existed; 3 instances no longer fit.)
+   - **The scheduled analytics command must open only its own jobs pool (`max: 2`).** If its
+     entry point imports `lib/prisma`, it opens a second 30-connection pool and the arithmetic
+     above stops holding. Keep that process on `lib/prisma-analytics.ts` alone.
 
 4. **Rate Limiting** (already distributed):
    - Redis handles shared rate limits across instances

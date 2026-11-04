@@ -112,6 +112,12 @@ Newest sections at the bottom; delete an item when it's fixed.
   browser runs (`e2e:*`). The
   admin editors (content, products, theme) have no automated UI tests; real form bugs
   (switches inside a `<form>`, saved values reverting on screen) were only found by hand.
+- **`pg` deprecation warning during verification runs.** `pnpm verify:isolation` (and other
+  scripts that use interactive transactions) prints: *"Calling client.query() when the client is
+  already executing a query is deprecated and will be removed in pg@9.0."* It comes from the
+  query path inside `@prisma/adapter-pg`, not from application code, and nothing misbehaves
+  today. Worth resolving before `pg@9`: check whether a newer `@prisma/adapter-pg` or `pg`
+  release has fixed it, since every tenant-scoped query runs through that path.
 - **No caching** on storefront pages (plain SSR by design for the MVP).
 - **DB connection pool: `max: 30`** is now set on `PrismaPg` (`lib/prisma.ts`), up from
   node-postgres's default of 10 — confirmed against this DB's `max_connections` (100). Single

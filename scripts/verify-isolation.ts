@@ -2,9 +2,16 @@
  * Tenant-isolation check against the real database (pnpm verify:isolation).
  * Creates two throwaway stores, has store B try to read/modify/delete store A's
  * data through the same data-layer functions the admin actions use, then cleans up.
+ *
+ * Runs as the RESTRICTED runtime role (APP_DATABASE_URL), not the owner. It used to import
+ * ./_owner like the other scripts, which pointed it at the superuser - and a superuser bypasses
+ * Row-Level Security entirely, so the whole suite was only ever exercising the application's own
+ * WHERE clauses while reporting that isolation held. Connecting as the real runtime role means a
+ * pass covers both layers at once.
+ *
+ * It refuses to run as a privileged role rather than passing vacuously; see assertRestrictedRole.
  */
 import "dotenv/config";
-import "./_owner";
 import assert from "node:assert/strict";
 import { prisma } from "../lib/prisma";
 import { createStoreWithOwner } from "../lib/data/tenants";
@@ -43,7 +50,36 @@ async function check(name: string, fn: () => Promise<void>) {
   console.log(`  ok  ${name}`);
 }
 
+/**
+ * Fail loudly when this would run as a superuser or a BYPASSRLS role. Passing in that state
+ * would be worse than failing: it reports isolation as proven while the database layer of it is
+ * switched off.
+ */
+async function assertRestrictedRole() {
+  const [role] = await prisma.$queryRaw<{ current_user: string; rolsuper: boolean; rolbypassrls: boolean }[]>`
+    SELECT current_user, rolsuper, rolbypassrls FROM pg_roles WHERE rolname = current_user`;
+  if (!role) throw new Error("Could not determine the database role this script is connected as.");
+  if (role.rolsuper || role.rolbypassrls) {
+    const why = [role.rolsuper && "superuser", role.rolbypassrls && "BYPASSRLS"]
+      .filter(Boolean)
+      .join(", ");
+    throw new Error(
+      [
+        `Connected as "${role.current_user}", which bypasses Row-Level Security (${why}).`,
+        "This check must run as the restricted runtime role, or it proves only half of what it claims.",
+        "",
+        '  1. Create the role:  psql -d <database> -v app_pw="<password>" -f scripts/sql/rls-role.sql',
+        "  2. Point APP_DATABASE_URL at it in .env",
+        "  3. Re-run: pnpm verify:isolation",
+        "",
+      ].join("\n"),
+    );
+  }
+  console.log(`Connected as "${role.current_user}" (not superuser, not BYPASSRLS) - RLS is in force.`);
+}
+
 async function main() {
+  await assertRestrictedRole();
   const run = Date.now().toString(36);
   const a = await createStoreWithOwner({
     storeName: `Iso A ${run}`,
