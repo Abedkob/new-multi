@@ -265,7 +265,7 @@ export type ResetPasswordState = FormState & {
 
 export async function resetOwnerPasswordAction(
   slug: string,
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars -- required by useActionState
+  // Required by useActionState, which passes (prev, formData) by position.
   _prev: ResetPasswordState,
 ): Promise<ResetPasswordState> {
   await requirePlatformAdmin();
@@ -344,7 +344,7 @@ export async function updateStoreDomainAction(
 
 export async function deleteStoreAction(
   slug: string,
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars -- required by useActionState
+  // Required by useActionState, which passes (prev, formData) by position.
   _prev: FormState,
 ): Promise<FormState> {
   await requirePlatformAdmin();

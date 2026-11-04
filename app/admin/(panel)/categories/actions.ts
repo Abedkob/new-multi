@@ -60,7 +60,7 @@ export async function updateCategoryAction(
 /** Blocked (with a clear message, nothing deleted) while the category has children or products. */
 export async function deleteCategoryAction(
   id: string,
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars -- required by useActionState
+  // Required by useActionState, which passes (prev, formData) by position.
   _prev: FormState,
 ): Promise<FormState> {
   const { tenantId } = await requireOwner();

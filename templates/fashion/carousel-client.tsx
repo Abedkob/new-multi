@@ -3,7 +3,6 @@
 import { useRef } from "react";
 import { motion } from "motion/react";
 import { ChevronLeft, ChevronRight } from "lucide-react";
-import { cn } from "@/lib/utils";
 
 export function CarouselClient({ children }: { children: React.ReactNode }) {
   const scrollRef = useRef<HTMLUListElement>(null);

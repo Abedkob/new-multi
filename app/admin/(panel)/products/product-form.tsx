@@ -445,6 +445,10 @@ function ProductPreviewCard({ name, description, price, imageUrl }: { name: stri
     <div className="rounded-3xl overflow-hidden border border-border shadow-sm bg-background">
       <div className="aspect-[4/3] bg-muted relative overflow-hidden flex items-center justify-center">
         {imageUrl ? (
+          // Deliberately not next/image: this previews LIVE FORM STATE, so imageUrl is whatever
+          // the owner has typed so far. A half-typed URL makes next/image throw and takes the
+          // whole admin page down, where an <img> just shows a broken image for a keystroke.
+          // eslint-disable-next-line @next/next/no-img-element
           <img src={imageUrl} alt={t("products.form.previewAlt")} className="w-full h-full object-cover" />
         ) : (
           <div className="w-full h-full bg-secondary/50 flex items-center justify-center text-muted-foreground/30 text-6xl">

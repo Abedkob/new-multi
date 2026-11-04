@@ -3,7 +3,7 @@ import type { Variants } from "motion/react";
 import { buttonVariants } from "@/components/ui/button";
 import type { ContentMap } from "@/lib/content";
 import { cn } from "@/lib/utils";
-import { MotionDiv, MotionH1, MotionH2, MotionLi, MotionP, MotionSection, MotionUl } from "../motion";
+import { MotionDiv, MotionH1, MotionH2, MotionLi, MotionP, MotionUl } from "../motion";
 import { StoreFAQ } from "../store-faq";
 import { StoreFooter } from "../store-footer";
 import { Picture, StoreBrand, StoreMenuButton, cardPrice, productHref, sectionHref, shopHref, storeHref } from "../shared";

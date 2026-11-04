@@ -53,6 +53,11 @@ export default async function ContentPage({ params }: PageProps<"/store/[slug]/[
       <h1 className={s.title}>{title}</h1>
       <div className="mt-8 max-w-4xl leading-relaxed">
         {image && (
+          // Deliberately not next/image: this is an owner's content image of unknown intrinsic
+          // size, laid out floating at half width with no fixed aspect. next/image would need
+          // either a cropping aspect box or hardcoded dimensions, and both change the owner's
+          // picture to satisfy a lint rule.
+          // eslint-disable-next-line @next/next/no-img-element
           <img 
             src={image} 
             alt={title} 

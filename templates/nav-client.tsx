@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { useState, useEffect, useRef } from "react";
 import { createPortal } from "react-dom";
@@ -117,7 +118,17 @@ export function SearchBox({
                   className="flex items-center gap-3 px-4 py-2 hover:bg-secondary transition-colors"
                 >
                   {p.imageUrl ? (
-                    <img src={p.imageUrl} alt={p.name} className="h-10 w-10 object-cover rounded" />
+                    // A stored imageUrl is always "/..." or a valid http(s) URL
+                    // (lib/validation.ts's isImageUrl at save time), which is exactly what the
+                    // optimizer accepts — and a 40px thumbnail has no business downloading a
+                    // full product photo.
+                    <Image
+                      src={p.imageUrl}
+                      alt={p.name}
+                      width={40}
+                      height={40}
+                      className="h-10 w-10 object-cover rounded"
+                    />
                   ) : (
                     <div className="h-10 w-10 bg-secondary rounded flex items-center justify-center text-xs text-muted-foreground">
                       {p.name.charAt(0).toUpperCase()}
