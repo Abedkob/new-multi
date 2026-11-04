@@ -38,6 +38,13 @@ const TRACKER_HOSTS = [
 ];
 
 const isTracker = (url: string) => TRACKER_HOSTS.some((host) => url.includes(host));
+
+/**
+ * Lets late requests arrive before asserting on what did or did not leave the page.
+ * `networkidle` is unusable here: the dev server keeps an HMR connection open, so the network
+ * is never idle and every navigation would time out.
+ */
+const settle = (page: Page, ms = 1200) => page.waitForTimeout(ms);
 /** Our own analytics surface. Phase 1 ships none; this keeps it that way as Phase 2 lands. */
 const isOwnAnalytics = (url: string) => /\/analytics(\/|\?|$)/.test(new URL(url).pathname + "?");
 
@@ -112,8 +119,9 @@ async function main() {
 
   try {
     // ------------------------------------------------------------------ nothing before consent
-    await page.goto(home, { waitUntil: "networkidle" });
+    await page.goto(home, { waitUntil: "load" });
     await page.locator('[data-testid="consent-banner"]').waitFor();
+    await settle(page, 2000);
 
     assert.deepEqual(trackersIn(log), [], `requests left before any choice: ${trackersIn(log)}`);
     ok("P1-01", `no request to any of the ${TRACKER_HOSTS.length} tracker hosts before a choice`);
@@ -193,7 +201,7 @@ async function main() {
     await page.locator('[data-testid="consent-category-analytics"]').check();
     await page.locator('[data-testid="consent-save"]').click();
     await page.locator('[data-testid="consent-banner"]').waitFor({ state: "detached" });
-    await page.waitForLoadState("networkidle");
+    await settle(page);
 
     const afterAnalytics = trackersIn(log);
     assert.ok(
@@ -231,11 +239,11 @@ async function main() {
     await page.locator('[data-testid="consent-manage-dialog"]').waitFor();
     await page.locator('[data-testid="consent-withdraw"]').click();
     await page.locator('[data-testid="consent-manage-dialog"]').waitFor({ state: "hidden" });
-    await page.waitForLoadState("networkidle");
+    await settle(page);
     ok("P1-09", "withdrawing takes two clicks from the footer — the same as accepting took");
 
     log.reset();
-    await page.goto(home, { waitUntil: "networkidle" });
+    await page.goto(home, { waitUntil: "load" });
     await page.waitForTimeout(1500);
     assert.deepEqual(trackersIn(log), [], `tracking after withdrawal: ${trackersIn(log)}`);
     ok("P1-10", "after withdrawal no tracking request leaves the page again");
@@ -256,7 +264,7 @@ async function main() {
       where: { id: T },
       data: { consentNoticeVersion: { increment: 1 } },
     });
-    await page.goto(home, { waitUntil: "networkidle" });
+    await page.goto(home, { waitUntil: "load" });
     await page.locator('[data-testid="consent-banner"]').waitFor();
     ok("P1-11", "bumping the notice version asks a visitor who already answered to answer again");
 
@@ -266,7 +274,7 @@ async function main() {
     await page.locator('[data-testid="consent-category-advertising"]').check();
     await page.locator('[data-testid="consent-save"]').click();
     await page.locator('[data-testid="consent-banner"]').waitFor({ state: "detached" });
-    await page.waitForLoadState("networkidle");
+    await settle(page);
     const afterAds = trackersIn(log);
     assert.ok(
       afterAds.some((u) => u.includes("connect.facebook.net")),
@@ -284,13 +292,23 @@ async function main() {
     await refuser.goto(home);
     // A fresh page shares the context's cookie, so clear the decision for this leg.
     await context.clearCookies({ name: (await consentCookies(context))[0]?.name });
-    await refuser.goto(home, { waitUntil: "networkidle" });
+    await refuser.goto(home, { waitUntil: "load" });
     await refuser.locator('[data-testid="consent-reject"]').click();
     await refuser.locator('[data-testid="consent-banner"]').waitFor({ state: "detached" });
 
-    await refuser.goto(`${home}/products/${product.slug}`, { waitUntil: "networkidle" });
+    await refuser.goto(`${home}/products/${product.slug}`, { waitUntil: "load" });
     await refuser.locator('[data-testid="add-to-cart-button"]').click();
-    await refuser.goto(`${home}/checkout`, { waitUntil: "networkidle" });
+    // Click through rather than navigating: the cart lives in React state in the storefront
+    // layout, so a hard navigation would empty it and the checkout form would never render.
+    await Promise.all([
+      refuser.waitForURL(/\/cart$/),
+      refuser.locator('[data-testid="cart-link"]').first().click(),
+    ]);
+    await refuser.waitForSelector('[data-testid="cart-line"]');
+    await Promise.all([
+      refuser.waitForURL(/\/checkout$/),
+      refuser.click('[data-testid="go-to-checkout"]'),
+    ]);
     await refuser.fill("#co-customerName", "Refusing Shopper");
     await refuser.fill("#co-customerPhone", "+961 70 000 000");
     await refuser.fill("#co-customerAddress", "1 Privacy Street");
@@ -320,7 +338,7 @@ async function main() {
       for (const locale of ["en", "ar"] as const) {
         await prisma.tenant.update({ where: { id: T }, data: { defaultLocale: locale } });
         await mobile.clearCookies();
-        await mPage.goto(home, { waitUntil: "networkidle" });
+        await mPage.goto(home, { waitUntil: "load" });
         const bannerEl = mPage.locator('[data-testid="consent-banner"]');
         await bannerEl.waitFor();
 
@@ -362,7 +380,7 @@ async function main() {
       const dPage = await dContext.newPage();
       const origin = `http://${domain}:${port}`;
 
-      await dPage.goto(`${origin}/privacy`, { waitUntil: "networkidle" });
+      await dPage.goto(`${origin}/privacy`, { waitUntil: "load" });
       await dPage.locator('[data-testid="privacy-page"]').waitFor();
       const privacyText = await dPage.locator('[data-testid="privacy-page"]').innerText();
       assert.ok(
@@ -384,7 +402,7 @@ async function main() {
       ok("P1-35", "the privacy page reads in Arabic without a consent decision being needed");
 
       assert.deepEqual(trackersIn(dLog), [], "tracking fired on the custom domain before consent");
-      await dPage.goto(origin, { waitUntil: "networkidle" });
+      await dPage.goto(origin, { waitUntil: "load" });
       await dPage.locator('[data-testid="consent-accept-all"]').click();
       await dPage.locator('[data-testid="consent-banner"]').waitFor({ state: "detached" });
 
@@ -396,7 +414,7 @@ async function main() {
       assert.equal(dCookie.httpOnly, true);
       ok("P1-34", `on ${domain} the cookie is scoped to "/" for that host alone, HttpOnly, not Secure`);
 
-      await dPage.goto(origin, { waitUntil: "networkidle" });
+      await dPage.goto(origin, { waitUntil: "load" });
       assert.equal(await dPage.locator('[data-testid="consent-banner"]').count(), 0);
       ok("P1-34", "the custom-domain decision persists across a reload");
     } finally {

@@ -2,6 +2,13 @@ import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
   output: "standalone",
+  // Development only (ignored by a production build). `next dev` refuses to serve its dev
+  // resources — HMR, fonts, the client bundle — to a page loaded from a hostname it does not
+  // recognise, which breaks any local test of the custom-domain routing in proxy.ts: the page
+  // renders but its JavaScript never arrives, so nothing on it works. pnpm e2e:consent drives
+  // exactly that path, resolving this hostname to 127.0.0.1 through Chrome itself.
+  // Add your own test domains here if you need to exercise custom-domain behaviour locally.
+  allowedDevOrigins: ["consent-e2e.test"],
   experimental: {
     serverActions: {
       // Image uploads go through a Server Action (uploadImageAction) and allow up to 5MB

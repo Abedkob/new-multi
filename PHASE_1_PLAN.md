@@ -236,7 +236,7 @@ Nothing is reported complete without pasted command output.
 |---|---|---|
 | P1-30 | Legal wording is placeholder `TODO(legal)` | §4.1/§4.3 require local legal review (**D2**) |
 | P1-31 | Screen-reader pass not performed | ARIA/focus is assertable; real assistive-technology testing is a human or auditor task |
-| P1-32 | Custom-domain cookie path scoping untested end to end | Needs real DNS pointed at the server; only the platform-domain path is locally testable |
+| ~~P1-32~~ | ~~Custom-domain cookie path scoping untested end to end~~ | **Removed — it was tested.** Chrome's `--host-resolver-rules` resolves a real hostname in-browser, so no DNS and no hosts-file edit were needed. Covered by P1-34/P1-35; see PHASE_1_ACCEPTANCE.md |
 
 ---
 
@@ -252,6 +252,11 @@ Nothing is reported complete without pasted command output.
 ---
 
 ## 9. What "Phase 1 complete" means
+
+**Results: see [PHASE_1_ACCEPTANCE.md](PHASE_1_ACCEPTANCE.md).** 29 of 29 required items pass,
+P1-30 and P1-31 are open and declared, and P1-32 was removed because it was proved rather than
+deferred.
+
 
 `PHASE_1_ACCEPTANCE.md` with every item P1-01..P1-29 showing passing evidence, P1-30..P1-32
 declared open, and `pnpm verify:consent && pnpm e2e:consent && pnpm typecheck && pnpm lint`
