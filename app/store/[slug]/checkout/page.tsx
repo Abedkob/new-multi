@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
+import { CheckoutStartedTracker } from "@/components/analytics/commerce-events";
 import { privatePageMeta } from "@/lib/seo";
 import { loadStorefrontData, loadTenant } from "@/lib/data/storefront";
 import { getTemplate } from "@/templates";
@@ -21,13 +22,16 @@ export default async function CheckoutPage({ params }: PageProps<"/store/[slug]/
   if (!tenant || !data) notFound();
 
   return (
-    <CheckoutView
-      slug={slug}
-      basePath={data.store.basePath}
-      content={data.content}
-      deliveryFeeCents={tenant.deliveryFeeCents}
-      deliveryNote={tenant.deliveryNote}
-      style={getTemplate(tenant.templateId).pageStyle}
-    />
+    <>
+      <CheckoutStartedTracker />
+      <CheckoutView
+        slug={slug}
+        basePath={data.store.basePath}
+        content={data.content}
+        deliveryFeeCents={tenant.deliveryFeeCents}
+        deliveryNote={tenant.deliveryNote}
+        style={getTemplate(tenant.templateId).pageStyle}
+      />
+    </>
   );
 }
