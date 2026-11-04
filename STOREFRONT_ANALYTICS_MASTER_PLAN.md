@@ -945,7 +945,7 @@ Build Overview, Products, Acquisition, Searches, branched funnel, heatmap, acces
 Also, agreed before [PHASE_5_PLAN.md](PHASE_5_PLAN.md) was written, because they decide what this product *is* to the person paying for it:
 
 - **One Marketing section** in the owner's admin — campaigns, tracked links, integrations, results — instead of the same work scattered between settings and analytics. The storefront is a shop; this section is the reason an owner opens the admin on a week when nothing has sold.
-- **Owner self-service integrations**: the owner connects their own Google and Meta accounts, which today only a platform admin can do. Needing to ask someone else to paste a pixel id is what makes software feel like it belongs to somebody else.
+- **Owner self-service integrations**: the owner connects their own Google and Meta accounts, which today only a platform admin can do. Needing to ask someone else to paste a pixel id is what makes software feel like it belongs to somebody else. The platform admin keeps full edit as well — an owner stuck on a tag asks for help, and "I can see it is wrong and may only delete it" is a worse answer than fixing it — and every write, owner's or admin's, is audit-logged. Each integration gets step-by-step setup text in English and Arabic ending in how to check it, whatever the owner pastes is reduced to the id itself (never stored as HTML or script), and the domain-verification tags render without consent, because they prove who owns a domain rather than watching anyone.
 
 Verify small-store exact values, insight thresholds, no person-level access, platform aggregate-only boundaries, and order/aggregate reconciliation.
 
