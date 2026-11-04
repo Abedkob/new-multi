@@ -32,6 +32,7 @@
     "verify:health": "tsx scripts/verify-health.ts",
     "verify:reports": "tsx scripts/verify-reports.ts",
     "verify:insights": "tsx scripts/verify-insights.ts",
+    "verify:integrations": "tsx scripts/verify-integrations.ts",
     "analytics:scheduled": "tsx scripts/analytics-scheduled.ts",
     "uploads:migrate": "tsx scripts/migrate-uploads-to-r2.ts",
     "e2e:categories": "tsx scripts/e2e/categories.ts",

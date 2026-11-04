@@ -25,6 +25,7 @@
  */
 
 import { withBypass, withTenant } from "@/lib/prisma";
+import { recordAnalyticsAudit } from "@/lib/analytics/audit";
 
 export type PrivacyRequestSummary = {
   visitorId: string;
@@ -231,6 +232,11 @@ export async function erasePrivacyRequest(
  * rather than evidence belonging to it — so it goes through the narrow bypass, like every other
  * platform-level write.
  */
+/**
+ * A privacy-request entry. Delegates to lib/analytics/audit.ts, the single writer for this
+ * table — one place that decides how a row is shaped, so two features cannot record the same
+ * kind of fact in two different ways.
+ */
 export async function recordPrivacyAudit(input: {
   tenantId: string | null;
   actorUserId: string | null;
@@ -239,18 +245,7 @@ export async function recordPrivacyAudit(input: {
   subject: string | null;
   detail: string | null;
 }): Promise<void> {
-  await withBypass((db) =>
-    db.analyticsAuditLog.create({
-      data: {
-        tenantId: input.tenantId,
-        actorUserId: input.actorUserId,
-        actorEmail: input.actorEmail,
-        action: input.action,
-        subject: input.subject,
-        detail: input.detail?.slice(0, 500) ?? null,
-      },
-    }),
-  );
+  await recordAnalyticsAudit(input);
 }
 
 /** The audit trail for one store, newest first — read by the platform console. */

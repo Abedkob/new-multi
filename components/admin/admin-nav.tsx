@@ -15,7 +15,7 @@ import {
   Share2,
   ShoppingBag,
   Truck,
-  Link2,
+  Megaphone,
 } from "lucide-react";
 import { logoutAction } from "@/app/actions/auth";
 import { setAdminLocaleAction } from "@/app/admin/actions";
@@ -34,7 +34,7 @@ function useNavLinks() {
     { href: "/admin/categories", label: t("nav.categories"), icon: FolderTree },
     { href: "/admin/content", label: t("nav.storeContent"), icon: Paintbrush },
     { href: "/admin/social-links", label: t("nav.socialLinks"), icon: Share2 },
-    { href: "/admin/analytics/links", label: t("nav.trackedLinks"), icon: Link2 },
+    { href: "/admin/marketing", label: t("nav.marketing"), icon: Megaphone },
   ];
 }
 

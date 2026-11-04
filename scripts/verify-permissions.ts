@@ -78,6 +78,7 @@ function staticActionGuard() {
   // Login and logout are intentionally public.
   const publicFiles = new Set([join("app", "login", "actions.ts"), join("app", "actions", "auth.ts")]);
   let count = 0;
+  const indirect: string[] = [];
   for (const file of walk("app").filter((f) => /actions?\.ts$/.test(f))) {
     const src = readFileSync(file, "utf8");
     if (!src.trimStart().startsWith('"use server"')) continue;
@@ -87,14 +88,40 @@ function staticActionGuard() {
     if (file.startsWith(join("app", "store") + "\\") || file.startsWith("app/store/")) continue;
     const parts = src.split(/^export async function /m).slice(1);
     assert.ok(parts.length > 0, `${file}: no exported actions found`);
+    const wants = file.includes(`${join("app", "platform")}`) ? "requirePlatformAdmin(" : "requireOwner(";
+
+    /**
+     * Local helpers in this file that perform the guard themselves, so an action may satisfy
+     * the rule by calling one.
+     *
+     * Added because the check failed on the privacy actions, which share a `resolve()` that
+     * calls `requirePlatformAdmin` and then does the lookups — the guard was there, one call
+     * away, and a check that cannot see one level of indirection pushes people towards
+     * copy-pasting the guard rather than sharing it. One level only: beyond that the reader of
+     * the action can no longer tell, and neither can this.
+     */
+    const guardingHelpers = [...src.matchAll(/^(?:async )?function (\w+)\(/gm)]
+      .map((m) => m[1])
+      .filter((helper) => {
+        const body = src.slice(src.indexOf(`function ${helper}(`));
+        return body.slice(0, body.indexOf("\n}\n") + 1).includes(wants);
+      });
+
     for (const part of parts) {
       const name = part.slice(0, part.indexOf("("));
-      const wants = file.includes(`${join("app", "platform")}`) ? "requirePlatformAdmin(" : "requireOwner(";
-      assert.ok(part.includes(wants), `${file}: ${name}() does not call ${wants})`);
+      const direct = part.includes(wants);
+      const viaHelper = guardingHelpers.find((helper) => new RegExp(`\\b${helper}\\(`).test(part));
+      assert.ok(
+        direct || viaHelper,
+        `${file}: ${name}() does not call ${wants}) — neither directly nor through a helper in the same file`,
+      );
+      if (!direct && viaHelper) indirect.push(`${name}() via ${viaHelper}()`);
       count++;
     }
   }
   ok(`all ${count} server actions verify the right role (owner actions: requireOwner, platform actions: requirePlatformAdmin)`);
+  // Printed every run, so sharing the guard stays visible rather than becoming invisible.
+  for (const line of indirect) console.log(`      via helper: ${line}`);
 }
 
 async function main() {
@@ -147,6 +174,31 @@ async function main() {
       assert.ok(delivery.body.includes(`name="${name}"`), `delivery page is missing ${name}`);
     }
     ok("can open Delivery, with one fixed fee and an optional note");
+    // Marketing -> Integrations: the owner's own Google and Meta ids (D40, P5-18b).
+    const integrations = await owner.get("/admin/marketing/integrations");
+    assert.equal(integrations.status, 200);
+    for (const name of [
+      "gaMeasurementId",
+      "metaPixelId",
+      "googleAdsId",
+      "googleAdsPurchaseLabel",
+      "metaDomainVerification",
+      "googleSiteVerification",
+    ]) {
+      assert.ok(integrations.body.includes(`name="${name}"`), `integrations page is missing ${name}`);
+    }
+    assert.ok(
+      integrations.body.includes("Pixel Helper") || integrations.body.includes("Tag Assistant"),
+      "each integration must name the tool that checks it",
+    );
+    ok("can open Marketing > Integrations, with all six fields and a way to check them");
+    // The Phase 4 path still works for anyone who bookmarked it (P5-15).
+    const moved = await owner.get("/admin/analytics/links");
+    assert.ok(
+      moved.status >= 300 && moved.status < 400 && moved.location.endsWith("/admin/marketing/links"),
+      `the old tracked-links path must redirect into Marketing, got ${moved.status} ${moved.location}`,
+    );
+    ok("the Phase 4 tracked-links path redirects into Marketing");
     const ownerPreview = await owner.get("/admin/preview");
     assert.equal(ownerPreview.status, 200);
     assert.ok(ownerPreview.body.includes("Perm Test"), "owner preview should show the owner's own store");

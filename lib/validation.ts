@@ -5,7 +5,11 @@ import { CONTENT_KEY_NAMES, IMAGE_CONTENT_KEYS } from "@/lib/content";
 // domain-check.ts pulls in node:dns/promises and env.ts, neither of which can reach a client
 // bundle. See lib/domain-check.ts's own docstring for the full story.
 import { isValidDomainFormat, normalizeHostname } from "@/lib/domain-format";
-import { INTEGRATION_FORMATS, extractMetaContent, type IntegrationKey } from "@/lib/integrations";
+import {
+  INTEGRATION_FORMATS,
+  extractIntegrationValue,
+  type IntegrationKey,
+} from "@/lib/integrations";
 import { encodeMessage } from "@/lib/i18n/types";
 // Pure Intl check, same reasoning as domain-format above: this file reaches a client bundle.
 import { isIanaTimeZone } from "@/lib/time-zones";
@@ -86,13 +90,20 @@ export const domainFormSchema = z.object({
   // (see its comment) — it needs lib/domain-check.ts, which this file must never import.
 });
 
-/** Empty -> null (turns the integration off); otherwise trimmed and format-checked. */
-function integrationField(key: IntegrationKey, message: string, normalize = (v: string) => v) {
+/**
+ * Empty -> null (turns the integration off); otherwise reduced to its id and format-checked.
+ *
+ * The extraction is per key and lives in lib/integrations.ts, so the owner's form and the
+ * platform admin's form accept exactly the same paste and store exactly the same value (D40).
+ * The length cap is generous because a pasted Google or Meta snippet is a few hundred
+ * characters; what survives it is an id of at most ~64.
+ */
+function integrationField(key: IntegrationKey, message: string) {
   return z
     .string()
     .trim()
-    .max(300)
-    .transform((v) => (v === "" ? null : normalize(v)))
+    .max(2000)
+    .transform((v) => (v === "" ? null : extractIntegrationValue(key, v)))
     .refine((v) => v === null || INTEGRATION_FORMATS[key].test(v), { message });
 }
 
@@ -101,7 +112,6 @@ export const searchSettingsSchema = z.object({
   googleSiteVerification: integrationField(
     "googleSiteVerification",
     "Paste the whole <meta> tag from Search Console, or just its content value.",
-    extractMetaContent,
   ),
 });
 
@@ -110,25 +120,40 @@ export const analyticsSettingsSchema = z
   .object({
     gaMeasurementId: integrationField(
       "gaMeasurementId",
-      "A GA4 Measurement ID looks like G-ABC123XYZ.",
-      (v) => v.toUpperCase(),
+      "A GA4 Measurement ID looks like G-ABC123XYZ. You can paste the whole gtag snippet.",
     ),
-    googleAdsId: integrationField("googleAdsId", "A Google Ads tag ID looks like AW-123456789.", (v) =>
-      // Accept a pasted "AW-123/label" send_to value; the label goes in its own field.
-      v.toUpperCase().split("/")[0],
+    googleAdsId: integrationField(
+      "googleAdsId",
+      "A Google Ads tag ID looks like AW-123456789. A pasted AW-123/label send_to value works too.",
     ),
     googleAdsPurchaseLabel: integrationField(
       "googleAdsPurchaseLabel",
       "The conversion label is the part after the slash in AW-123456789/AbC-dEfGh.",
-      (v) => (v.includes("/") ? v.split("/").pop()! : v),
     ),
-    metaPixelId: integrationField("metaPixelId", "A Meta Pixel (dataset) ID is 10-20 digits."),
+    metaPixelId: integrationField(
+      "metaPixelId",
+      "A Meta Pixel (dataset) ID is 10-20 digits. You can paste the whole fbq snippet.",
+    ),
     metaDomainVerification: integrationField(
       "metaDomainVerification",
       "Paste the whole <meta> tag from Meta Business settings, or just its content value.",
-      extractMetaContent,
     ),
   })
+  .refine((v) => !v.googleAdsPurchaseLabel || v.googleAdsId, {
+    path: ["googleAdsId"],
+    message: "Add the Google Ads tag ID too — the label alone can't be sent anywhere.",
+  });
+
+/**
+ * Store owner -> Marketing -> Integrations (D40). Every field the platform admin can set, in
+ * one form, because the owner owns all of them now.
+ *
+ * Built from `analyticsSettingsSchema` rather than beside it, so the two cannot drift: the
+ * owner's form and the platform admin's accept the same paste, apply the same extraction, and
+ * refuse the same values. A second copy of these rules is a second set of them.
+ */
+export const ownerIntegrationsSchema = analyticsSettingsSchema
+  .safeExtend(searchSettingsSchema.shape)
   .refine((v) => !v.googleAdsPurchaseLabel || v.googleAdsId, {
     path: ["googleAdsId"],
     message: "Add the Google Ads tag ID too — the label alone can't be sent anywhere.",

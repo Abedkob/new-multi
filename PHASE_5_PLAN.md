@@ -24,7 +24,15 @@ all be "working software" and still cost a merchant money.
 | 1 | `lib/analytics/report.ts`, `lib/analytics/compare.ts`, `scripts/verify-reports.ts` (18 checks). The read layer and the rules that stop it misleading anyone: aggregate-only enforced by walking report.ts's own imports, day ranges proven across Beirut's 23- and 25-hour days, null rates instead of zeros, a trend that refuses to judge below its sample floor, the two money figures kept apart, and an empty funnel step shown as zero. No UI. | done |
 | 2 | **Was commit 3**, brought forward: `20261106120000_report_columns` and the recompute that fills it. D44's product-name snapshot (which survives a later recompute, or the nightly pass would erase the name of every product deleted in the last month), D48a's per-product viewers, D48's four per-source columns, and D49's `visitorDays` rename. Also a bug this work exposed: `AnalyticsAcquisitionDaily.whatsappClickSessions` was initialised to 0 and never assigned, so every campaign would have reported no WhatsApp clicks. `verify:reports` is 23 checks. | done |
 | 3 | `insights.ts` and `scripts/verify-insights.ts` (14 checks) — **was commit 2**. Swapped, because §6's "frequently revisited product" needs the columns above; writing the rule first would have meant writing it against data that did not exist. All eight rules, every threshold in `INSIGHT_THRESHOLDS` as a named number, each exercised at the line and one below it. Pure: the check asserts it imports the report layer for types only. One reconciliation — the activity-shift insight re-uses `compare.ts`'s verdict rather than applying §6's numbers separately, so `TREND_RULES.sessions` is now §6's 20-across-the-comparison and a tile cannot say "not enough evidence" beside an insight claiming a shift. | done |
-| 4–10 | §5's sequence, unchanged. Next: the Marketing shell and Integrations. | not started |
+| 4 | The Marketing section's shell and **Integrations** (D40, D40a). `lib/integrations-guide.ts` (structure) with EN/AR text in the dictionaries, per-key snippet extraction in `lib/integrations.ts`, `lib/analytics/audit.ts` as the single audit writer, the owner's route, and the platform admin's writes logged in the same shape. `LinkBuilder` moved into the section unchanged and the Phase 4 route is a redirect (P5-15). `verify:integrations` is 12 checks, `verify:permissions` now 17. | done |
+| 5–10 | §5's sequence, unchanged. Next: Campaigns and Tracked links. | not started |
+
+Three defects commit 4 found, all fixed in it: the storefront passed **every** advertising id to
+the browser and relied on the client to ignore the ungranted ones (so a visitor who declined had
+the pixel id in their page props); `extractIntegrationValue` refused a lower-case `g-abc123`,
+which is how people type their own id; and `verify:permissions`' static guard could not see an
+action that shares a role check through a helper, so it had been failing on Phase 4's privacy
+actions since they landed.
 
 Four gaps found by building rather than by planning, each recorded as a decision instead of
 worked around: **D44**, **D48**, **D48a** and **D49**. The first three were missing columns; the

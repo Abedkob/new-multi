@@ -12,7 +12,7 @@ import { readStoreConsent } from "@/lib/consent/read";
 import { getStoreBasePath } from "@/lib/store-url";
 import { letterFavicon } from "@/lib/favicon";
 import { loadStorefrontData, loadTenant } from "@/lib/data/storefront";
-import { storeIntegrations } from "@/lib/integrations";
+import { grantedConfig, storeIntegrations } from "@/lib/integrations";
 import { pageMeta, storeDescription, storeImage } from "@/lib/seo";
 import { parseThemeFonts } from "@/lib/fonts";
 import { parseThemeOverrides, resolveTheme } from "@/lib/theme";
@@ -60,8 +60,12 @@ export async function generateMetadata({
     // Child pages set just their own title ("Linen Shirt"); the template adds the store name.
     title: { default: tenant.name, template: `%s | ${tenant.name}` },
     icons: { icon: favicon, apple: tenant.faviconUrl || undefined },
-    // Search Console (HTML-tag method) and Meta Business domain verification, set by the
-    // platform admin. Emitted on every storefront page, which includes the home page they check.
+    // Search Console (HTML-tag method) and Meta Business domain verification, set by the owner
+    // in Marketing > Integrations or by a platform admin. Emitted on every storefront page,
+    // which includes the home page they check — and for every visitor, consent or not (D40a):
+    // these prove who owns the domain, set no cookie and identify the site rather than the
+    // reader, so withholding them from someone who declined would break verification for a
+    // share of visitors while protecting none of them.
     verification: {
       ...(googleSiteVerification ? { google: googleSiteVerification } : {}),
       ...(metaDomainVerification
@@ -142,7 +146,13 @@ export default async function StoreLayout({
         initialState={consent}
       >
         {hasAnalytics ? (
-          <StoreAnalytics config={analytics} grants={consent.grants}>
+          // The ids are narrowed to the consented ones HERE, on the server, before they are
+          // serialized into the page. StoreAnalytics narrows them again for its own sake, but
+          // doing it only there left a declining visitor's page carrying the pixel id in its
+          // props — no request, no tracking, and still an id the browser was never meant to
+          // receive, waiting for the first piece of code that reads `config` instead of the
+          // granted one. Found by verify:integrations (P5-16).
+          <StoreAnalytics config={grantedConfig(analytics, consent.grants)} grants={consent.grants}>
             {shell}
           </StoreAnalytics>
         ) : (

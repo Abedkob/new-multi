@@ -30,6 +30,8 @@ import { isValidDomainFormat, normalizeHostname, wwwTwin } from "@/lib/domain-fo
 import { env } from "@/lib/env";
 import { generateTempPassword, hashPassword } from "@/lib/passwords";
 import { activateTenantLicense } from "@/lib/license/service";
+import { diffIntegrations, recordIntegrationChange } from "@/lib/analytics/audit";
+import type { IntegrationKey } from "@/lib/integrations";
 import { RATE_LIMITS, rateLimit, retryAfterText } from "@/lib/rate-limit";
 import { requirePlatformAdmin } from "@/lib/session";
 import { importImageFromUrl, isOwnImageUrl, storeImage } from "@/lib/storage";
@@ -385,7 +387,7 @@ export async function saveSearchSettingsAction(
   _prev: FormState,
   formData: FormData,
 ): Promise<FormState> {
-  await requirePlatformAdmin();
+  const admin = await requirePlatformAdmin();
   const parsed = searchSettingsSchema.safeParse({
     googleSiteVerification: formData.get("googleSiteVerification") ?? "",
   });
@@ -394,6 +396,7 @@ export async function saveSearchSettingsAction(
   const tenant = await getTenantBySlug(slug);
   if (!tenant) return { error: "Store not found." };
   await updateTenantIntegrations(tenant.id, parsed.data);
+  await logIntegrationWrite(admin, tenant, parsed.data);
   revalidateStore(slug);
   return { ok: true };
 }
@@ -403,7 +406,7 @@ export async function saveAnalyticsSettingsAction(
   _prev: FormState,
   formData: FormData,
 ): Promise<FormState> {
-  await requirePlatformAdmin();
+  const admin = await requirePlatformAdmin();
   const field = (k: string) => formData.get(k) ?? "";
   const parsed = analyticsSettingsSchema.safeParse({
     gaMeasurementId: field("gaMeasurementId"),
@@ -417,8 +420,41 @@ export async function saveAnalyticsSettingsAction(
   const tenant = await getTenantBySlug(slug);
   if (!tenant) return { error: "Store not found." };
   await updateTenantIntegrations(tenant.id, parsed.data);
+  await logIntegrationWrite(admin, tenant, parsed.data);
   revalidateStore(slug);
   return { ok: true };
+}
+
+/**
+ * The platform admin keeps full edit of a store's integrations, not just the power to clear one
+ * (D40). An owner who cannot get a tag working will ask for help, and "I can see that it is
+ * wrong and I may only delete it" is a worse answer than fixing it.
+ *
+ * What makes that safe is the record, not withholding the power: every write here lands in
+ * AnalyticsAuditLog with the admin's email, the fields and their before and after values, in
+ * the same shape as the owner's own edits. The ids are public identifiers that ship in the page
+ * source of every storefront visit, so they are recorded in full rather than masked.
+ */
+async function logIntegrationWrite(
+  admin: { userId: string; email: string },
+  before: Record<string, unknown> & { id: string },
+  after: Partial<Record<IntegrationKey, string | null>>,
+) {
+  await recordIntegrationChange({
+    tenantId: before.id,
+    actorUserId: admin.userId,
+    actorEmail: admin.email,
+    actorRole: "platform-admin",
+    changes: diffIntegrations(
+      Object.fromEntries(
+        (Object.keys(after) as IntegrationKey[]).map((key) => [
+          key,
+          (before[key] as string | null) ?? null,
+        ]),
+      ),
+      after,
+    ),
+  });
 }
 
 /** Branding section: the store's favicon. Empty clears it (back to the generated letter icon). */

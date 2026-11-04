@@ -3,7 +3,11 @@
 import Script from "next/script";
 import { usePathname } from "next/navigation";
 import { createContext, useContext, useEffect, useMemo, useRef } from "react";
-import type { AnalyticsConfig } from "@/lib/integrations";
+// grantedConfig lives in that module, not here, because the storefront layout applies it on
+// the server — see its docstring. Re-exported so existing importers need not care.
+import { grantedConfig, type AnalyticsConfig } from "@/lib/integrations";
+
+export { grantedConfig };
 import type { ConsentGrants } from "@/lib/consent/types";
 
 /**
@@ -206,21 +210,6 @@ const Ctx = createContext<Tracker | null>(null);
 
 /** Event helpers; inert outside a storefront with analytics configured (e.g. admin previews). */
 export const useTrack = () => useContext(Ctx) ?? NOOP;
-
-/**
- * The ids this visitor's consent actually permits. GA4 is measurement, so it belongs to the
- * `analytics` category; Google Ads and the Meta Pixel are advertising. An ungranted id becomes
- * null, which every path in this file already treats as "not configured" — so refusing a
- * category doesn't just hide a script tag, it makes the corresponding events inert too.
- */
-export function grantedConfig(config: AnalyticsConfig, grants: ConsentGrants): AnalyticsConfig {
-  return {
-    gaId: grants.analytics ? config.gaId : null,
-    adsId: grants.advertising ? config.adsId : null,
-    adsPurchaseLabel: grants.advertising ? config.adsPurchaseLabel : null,
-    metaPixelId: grants.advertising ? config.metaPixelId : null,
-  };
-}
 
 export function StoreAnalytics({
   config,

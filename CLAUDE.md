@@ -10,7 +10,7 @@ Multi-tenant e-commerce platform built with **Next.js 16 (App Router)** + **Post
 
 Three user roles:
 - **Platform Admin** (`/platform/*`): manages stores, chooses templates/colors for each, resets owner passwords
-- **Store Owner** (`/admin/*`): edits content, products, categories, and processes orders for their own store
+- **Store Owner** (`/admin/*`): edits content, products, categories, processes orders, and connects their own Google/Meta accounts under Marketing
 - **Public shoppers** (`/store/[slug]/*`): browse and purchase (no accounts, cash-on-delivery only)
 
 ## Quick Setup
@@ -48,6 +48,7 @@ pnpm dev                              # http://localhost:3000
 | `pnpm verify:e2e-policy` | Static check that every E2E suite has a custom-domain leg and no skip path (no server needed) |
 | `pnpm verify:reports` | Test the report read layer (aggregate-only rule, store-local date ranges across DST, null-not-zero rates, trend thresholds) |
 | `pnpm verify:insights` | Test §6's insight rules at, just below and just above every threshold (pure; no server or database) |
+| `pnpm verify:integrations` | Test the owner's Google/Meta connections: snippet extraction, consent gating, verification tags on a custom domain, audit rows (needs server) |
 | `pnpm uploads:migrate --rewrite-from=<old URL>` | Rewrite stored R2 URLs after moving buckets/domains |
 | `pnpm e2e:categories` / `e2e:variants` / `e2e:discounts` / `e2e:social-links` / `e2e:pages` / `e2e:checkout` / `e2e:kinetic` / `e2e:mirage` / `e2e:prism` | Chrome automation tests, one per feature area (needs server + Chrome installed; each creates/removes throwaway stores) |
 
@@ -182,7 +183,8 @@ const allProducts = await withBypass(async (tx) => {
 
 - Every storefront page has a title, meta description, canonical URL, Open Graph tags.
 - Structured data (JSON-LD): `WebSite` + `Organization` on home, `Product` with `AggregateOffer` on product pages.
-- Integrations: per-store GA4 ID, Meta Pixel, Google Ads IDs, Google Search Console verification, sitemap/robots.txt.
+- Integrations: per-store GA4 ID, Meta Pixel, Google Ads IDs, Google Search Console and Meta domain verification, sitemap/robots.txt. **The owner sets these themselves** at `/admin/marketing/integrations` (D40); the platform admin can also edit or clear them from `/platform/stores/[slug]/analytics`. Either way the write is appended to `AnalyticsAuditLog` with the actor and the before/after values, and the owner has no route that reads that log. Whatever is pasted — a `<meta>` tag, a gtag or fbq snippet, an `AW-123/label` pair — is reduced to the id by `lib/integrations.ts`; markup and script text are never stored.
+- The two verification tokens render for **every** visitor, consent or not: they prove domain ownership rather than watching anyone. The measurement ids are narrowed by `grantedConfig` **on the server**, so a visitor who declines advertising never receives them at all.
 - `lib/analytics.tsx` mounts tracking tags (only in storefront, never in admin previews).
 - Purchase event deduped by `eventID = orderId` and fires once per browser within 30 min of order.
 
@@ -232,6 +234,7 @@ No automated test suite yet. Manual verification scripts + browser E2E tests:
 - `pnpm verify:social-links`: tenant social-link field validation and rendering.
 - `pnpm verify:reports`: the report read layer — that it reads aggregates only (by walking its own imports), that a date range means store-local days across a 23- and a 25-hour day, that a rate with no denominator is null rather than 0, and that a trend is withheld below its sample floor.
 - `pnpm verify:insights`: every §6 threshold exercised at the line, one below it and one above, plus the rules that a redacted search phrase never becomes a suggestion, that an unmeasured figure is treated as unknown rather than low, and that no insight asserts a cause.
+- `pnpm verify:integrations`: what an owner pastes is reduced to an id (no markup, no script), a malformed value is refused with its expected shape, consent nulls the advertising ids server-side, the verification tags are present for a visitor who declined **and on the store's own domain**, and every integration write leaves one audit row while a no-op leaves none.
 - `pnpm e2e:*`: Chrome automation, one script per feature (categories, variants, discounts, social-links, storefront pages, checkout, kinetic/mirage/prism template-specific flows).
 
 ### Custom-domain legs are mandatory, and a skip is a failure
