@@ -341,8 +341,9 @@ async function aggregateChecks() {
 
     // -------------------------------------------------------------- P4-18: twice is the same
     const snapshot = async () => {
+      // id and computedAt are expected to differ between runs; everything else must not.
       const strip = <T extends { id: string; computedAt: Date }>(rows: T[]) =>
-        rows.map(({ id, computedAt, ...rest }) => rest);
+        rows.map(({ id: _id, computedAt: _computedAt, ...rest }) => rest);
       return JSON.stringify([
         strip(await prisma.analyticsDailyMetric.findMany({ where: { tenantId: T }, orderBy: { localDay: "asc" } })),
         strip(await prisma.analyticsHourlyMetric.findMany({ where: { tenantId: T }, orderBy: [{ localDay: "asc" }, { hour: "asc" }] })),
