@@ -58,6 +58,29 @@ export type OrderLineInput = {
 const MAX_LINES = 50;
 const MAX_QTY = 99;
 
+/**
+ * Where an order came from, as analytics knows it at the moment of purchase (master plan 9.1).
+ *
+ * Resolved by the caller (lib/analytics/order-attribution.ts) BEFORE the order transaction
+ * opens, and then written inside it as part of `tx.order.create`. That ordering is the whole
+ * design: the order never waits on the analytics database, never fails because of it, and never
+ * needs a second write afterwards that could be lost. Every field is optional — a visitor who
+ * refused analytics has no session, so the snapshot is simply absent and the order is normal.
+ *
+ * The shape lives here, with the order, rather than in the analytics layer: this is what an
+ * order records about itself, and commerce must not depend on analytics code to describe it.
+ */
+export type OrderAttributionSnapshot = {
+  analyticsSessionId?: string | null;
+  analyticsVisitorId?: string | null;
+  attributionSource?: string | null;
+  attributionMedium?: string | null;
+  attributionCampaign?: string | null;
+  firstTouchSource?: string | null;
+  analyticsCountry?: string | null;
+  analyticsDeviceClass?: string | null;
+};
+
 export async function previewCoupon(
   tenantId: string,
   code: string,
@@ -109,7 +132,13 @@ export async function placeOrder(
   tenantId: string,
   customer: CustomerInput,
   lines: OrderLineInput[],
-  options: { expectedDeliveryFeeCents?: number; couponCode?: string; expectedTotalCents?: number } = {},
+  options: {
+    expectedDeliveryFeeCents?: number;
+    couponCode?: string;
+    expectedTotalCents?: number;
+    /** Already resolved; see OrderAttributionSnapshot. Absent means "not known", never "fail". */
+    attribution?: OrderAttributionSnapshot;
+  } = {},
 ) {
   // Merge duplicate variant ids and sanity-check quantities.
   const wanted = new Map<string, number>();
@@ -282,6 +311,16 @@ export async function placeOrder(
         couponMerchandiseDiscountCentsSnapshot: couponResult.merchandiseDiscountCents,
         couponDeliveryDiscountCentsSnapshot: couponResult.deliveryDiscountCents,
         couponDiscountCentsSnapshot: couponResult.discountCents,
+        // Written here, in the order's own transaction, so it commits with the order or not at
+        // all. Nulls when there was nothing to attribute.
+        analyticsSessionId: options.attribution?.analyticsSessionId ?? null,
+        analyticsVisitorId: options.attribution?.analyticsVisitorId ?? null,
+        attributionSource: options.attribution?.attributionSource ?? null,
+        attributionMedium: options.attribution?.attributionMedium ?? null,
+        attributionCampaign: options.attribution?.attributionCampaign ?? null,
+        firstTouchSource: options.attribution?.firstTouchSource ?? null,
+        analyticsCountry: options.attribution?.analyticsCountry ?? null,
+        analyticsDeviceClass: options.attribution?.analyticsDeviceClass ?? null,
         items: {
           create: ids.map((id) => {
             const v = byId.get(id)!;

@@ -388,6 +388,27 @@ model Order {
   createdAt                              DateTime     @default(now())
   items                                  OrderItem[]
 
+  // Analytics attribution, snapshotted at purchase time (Phase 3, master plan 9.1). All
+  // nullable and written exactly once, inside the order's own transaction: an order placed by a
+  // visitor who refused analytics records nulls and is otherwise completely unaffected. A later
+  // change to the session or visitor must never rewrite what an order says about itself, which
+  // is the same rule the price and coupon snapshots above follow.
+  //
+  // Deliberately NOT a foreign key to AnalyticsSession: retention deletes sessions after 13
+  // months while orders are kept for commercial and tax reasons, and a foreign key would either
+  // block that deletion or cascade it into the order. These are references for reconciliation,
+  // not relations.
+  analyticsSessionId                     String?
+  analyticsVisitorId                     String?
+  // Last non-direct touch of the session that placed the order.
+  attributionSource                      String?
+  attributionMedium                      String?
+  attributionCampaign                    String?
+  // The visitor's first ever touch for this store.
+  firstTouchSource                       String?
+  analyticsCountry                       String?
+  analyticsDeviceClass                   String?
+
   @@index([tenantId, createdAt])
 }
 
