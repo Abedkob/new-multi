@@ -25,7 +25,13 @@
  */
 
 import { Prisma } from "@/generated/prisma/client";
-import { localDayOf, localDayRange, localHourOf, type LocalDay } from "@/lib/analytics/local-day";
+import {
+  localDayOf,
+  localDayRange,
+  localDayToDate,
+  localHourOf,
+  type LocalDay,
+} from "@/lib/analytics/local-day";
 import { REDACTED } from "@/lib/analytics/search-text";
 import { orderTotal } from "@/lib/orders";
 import { withJobTenant, type JobTx } from "@/lib/prisma-job";
@@ -43,7 +49,7 @@ export type DayResult = {
   acquisitionRows: number;
 };
 
-const asDate = (day: LocalDay) => new Date(`${day}T00:00:00.000Z`);
+const asDate = localDayToDate;
 
 /**
  * Recompute every aggregate for one store and one local day.

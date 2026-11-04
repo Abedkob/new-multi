@@ -46,6 +46,7 @@ pnpm dev                              # http://localhost:3000
 | `pnpm verify:permissions` | Test role-based access (needs server + login session) |
 | `pnpm verify:social-links` | Test tenant social-link fields (validation, storefront rendering) |
 | `pnpm verify:e2e-policy` | Static check that every E2E suite has a custom-domain leg and no skip path (no server needed) |
+| `pnpm verify:reports` | Test the report read layer (aggregate-only rule, store-local date ranges across DST, null-not-zero rates, trend thresholds) |
 | `pnpm uploads:migrate --rewrite-from=<old URL>` | Rewrite stored R2 URLs after moving buckets/domains |
 | `pnpm e2e:categories` / `e2e:variants` / `e2e:discounts` / `e2e:social-links` / `e2e:pages` / `e2e:checkout` / `e2e:kinetic` / `e2e:mirage` / `e2e:prism` | Chrome automation tests, one per feature area (needs server + Chrome installed; each creates/removes throwaway stores) |
 
@@ -228,6 +229,7 @@ No automated test suite yet. Manual verification scripts + browser E2E tests:
 - `pnpm verify:templates`: all 13 templates × 10 sections, switches, live preview in admin/platform.
 - `pnpm verify:permissions`: role-based access via real login sessions + static check that every server action verifies role.
 - `pnpm verify:social-links`: tenant social-link field validation and rendering.
+- `pnpm verify:reports`: the report read layer — that it reads aggregates only (by walking its own imports), that a date range means store-local days across a 23- and a 25-hour day, that a rate with no denominator is null rather than 0, and that a trend is withheld below its sample floor.
 - `pnpm e2e:*`: Chrome automation, one script per feature (categories, variants, discounts, social-links, storefront pages, checkout, kinetic/mirage/prism template-specific flows).
 
 ### Custom-domain legs are mandatory, and a skip is a failure

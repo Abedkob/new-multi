@@ -71,6 +71,18 @@ export function localHourOf(at: Date, timeZone: string): number {
   return Number(hourFormatter(timeZone).format(at).slice(0, 2)) % 24;
 }
 
+/**
+ * A `LocalDay` as the value stored in an aggregate row's `@db.Date` column, and back.
+ *
+ * A Postgres `date` has no zone, and the driver hands it back as UTC midnight, so the pair is
+ * lossless as long as nobody reads it with a local-time accessor. One pair of functions here,
+ * rather than a `new Date(`${day}T00:00:00.000Z`)` literal in every module that queries a
+ * range: that literal was already in three places, and the day it is written once with the "Z"
+ * missing, every report shifts by the reader's own offset.
+ */
+export const localDayToDate = (day: LocalDay): Date => new Date(`${day}T00:00:00.000Z`);
+export const localDayFromDate = (value: Date): LocalDay => value.toISOString().slice(0, 10);
+
 /** Calendar arithmetic on the date string itself — no zone involved, so no DST to get wrong. */
 export function shiftLocalDay(day: LocalDay, days: number): LocalDay {
   const [y, m, d] = day.split("-").map(Number);

@@ -17,6 +17,17 @@ accurate data in a way that leads someone to a wrong decision. A number with no 
 trend drawn from nine sessions, or WhatsApp intent sitting in the same column as revenue would
 all be "working software" and still cost a merchant money.
 
+## 0. Progress
+
+| Commit | What landed | State |
+|---|---|---|
+| 1 | `lib/analytics/report.ts`, `lib/analytics/compare.ts`, `scripts/verify-reports.ts` (18 checks). The read layer and the rules that stop it misleading anyone: aggregate-only enforced by walking report.ts's own imports, day ranges proven across Beirut's 23- and 25-hour days, null rates instead of zeros, a trend that refuses to judge below its sample floor, the two money figures kept apart, and an empty funnel step shown as zero. No UI. | done |
+| 2–10 | §5's sequence. | not started |
+
+Found while building, recorded as decisions rather than worked around: **D48** (four of §5.5's
+per-source columns are not in the aggregate) and **D44** (no product name is). Both are fixed by
+one migration in commit 3; neither is faked in the view meanwhile.
+
 ## 1. Scope
 
 ### In scope
@@ -60,6 +71,7 @@ all be "working software" and still cost a merchant money.
 | **D44** | How do deleted products keep their names? | §5.3 requires a historical name and a "Deleted product" label, and `AnalyticsProductDaily` stores only a `productId` — a product deleted next month makes every past row unnameable. So the recompute **snapshots `productName` onto the aggregate row**, the way an order item snapshots what it sold. It names what the product was called *that day*, which is also the honest answer after a rename. Migration plus a backfill from the current products for rows that already exist. |
 | **D45** | What does a date range mean? | **Store-local days, end-inclusive, resolved by `lib/analytics/local-day.ts`.** "Last 7 days" is seven local days ending today, and a comparison period is the seven before it — not 168 hours, which would silently shift on the 23- and 25-hour days this platform's default zone actually has. Every view carries the store's timezone indicator (§5.1). |
 | **D46** | What does the funnel show when a step is missing? | The step, with zero, and the drop-off above it. A funnel that hides an empty step makes a broken storefront look like a narrow one. Website and WhatsApp paths stay visually separate and never share a monetary total (§5.4, and §3.4's rule that intent is not revenue). |
+| **D48** | Acquisition is missing four of the columns §5.5 asks for. Where do they come from? | **From the aggregate, in commit 3, not from arithmetic in the view.** Found while writing `report.ts`: `AnalyticsAcquisitionDaily` holds sessions, first/last-touch orders and value, and WhatsApp click sessions — but §5.5 also asks for visitors, product viewers, cart sessions and potential WhatsApp value **per source**. Those cannot be derived from a store-wide total: apportioning 40 store visitors across three sources by their session share produces a number that is plausible, wrong, and impossible to notice. So the columns are added beside D44's migration (the recompute already groups by attribution, so it is the same query learning four more counts) and backfilled by the 30-day recompute. Until then the view shows what exists rather than what looks complete. |
 | **D47** | Does an admin-only browser suite need a custom-domain leg? | **No, and the exemption is written down rather than assumed.** `/admin` and `/platform` are refused on a store's own domain by `proxy.ts` (`PLATFORM_ONLY_PREFIXES`), so there is no custom-domain behaviour to test — unlike the storefront, where two phases of defects hid there. `verify:e2e-policy` gains an `ADMIN_ONLY` set with that reason, and a suite in it must prove the refusal instead: `/admin/marketing` on a store domain must not render. |
 
 ## 3. Data model
@@ -94,8 +106,9 @@ the charts that could.
 1. **`report.ts` and `compare.ts`**, with the aggregate-only rule enforced and the local-day
    ranges verified across a DST boundary. No UI.
 2. **`insights.ts`**, with every §6 threshold exercised at, just below and just above the line.
-3. **D44's product-name snapshot**: migration, recompute change, backfill, and a check that a
-   deleted product still names itself.
+3. **The aggregate's two missing pieces**: D44's product-name snapshot and **D48**'s four
+   per-source columns — one migration, one recompute change, one backfill, and checks that a
+   deleted product still names itself and that visitors-per-source are counted, not apportioned.
 4. **The Marketing section's shell and Integrations** (**D40**, **D40a**) — the owner's own ids,
    validated, extracted from whatever they paste, each with its EN/AR guide and a way to check
    it; the platform admin's edit-and-clear view; audit rows for every write, owner's or admin's.
@@ -152,7 +165,7 @@ prove the refusal instead.
 | P5-18c | A pasted `<meta>` tag, a pasted GA4/Meta base-code snippet, and an `AW-123/label` pair each save the id alone — read the column back: no `<`, no `script`, no `fbq`. What cannot be parsed is refused with the expected shape, never stored raw. |
 | P5-18d | `facebook-domain-verification` and `google-site-verification` render in the storefront head **with consent declined**, and on the store's own domain as well as the shared host (**D40a**). The pixel and GA4 tags, in the same page, do not. |
 | P5-18e | Each integration carries step-by-step setup text in English and Arabic, and names the tool that checks it (Meta Pixel Helper, Google Tag Assistant). The Meta domain-verification guide states that verification is per domain and that a store on its own domain must verify that domain. |
-| P5-19 | Results answers "which source brought visitors, orders and WhatsApp clicks" for a period, with the three kept separate. |
+| P5-19 | Results answers "which source brought visitors, orders and WhatsApp clicks" for a period, with the three kept separate — visitors per source **counted** by the recompute, never apportioned from a store total (**D48**). |
 | P5-20 | Searches shows what shoppers wanted and did not find, with redacted phrases counted but never suggested (P4-12's flag, now honoured in UI). |
 
 ### Platform console
