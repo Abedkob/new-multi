@@ -44,6 +44,11 @@ const Navbar: SectionComponent = ({ data }) => (
       <nav aria-label="Main navigation" className="whitespace-nowrap hidden items-center gap-8 lg:flex">
         <Link href={shopHref(data.store)} className="py-3 text-sm">{data.content["navbar.shopLabel"]}</Link>
         {data.categoryTiles.slice(0, 3).map((category) => <Link key={category.id} href={category.href} className="py-3 text-sm">{category.label}</Link>)}
+        {/* Prism was the only one of the 13 templates whose navbar omitted these, so an owner's
+            About or FAQ was reachable from the footer and nowhere else. Not capped: writing text
+            for a page is what links it, and a page an owner has filled in must appear. There are
+            only four of them, and `pages` holds just the ones with content. */}
+        {data.pages.map((page) => <Link key={page.slug} href={page.href} className="py-3 text-sm">{page.label}</Link>)}
       </nav>
       <div className="flex shrink-0 items-center gap-2">
         <PrismSearch data={data} />

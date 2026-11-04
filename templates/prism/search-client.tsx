@@ -46,12 +46,12 @@ export function PrismSearch({ data }: { data: StorefrontData }) {
   }, [open, term, data.store.slug]);
 
   return <>
-    <button ref={trigger} type="button" onClick={() => setOpen(true)} aria-label={data.content["search.button"]} aria-haspopup="dialog" className="grid size-11 place-items-center rounded-full bg-secondary"><Search className="size-5" aria-hidden /></button>
+    <button ref={trigger} type="button" onClick={() => setOpen(true)} aria-label={data.content["search.button"]} aria-haspopup="dialog" aria-expanded={open} data-testid="search-toggle" className="grid size-11 place-items-center rounded-full bg-secondary"><Search className="size-5" aria-hidden /></button>
     <dialog ref={dialog} className={cn(styles.scope, styles.dialog)} aria-labelledby={titleId} onKeyDown={(event) => { if (event.key === "Escape") { event.preventDefault(); event.stopPropagation(); close(); } }} onCancel={(event) => { event.preventDefault(); close(); }} onClose={() => { setOpen(false); trigger.current?.focus(); }}>
       <div className="mx-auto max-w-7xl">
         <div className="flex items-center justify-between gap-6"><h2 id={titleId} className={styles.title}>{data.content["search.heading"]}</h2><button type="button" onClick={close} aria-label="Close search" className="grid size-12 shrink-0 place-items-center rounded-full border border-border"><X aria-hidden /></button></div>
         <form action={searchHref(data.store)} role="search" className="mt-12 flex items-center gap-3 border-b border-border pb-4" onSubmit={close}>
-          <input ref={input} name="q" type="search" value={query} onChange={(event) => setQuery(event.target.value)} maxLength={100} autoComplete="off" aria-label={data.content["search.placeholder"]} placeholder={data.content["search.placeholder"]} className="min-h-14 min-w-0 flex-1 bg-transparent text-xl outline-none sm:text-4xl" />
+          <input ref={input} name="q" type="search" data-testid="search-panel-input" value={query} onChange={(event) => setQuery(event.target.value)} maxLength={100} autoComplete="off" aria-label={data.content["search.placeholder"]} placeholder={data.content["search.placeholder"]} className="min-h-14 min-w-0 flex-1 bg-transparent text-xl outline-none sm:text-4xl" />
           <button type="submit" className={styles.button}><span className="hidden sm:inline">{data.content["search.button"]}</span><ArrowUpRight aria-label={data.content["search.button"]} className="size-5" /></button>
         </form>
         {!term && <nav aria-label={data.content["featuredCategories.heading"]} className="mt-10 flex flex-wrap gap-3">{data.categoryTiles.map((category) => <Link key={category.id} href={category.href} onClick={close} className="rounded-full bg-secondary px-6 py-4">{category.label}</Link>)}</nav>}
