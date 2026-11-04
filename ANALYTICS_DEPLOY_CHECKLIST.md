@@ -152,7 +152,9 @@ Verify RLS is actually on, which is the thing that silently does not happen:
 psql "$DATABASE_URL" -c "SELECT relname, relrowsecurity, relforcerowsecurity FROM pg_class WHERE relname LIKE 'Analytics%' AND relkind = 'r' ORDER BY relname;"
 ```
 
-- [ ] All four tables `t | t`.
+- [ ] All four tables `t | t`. Same query with `relname = 'TenantLicense'` must also be `t | t`
+      once `20261105230000_tenant_license_rls` has run — and the app must be on the matching
+      code (see §7).
 - [ ] `APP_DATABASE_URL` points at `app_user`, not the owner. RLS does not apply to a superuser
       or a `BYPASSRLS` role, so an app connected as the owner has no isolation at the database
       layer at all — only the application's WHERE clauses.
@@ -171,8 +173,18 @@ psql "$DATABASE_URL" -c "SELECT relname, relrowsecurity, relforcerowsecurity FRO
 
 - [ ] **To stop collection:** set `ANALYTICS_ROLLOUT_MODE=off` and restart. This is the whole
       kill switch; there is also a per-store `analyticsPausedAt` for silencing one store.
-- [ ] **To roll back the code:** redeploy the previous image. The three migrations stay applied
-      and that is fine — the older code neither reads nor writes those columns and tables.
+- [ ] **To roll back the code:** redeploy the previous image. The three migrations above stay
+      applied and that is fine — the older code neither reads nor writes those columns and tables.
+- [ ] **One exception, and it is silent.** `20261105230000_tenant_license_rls` puts
+      `TenantLicense` under RLS, and the code in the same change reads the licence through
+      `getLicenseAccessSnapshot` instead of an `include` on `getTenantBySlug`. Older code still
+      uses the include, which under the policy returns null for every store — and
+      `isLicenseActive(null)` is `true` by design during the opt-in rollout. So rolling the code
+      back **while that migration stays applied stops licence enforcement with no error**: every
+      store serves, expired or not. Roll that migration back with the code
+      (`ALTER TABLE "TenantLicense" DISABLE ROW LEVEL SECURITY;`
+      `DROP POLICY tenant_isolation ON "TenantLicense";`) or decide deliberately to run
+      unenforced until you roll forward again.
 - [ ] **Do not** write a down-migration to drop the `Order` columns. Dropping a column that a
       later deploy writes into loses attribution for every order placed in between, and the
       columns are harmless when unread.

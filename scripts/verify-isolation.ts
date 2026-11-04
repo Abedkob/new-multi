@@ -13,8 +13,9 @@
  */
 import "dotenv/config";
 import assert from "node:assert/strict";
-import { prisma } from "../lib/prisma";
-import { createStoreWithOwner } from "../lib/data/tenants";
+import { prisma, withBypass, withTenant } from "../lib/prisma";
+import { createStoreWithOwner, getTenantBySlug } from "../lib/data/tenants";
+import { canServeTenant } from "../lib/license/status";
 import {
   createProduct,
   deleteProduct,
@@ -177,6 +178,69 @@ async function main() {
       const tenantB = await prisma.tenant.findUniqueOrThrow({ where: { id: B } });
       assert.equal(parseSectionVisibility(tenantA.sectionVisibility).reviews, true);
       assert.equal(parseSectionVisibility(tenantB.sectionVisibility).reviews, false);
+    });
+
+    await check("cannot read another store's license row", async () => {
+      await withBypass((db) =>
+        db.tenantLicense.create({
+          data: {
+            tenantId: A,
+            productCode: "test",
+            licenseKeyCiphertext: "ciphertext",
+            keyHint: "AAAA",
+            status: "LICENSE_ACTIVE",
+          },
+        }),
+      );
+      const seen = await withTenant(B, (db) =>
+        db.tenantLicense.findUnique({ where: { tenantId: A } }),
+      );
+      assert.equal(seen, null);
+      assert.deepEqual(await withTenant(B, (db) => db.tenantLicense.findMany()), []);
+    });
+    await check("cannot write another store's license row", async () => {
+      // The USING half: an update aimed at A's row from B's context matches nothing.
+      const touched = await withTenant(B, (db) =>
+        db.tenantLicense.updateMany({ where: { tenantId: A }, data: { status: "HACKED" } }),
+      );
+      assert.equal(touched.count, 0);
+      // The WITH CHECK half, which a working USING clause alone would not cover: writing a row
+      // that belongs to another store is refused outright, not silently hidden. B has no
+      // license row, so a unique-constraint violation can't stand in for the policy here.
+      await assert.rejects(
+        withTenant(A, (db) =>
+          db.tenantLicense.create({
+            data: { tenantId: B, productCode: "test", licenseKeyCiphertext: "ciphertext" },
+          }),
+        ),
+        /row-level security|violates/i,
+      );
+      const after = await withBypass((db) =>
+        db.tenantLicense.findUniqueOrThrow({ where: { tenantId: A }, select: { status: true } }),
+      );
+      assert.equal(after.status, "LICENSE_ACTIVE");
+      assert.equal(await withBypass((db) => db.tenantLicense.count({ where: { tenantId: B } })), 0);
+    });
+    await check("an expired license still stops the store serving", async () => {
+      // The reason RLS on TenantLicense needed a code change as well: getTenantBySlug resolves a
+      // store by slug with no tenant context, so an `include` would come back null for every
+      // store — and isLicenseActive(null) is true by design during the opt-in rollout. Were that
+      // regression to return, this check fails here rather than in production, silently.
+      const past = new Date(Date.now() - 60_000);
+      await withBypass((db) =>
+        db.tenantLicense.update({ where: { tenantId: A }, data: { expiresAt: past } }),
+      );
+      const expired = await getTenantBySlug(a.tenant.slug);
+      assert.ok(expired?.license, "the license must be readable without a tenant context set");
+      assert.equal(expired.license.status, "LICENSE_ACTIVE");
+      assert.equal(canServeTenant(expired), false);
+
+      const future = new Date(Date.now() + 60 * 60_000);
+      await withBypass((db) =>
+        db.tenantLicense.update({ where: { tenantId: A }, data: { expiresAt: future } }),
+      );
+      const live = await getTenantBySlug(a.tenant.slug);
+      assert.equal(canServeTenant(live!), true);
     });
 
     console.log("Sanity: owners can manage their own data:");

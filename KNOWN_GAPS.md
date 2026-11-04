@@ -8,10 +8,10 @@ Newest sections at the bottom; delete an item when it's fixed.
 - **Database-level isolation is now enforced** (see `prisma/migrations/*_row_level_security`).
   The Next.js runtime connects as a restricted, non-superuser role (`APP_DATABASE_URL`); every
   tenant-scoped query runs through `withTenant()` in `lib/prisma.ts`, which sets `app.tenant_id`
-  per transaction, and RLS policies filter on it. As of Phase 4 that is **18 tenant-scoped
-  tables** with RLS both ENABLED and FORCED and a `tenant_isolation` policy each — the original
-  7, the discount tables, the consent receipt, the three collection tables, and Phase 4's five
-  aggregates plus its cursor. `pnpm verify:aggregates`' **P4-23a** asserts that from the
+  per transaction, and RLS policies filter on it. That is **19 tenant-scoped tables** with RLS
+  both ENABLED and FORCED and a `tenant_isolation` policy each — the original 7, the discount
+  tables, the coupon tables, `TenantLicense`, the consent receipt, the three collection tables,
+  and Phase 4's five aggregates plus its cursor. `pnpm verify:aggregates`' **P4-23a** asserts that from the
   catalog, so a migration that creates a tenant-scoped table and forgets RLS, or enables it
   without FORCE, or leaves it policy-less, fails a check instead of going unnoticed. The
   platform admin's cross-tenant reads use `withBypass()`. This is defence-in-depth *under* the
@@ -24,22 +24,26 @@ Newest sections at the bottom; delete an item when it's fixed.
   same way; both are still guarded only by application code. Owner email + store metadata could
   leak if one of those queries ever dropped its filter. Consider RLS (or a `nolint` review) for
   them in a later pass.
-- **`TenantLicense` carries a `tenantId` and is NOT under RLS.** Found by P4-23a on its first
-  run. Only the application's WHERE clauses keep one store's licence rows out of another's
-  reach. It cannot simply be switched on: every accessor in `lib/data/licenses.ts` already uses
-  `withBypass()` and would be unaffected, but the storefront reads the licence through
-  `getTenantBySlug`, which includes it with **no tenant context**. Under a tenant policy that
-  include returns null, and `isLicenseActive(null)` is deliberately `true` ("a missing licence is
-  allowed during the opt-in rollout") — so enabling RLS alone would not take storefronts down,
-  it would **silently stop enforcing licensing**. The fix is a migration *plus* reading the
-  licence under bypass in `getTenantBySlug`, with a check that an expired licence still stops a
-  store serving. Recorded in P4-23a's `KNOWN_UNPROTECTED`, printed on every run, and that list
-  may only shrink.
+- **`TenantLicense` is under RLS as of `20261105230000_tenant_license_rls` — and the migration
+  needed a code change beside it.** P4-23a found the table carrying a `tenantId` with no policy,
+  so only the application's WHERE clauses kept one store's licence row (including its encrypted
+  key and activation token) out of another's reach. Enabling RLS alone would have been *worse*
+  than the leak: every accessor in `lib/data/licenses.ts` already uses `withBypass()` and was
+  unaffected, but the storefront read the licence through `getTenantBySlug`, a bare query with
+  **no tenant context**, where the policy returns null — and `isLicenseActive(null)` is
+  deliberately `true` ("a missing licence is allowed during the opt-in rollout"), so licensing
+  would have stopped being enforced with no error anywhere. `getTenantBySlug` now reads the gate
+  columns through `getLicenseAccessSnapshot`, under the store's own tenant context rather than
+  under bypass, at the cost of one extra round trip per request (`loadTenant` is `cache()`d, so
+  once per render). `verify:isolation` holds all three halves down: another store can neither
+  read nor write the row, and an expired licence still stops a store serving.
+  **This pins the rollback order:** rolling the code back while this migration stays applied
+  silently switches licence enforcement off. Roll the migration back with it, or accept that.
 - **Dev/CI scripts run as the owner** (`scripts/_owner.ts` points `APP_DATABASE_URL` at
   `DATABASE_URL`), so they bypass RLS to manage fixtures — **which is why every check that makes
   a database-level claim arranges to be the restricted role instead**:
   - `verify:isolation` does not import `_owner` at all and refuses to run as a privileged role
-    (`assertRestrictedRole`), so its 12 checks cover both the WHERE clauses and the policies.
+    (`assertRestrictedRole`), so its 15 checks cover both the WHERE clauses and the policies.
   - `verify:consent` (P1-24) and `verify:ingestion` (P2-22, P2-23) open a raw `pg` client on
     `APP_DATABASE_URL`, assert `rolsuper = false` and `rolbypassrls = false`, then prove reads
     are filtered **and** that a write for another tenant is refused by the policy's `WITH CHECK`.

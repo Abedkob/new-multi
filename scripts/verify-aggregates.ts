@@ -610,26 +610,18 @@ async function rlsConfigurationCheck() {
   };
 
   /**
-   * A gap this check FOUND, recorded rather than papered over. It may only shrink.
+   * Gaps this check FOUND, recorded rather than papered over. The list may only shrink, and it
+   * is printed on every run so an entry cannot quietly become permanent.
    *
-   * TenantLicense carries a tenantId and has no row-level security, so the only thing keeping
-   * one store's licence rows out of another's reach is the application's own WHERE clauses.
-   *
-   * It cannot simply be switched on, which is why it is a recorded gap and not a one-line fix.
-   * Every accessor in lib/data/licenses.ts already goes through withBypass and would be
-   * unaffected — but the storefront reads the licence through getTenantBySlug, which includes it
-   * with NO tenant context. Under a tenant policy that include would return null, and
-   * isLicenseActive(null) is deliberately TRUE ("a missing licence is allowed during the opt-in
-   * rollout"). So enabling RLS without changing that accessor would not take storefronts down;
-   * it would silently stop enforcing licensing altogether, which is worse than the leak it
-   * closes. The fix is a migration PLUS reading the licence under bypass in getTenantBySlug,
-   * with its own verification that an expired licence still stops a store serving.
+   * It is empty. Its one entry was TenantLicense, which carried a tenantId with no policy on it;
+   * the migration 20261105230000_tenant_license_rls closed that, together with the code change
+   * it needed — enabling RLS alone would have made getTenantBySlug's license read return null
+   * for every store, and isLicenseActive(null) is true by design during the opt-in rollout, so
+   * licensing would have stopped being enforced without an error anywhere. verify:isolation
+   * holds both halves down: another store can neither read nor write the row, and an expired
+   * license still stops a store serving.
    */
-  const KNOWN_UNPROTECTED: Record<string, string> = {
-    TenantLicense:
-      "no RLS; app-level WHERE clauses only. Needs getTenantBySlug to read the licence under " +
-      "bypass first, or enforcement silently stops (isLicenseActive(null) === true)",
-  };
+  const KNOWN_UNPROTECTED: Record<string, string> = {};
 
   const unprotected: string[] = [];
   const unforced: string[] = [];
@@ -676,7 +668,7 @@ async function rlsConfigurationCheck() {
     `RLS is forced but no policy exists on: ${policyless.join(", ")} — which denies everything, ` +
       "so this is a broken table rather than a safe one",
   );
-  assert.ok(protectedCount >= 15, `expected the tenant-scoped tables, found ${protectedCount}`);
+  assert.ok(protectedCount >= 19, `expected the tenant-scoped tables, found ${protectedCount}`);
 
   // And the platform-level tables must stay out, deliberately: putting the job's own run records
   // under a tenant policy would make them invisible to the job.
@@ -692,7 +684,7 @@ async function rlsConfigurationCheck() {
     "P4-23a",
     `${protectedCount} tenant-scoped tables have FORCED RLS and a policy; ` +
       `${Object.keys(DELIBERATELY_OPEN).length} documented exception, ` +
-      `${Object.keys(KNOWN_UNPROTECTED).length} recorded gap, 2 platform tables excluded`,
+      `${Object.keys(KNOWN_UNPROTECTED).length} recorded gaps, 2 platform tables excluded`,
   );
 }
 

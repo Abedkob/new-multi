@@ -1,7 +1,29 @@
 import { Prisma } from "@/generated/prisma/client";
-import { withBypass } from "@/lib/prisma";
+import { withBypass, withTenant } from "@/lib/prisma";
 import type { LicenseProviderSnapshot } from "@/lib/license/provider";
 import { dateFromProvider } from "@/lib/license/provider";
+
+/**
+ * The three columns that decide whether a store may serve (lib/license/status.ts), read under
+ * the store's OWN tenant context rather than under bypass.
+ *
+ * TenantLicense is RLS-guarded, so a bare query with no context set returns nothing — and
+ * because `isLicenseActive(null)` is deliberately true during the opt-in rollout, "nothing"
+ * would read as "licensed" and silently switch enforcement off. Hence this is its own small
+ * transaction: getTenantBySlug cannot know the tenant id until it has read the tenant, so the
+ * licence costs one extra round trip per request (loadTenant is cache()d, so once per render).
+ *
+ * Deliberately NOT withBypass: a store reading its own licence needs no cross-tenant privilege,
+ * and the secret columns are not selected here at all.
+ */
+export function getLicenseAccessSnapshot(tenantId: string) {
+  return withTenant(tenantId, (db) =>
+    db.tenantLicense.findUnique({
+      where: { tenantId },
+      select: { status: true, expiresAt: true, offlineGraceUntil: true },
+    }),
+  );
+}
 
 export function savePendingTenantLicense(input: {
   tenantId: string;

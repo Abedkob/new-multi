@@ -1,5 +1,6 @@
 import { Prisma } from "@/generated/prisma/client";
 import { prisma, withBypass } from "@/lib/prisma";
+import { getLicenseAccessSnapshot } from "@/lib/data/licenses";
 import { SEED_CONTENT } from "@/lib/content";
 import type { IntegrationKey } from "@/lib/integrations";
 import { parseSectionVisibility } from "@/lib/sections";
@@ -20,13 +21,19 @@ export function isUniqueViolation(e: unknown) {
   );
 }
 
-export function getTenantBySlug(slug: string) {
-  return prisma.tenant.findUnique({
-    where: { slug },
-    include: {
-      license: { select: { status: true, expiresAt: true, offlineGraceUntil: true } },
-    },
-  });
+/**
+ * The storefront's tenant read, with the licence snapshot canServeTenant() needs attached.
+ *
+ * The licence is a second query, not an `include`. TenantLicense is RLS-guarded and this lookup
+ * has no tenant context yet (it resolves one by slug), so an include would come back null for
+ * every store — and `isLicenseActive(null)` is true by design during the opt-in rollout, so
+ * licensing would stop being enforced without a single error. getLicenseAccessSnapshot reads
+ * the gate columns under the store's own context instead.
+ */
+export async function getTenantBySlug(slug: string) {
+  const tenant = await prisma.tenant.findUnique({ where: { slug } });
+  if (!tenant) return null;
+  return { ...tenant, license: await getLicenseAccessSnapshot(tenant.id) };
 }
 
 /** Tenant.domain is stored normalized (lib/domain-format.ts), so pass a normalized hostname. */
