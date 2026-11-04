@@ -29,52 +29,52 @@ model User {
 }
 
 model Tenant {
-  id                     String         @id @default(cuid())
-  slug                   String         @unique
-  name                   String
-  ownerId                String         @unique
-  owner                  User           @relation(fields: [ownerId], references: [id])
+  id                        String         @id @default(cuid())
+  slug                      String         @unique
+  name                      String
+  ownerId                   String         @unique
+  owner                     User           @relation(fields: [ownerId], references: [id])
   // Custom storefront domain (e.g. "acme.com") — set ONLY once it's verified and DNS actually
   // points here. Every URL-emitting surface (SEO helpers, sitemap, robots.txt, canonicals, and
   // the domain-routing proxy) trusts this field unconditionally and starts sending traffic and
   // search engines there the moment it's non-null. An unverified or mistyped value here sends
   // real traffic to a domain that doesn't serve this store. Null means the store is only
   // reachable at the platform's own /store/[slug] path. See lib/store-url.ts.
-  domain                 String?        @unique
+  domain                    String?        @unique
   // Per-store marketing integrations, set by the platform admin (/platform/stores/[slug]/...)
   // and injected into this store's storefront only. All nullable = off. Every value is
   // format-validated on save AND again before it is rendered into a <script> or <meta>
   // (lib/integrations.ts), since these strings end up in inline script text.
-  gaMeasurementId        String? // GA4, "G-XXXXXXX"
-  googleAdsId            String? // Google Ads tag, "AW-123456789"
-  googleAdsPurchaseLabel String? // Ads conversion label for purchases, sent as AW-.../<label>
-  metaPixelId            String? // Meta (Facebook/Instagram) Pixel / dataset id, digits
-  googleSiteVerification String? // Search Console HTML-tag token (google-site-verification)
-  metaDomainVerification String? // Meta Business domain verification token
+  gaMeasurementId           String? // GA4, "G-XXXXXXX"
+  googleAdsId               String? // Google Ads tag, "AW-123456789"
+  googleAdsPurchaseLabel    String? // Ads conversion label for purchases, sent as AW-.../<label>
+  metaPixelId               String? // Meta (Facebook/Instagram) Pixel / dataset id, digits
+  googleSiteVerification    String? // Search Console HTML-tag token (google-site-verification)
+  metaDomainVerification    String? // Meta Business domain verification token
   // Browser-tab icon for this store's storefront, set by the platform admin only (Branding
   // section). An image URL in our storage (lib/storage.ts). Null = a generated letter icon.
-  faviconUrl             String?
+  faviconUrl                String?
   // Optional public profile/location links managed by the store owner. Null means the link is
   // not shown anywhere on the storefront.
-  facebookUrl            String?
-  instagramUrl           String?
-  tiktokUrl              String?
-  whatsappNumber         String?
-  googleMapsUrl          String?
+  facebookUrl               String?
+  instagramUrl              String?
+  tiktokUrl                 String?
+  whatsappNumber            String?
+  googleMapsUrl             String?
   // One simple store-wide delivery price. Orders snapshot both values at checkout so later
   // settings changes never rewrite order history.
-  deliveryFeeCents       Int            @default(0)
-  deliveryNote           String         @default("")
-  templateId             String         @default("minimal")
-  themeOverrides         Json           @default("{}")
+  deliveryFeeCents          Int            @default(0)
+  deliveryNote              String         @default("")
+  templateId                String         @default("minimal")
+  themeOverrides            Json           @default("{}")
   // Owner-controlled on/off switches for the optional storefront sections.
   // Missing keys fall back to defaults (see lib/sections.ts).
-  sectionVisibility      Json           @default("{}")
+  sectionVisibility         Json           @default("{}")
   // Platform-admin pause state. Owners retain dashboard access; public storefront and checkout
   // are blocked while paused. Keep operator pause separate from provider license status.
-  isPaused               Boolean        @default(false)
-  pausedAt               DateTime?
-  pauseReason            String?
+  isPaused                  Boolean        @default(false)
+  pausedAt                  DateTime?
+  pauseReason               String?
   // --- Storefront analytics: privacy identity, reporting basis, launch control --------------
   // The platform and the merchant are JOINT CONTROLLERS for storefront analytics, so each store
   // has to be able to name its own controller and privacy contact on its privacy page. Set by
@@ -100,16 +100,17 @@ model Tenant {
   // storefront offline, this only silences measurement and leaves the store selling.
   analyticsPausedAt         DateTime?
   analyticsPauseReason      String?
-  license                TenantLicense?
-  createdAt              DateTime       @default(now())
+  license                   TenantLicense?
+  createdAt                 DateTime       @default(now())
 
-  contents        TenantContent[]
-  products        Product[]
-  categories      Category[]
-  orders          Order[]
-  discounts       DiscountCampaign[]
-  coupons         Coupon[]
-  consentReceipts AnalyticsConsentReceipt[]
+  contents          TenantContent[]
+  products          Product[]
+  categories        Category[]
+  orders            Order[]
+  discounts         DiscountCampaign[]
+  coupons           Coupon[]
+  consentReceipts   AnalyticsConsentReceipt[]
+  analyticsVisitors AnalyticsVisitor[]
 }
 
 // One row per consent decision a storefront visitor makes. It records THAT a decision was made
@@ -120,9 +121,9 @@ model Tenant {
 // `publicRef` is the only part a visitor ever sees: Cookie settings shows it so they can quote it
 // in a privacy request without us having to identify them by anything else.
 model AnalyticsConsentReceipt {
-  id       String @id @default(cuid())
-  tenantId String
-  tenant   Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  id                 String   @id @default(cuid())
+  tenantId           String
+  tenant             Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   // Shown to the visitor in Cookie settings; safe to disclose, meaningless without this table.
   publicRef          String   @unique @default(cuid())
   // Tenant.consentNoticeVersion at the moment of the decision.
@@ -411,4 +412,117 @@ model OrderItem {
 
   @@index([orderId])
   @@index([variantId])
+}
+
+// --- Storefront analytics: collection ---------------------------------------------------------
+//
+// Three tables, all tenant-scoped and all under forced RLS. Cascade runs down the chain
+// Tenant -> Visitor -> Session -> Event, so deleting a store takes every row with it without
+// needing a direct tenant foreign key on the children.
+//
+// Sessions and events reach their tenant through COMPOSITE foreign keys on (id, tenantId), the
+// same shape CouponProduct uses: a session cannot point at a visitor in another store, and an
+// event cannot point at a session in another store, even if application code slips. That is
+// structural, not a rule anyone has to remember.
+
+/// One browser per store. Deliberately per-store: the cookie is tenant-scoped, so the same
+/// person visiting two stores is two unrelated visitors and nothing can correlate them.
+model AnalyticsVisitor {
+  id       String @id @default(cuid())
+  tenantId String
+  tenant   Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  firstSeenAt   DateTime @default(now())
+  lastSeenAt    DateTime @default(now())
+  // Coarse and non-identifying, exactly as on a consent receipt.
+  country       String?
+  deviceClass   String?
+  // First touch, kept so Phase 4 can offer the first/last attribution switch.
+  firstSource   String?
+  firstMedium   String?
+  firstCampaign String?
+
+  sessions AnalyticsSession[]
+  events   AnalyticsEvent[]
+
+  @@unique([id, tenantId])
+  @@index([tenantId, lastSeenAt])
+}
+
+/// Activity separated by no more than 30 minutes of inactivity. Carries the acquisition
+/// dimensions so Phase 4 reports from sessions rather than re-deriving them from events.
+model AnalyticsSession {
+  id        String           @id @default(cuid())
+  tenantId  String
+  visitorId String
+  visitor   AnalyticsVisitor @relation(fields: [visitorId, tenantId], references: [id, tenantId], onDelete: Cascade)
+
+  startedAt      DateTime @default(now())
+  lastActivityAt DateTime @default(now())
+
+  country         String?
+  deviceClass     String?
+  landingPageKind String?
+
+  // Last non-direct touch for this session.
+  source     String?
+  medium     String?
+  campaign   String?
+  content    String?
+  // Presence of a gclid/fbclid, never the value: the marker is useful, the id identifies a click.
+  hasAdClick Boolean @default(false)
+
+  events AnalyticsEvent[]
+
+  @@unique([id, tenantId])
+  @@index([tenantId, startedAt])
+  @@index([tenantId, lastActivityAt])
+}
+
+/// Typed columns rather than arbitrary JSON, so what can be stored is visible in the schema.
+/// (tenantId, eventId) is unique, which is what makes a retried beacon free and lets the
+/// browser keep no durable retry queue.
+model AnalyticsEvent {
+  id       String @id @default(cuid())
+  tenantId String
+  /// Client-generated UUID; the deduplication key.
+  eventId  String
+
+  type       AnalyticsEventType
+  /// Client clock, clamped server-side.
+  occurredAt DateTime
+  receivedAt DateTime           @default(now())
+
+  sessionId String
+  session   AnalyticsSession @relation(fields: [sessionId, tenantId], references: [id, tenantId], onDelete: Cascade)
+  visitorId String
+  visitor   AnalyticsVisitor @relation(fields: [visitorId, tenantId], references: [id, tenantId], onDelete: Cascade)
+
+  /// A normalized page kind, never a URL.
+  pageKind String
+
+  productId   String?
+  variantId   String?
+  quantity    Int?
+  /// Normalized and PII-scrubbed server-side; Phase 4 starts emitting these.
+  searchQuery String?
+  resultCount Int?
+  /// Server-computed only (Phase 3's WhatsApp potential value). Never accepted from a client.
+  valueCents  Int?
+
+  @@unique([tenantId, eventId])
+  @@index([tenantId, occurredAt])
+  @@index([tenantId, type, occurredAt])
+}
+
+enum AnalyticsEventType {
+  PAGE_VIEW
+  PRODUCT_VIEW
+  SEARCH_SUBMITTED
+  SEARCH_RESULT_CLICK
+  ADD_TO_CART
+  REMOVE_FROM_CART
+  CART_VIEW
+  CHECKOUT_STARTED
+  WHATSAPP_ORDER_CLICK
 }
