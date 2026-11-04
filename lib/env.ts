@@ -153,6 +153,9 @@ export const envSchema = z
     // in front of the pool so a burst becomes an immediate refusal rather than hundreds of
     // handlers each waiting out connectionTimeoutMillis. Defaults to twice the pool.
     ANALYTICS_MAX_IN_FLIGHT: z.coerce.number().int().min(1).max(500).optional(),
+    // The scheduled command's own pool (lib/prisma-job.ts). Small because the job walks
+    // tenants in bounded batches, and because every pool counts against one max_connections.
+    ANALYTICS_JOB_DATABASE_POOL_MAX: z.coerce.number().int().min(1).max(20).default(2),
     ANALYTICS_SESSION_TIMEOUT_MINUTES: z.coerce.number().int().min(1).max(1440).default(30),
     ANALYTICS_ACTIVE_WINDOW_MINUTES: z.coerce.number().int().min(1).max(60).default(5),
     PLATFORM_GA_ID: z
@@ -248,6 +251,7 @@ function load() {
       ANALYTICS_DATABASE_POOL_MAX: Number(raw.ANALYTICS_DATABASE_POOL_MAX) || 5,
       ANALYTICS_MAX_BATCH_SIZE: Number(raw.ANALYTICS_MAX_BATCH_SIZE) || 20,
       ANALYTICS_MAX_IN_FLIGHT: Number(raw.ANALYTICS_MAX_IN_FLIGHT) || undefined,
+      ANALYTICS_JOB_DATABASE_POOL_MAX: Number(raw.ANALYTICS_JOB_DATABASE_POOL_MAX) || 2,
       ANALYTICS_SESSION_TIMEOUT_MINUTES: Number(raw.ANALYTICS_SESSION_TIMEOUT_MINUTES) || 30,
       ANALYTICS_ACTIVE_WINDOW_MINUTES: Number(raw.ANALYTICS_ACTIVE_WINDOW_MINUTES) || 5,
       PLATFORM_GA_ID: raw.PLATFORM_GA_ID || undefined,
@@ -289,6 +293,7 @@ function load() {
         "ANALYTICS_DATABASE_POOL_MAX",
         "ANALYTICS_MAX_BATCH_SIZE",
         "ANALYTICS_MAX_IN_FLIGHT",
+        "ANALYTICS_JOB_DATABASE_POOL_MAX",
         "ANALYTICS_SESSION_TIMEOUT_MINUTES",
         "ANALYTICS_ACTIVE_WINDOW_MINUTES",
       ] as const

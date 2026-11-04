@@ -558,3 +558,42 @@ enum AnalyticsEventType {
   CHECKOUT_STARTED
   WHATSAPP_ORDER_CLICK
 }
+
+/// One stage of one `pnpm analytics:scheduled` invocation (§10).
+///
+/// Deliberately NOT tenant-scoped and NOT under RLS: a run record is operational bookkeeping
+/// about the platform's own job, not a store's data, and the job is cross-tenant by nature.
+/// Only the platform admin ever reads it, through the existing narrow bypass path.
+///
+/// `leaseUntil` is what makes a crashed run recoverable. The advisory lock is released the
+/// moment the process dies, so the next invocation can start — but the row it left behind still
+/// says RUNNING. A run whose lease has passed is marked EXPIRED and its stage is run again.
+model AnalyticsScheduledRun {
+  id    String @id @default(cuid())
+  stage String
+
+  startedAt  DateTime  @default(now())
+  finishedAt DateTime?
+  leaseUntil DateTime
+  status     AnalyticsRunStatus @default(RUNNING)
+
+  /// Whatever the stage counts: tenants processed, rows deleted, days recomputed.
+  items Int @default(0)
+  /// A one-line note for the platform admin; never a stack trace, never store data.
+  detail String?
+  /// Set when the stage threw. The run keeps going; the command exits non-zero.
+  error  String?
+  /// True when this run was told to change nothing (retention's dry run, D35).
+  dryRun Boolean @default(false)
+
+  @@index([stage, startedAt])
+  @@index([status, leaseUntil])
+}
+
+enum AnalyticsRunStatus {
+  RUNNING
+  OK
+  FAILED
+  /// The process died holding this stage; a later run found the lease expired.
+  EXPIRED
+}
