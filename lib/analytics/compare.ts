@@ -99,13 +99,19 @@ export type TrendVerdict = "growing" | "declining" | "steady" | "insufficient";
  * `minPercent` and `minAbsolute` must BOTH be met: 20% of 5 sessions is one session, and a
  * one-session week is noise wearing a percentage. `minSample` is the floor below which no
  * verdict is offered at all — §5.8's "very small stores keep their real numbers but receive
- * 'Not enough activity for a reliable trend'".
+ * 'Not enough activity for a reliable trend'" — and it is counted **across both periods**,
+ * which is how §6 words its own "20 sessions across the comparison".
+ *
+ * The session numbers are §6's, not §5.8's, on purpose. §5.8 is about ranking stores against
+ * each other in the platform console; §6 is the threshold at which a merchant is told something
+ * about their own store. Using two different floors would let one screen call a week a trend
+ * while the tile beside it says there is not enough evidence.
  */
 export type TrendRule = { minPercent: number; minAbsolute: number; minSample: number };
 
 export const TREND_RULES = {
-  /** §5.8's platform definitions of growing and declining, applied to sessions. */
-  sessions: { minPercent: 20, minAbsolute: 25, minSample: 50 },
+  /** §6's "meaningful activity shift": 20 sessions across the comparison. */
+  sessions: { minPercent: 20, minAbsolute: 10, minSample: 20 },
   /** Orders are rarer than sessions, so the absolute bar is lower — but it is not zero. */
   orders: { minPercent: 20, minAbsolute: 3, minSample: 10 },
   /** WhatsApp clicks are intent, counted like orders and never valued like them (§3.4). */
@@ -133,7 +139,10 @@ export function trend(
   label: string,
 ): TrendReading {
   const d = delta(current, previous);
-  const sample = Math.max(current, previous);
+  // Across both periods, not the larger of them: a week of 15 against a week of 14 is 29
+  // observations of a steady store, and refusing to judge it would be as unhelpful as judging
+  // 15 against 0 confidently.
+  const sample = current + previous;
   if (sample < rule.minSample) {
     return {
       verdict: "insufficient",

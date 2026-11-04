@@ -207,8 +207,14 @@ function arithmeticChecks() {
   const below = trend(rule.minSample - 1, 0, rule, "sessions");
   assert.equal(below.verdict, "insufficient");
   assert.match(below.evidence, /below the \d+ needed/);
-  // Enough sample, big percentage, trivial absolute move: 20% of nothing much is still nothing.
-  const tiny = trend(rule.minSample + 10, rule.minSample, rule, "sessions");
+  // Enough sample, big percentage, absolute move one short of the bar: a percentage of a small
+  // number is still a small number, and both bars have to be cleared.
+  const tiny = trend(
+    rule.minSample + rule.minAbsolute - 1,
+    rule.minSample,
+    rule,
+    "sessions",
+  );
   assert.equal(tiny.verdict, "steady", "a percentage alone must not produce a verdict");
   for (const reading of [at, below, tiny]) {
     assert.ok(reading.evidence.includes("sessions"), "every verdict must name what it counted");
