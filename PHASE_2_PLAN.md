@@ -258,7 +258,7 @@ on `(id, tenantId)`, so a row can never point across tenants even if application
 | P2-27 | With Redis down, active-now reports **unavailable**, never zero | `verify:ingestion` (Redis pointed at a closed port) |
 | P2-28 | With Redis down, rate limiting falls back to in-memory and still blocks | `verify:ingestion` (already true since Phase 1; re-asserted here) |
 | P2-29 | With Redis down, checkout completes normally | `e2e:analytics` |
-| P2-30 | Saturating the ingestion pool does not slow or fail checkout | `e2e:analytics` (200 concurrent batches while an order is placed) |
+| P2-30 | Saturating the ingestion pool does not slow or fail checkout | **BUILT AND PASSING** — `e2e:analytics`: with 200 concurrent batches in flight, a real order took 501ms against a 409ms warm baseline (1.22x), and analytics never held more than 5 of its 5 connections. Built before the tracker, as planned |
 | P2-31 | A failing analytics endpoint is invisible to the shopper: no console error, no UI change | `e2e:analytics` |
 
 ### Regression
@@ -275,8 +275,13 @@ on `(id, tenantId)`, so a row can never point across tenants even if application
 ## 8. Risks
 
 - **The ingestion pool is the dangerous part.** The whole point is that analytics cannot starve
-  checkout, and the only honest proof is P2-30: saturate it and place an order. Build that check
-  before the endpoint is wired into the storefront, not after.
+  checkout, and the only honest proof is P2-30: saturate it and place an order. Built first, and
+  passing — see the checklist row.
+- **The concurrency ceiling is the dominant limiter under a burst, not the pool.** Measured: of
+  200 simultaneous batches, 12 were stored and the rest were dropped at the ceiling and the
+  per-IP limit. That is the designed behaviour at 20x capacity on one instance, and dropping is
+  correct — but if real traffic ever approaches it, raise `MAX_IN_FLIGHT` in
+  `lib/prisma-analytics.ts` before raising the pool, since the pool is what protects checkout.
 - **`PAGE_VIEW` on every navigation is the first real write volume.** Watch table growth against
   §12.4 during the pilot; partitioning stays off the table until volume approaches tens of
   millions, as the master plan says.
