@@ -117,6 +117,7 @@ model Tenant {
   analyticsSearchDaily      AnalyticsSearchDaily[]
   analyticsAcquisitionDaily AnalyticsAcquisitionDaily[]
   analyticsCursors          AnalyticsAggregationCursor[]
+  analyticsAuditLogs        AnalyticsAuditLog[]
 }
 
 // One row per consent decision a storefront visitor makes. It records THAT a decision was made
@@ -804,4 +805,33 @@ model AnalyticsAggregationCursor {
 
   @@unique([tenantId, stage])
   @@index([stage, lastRunAt])
+}
+
+/// Who looked at or erased what (§9.3, D36).
+///
+/// Deliberately NOT under RLS and deliberately not cascaded away with the store: an audit
+/// record about a store is evidence ABOUT that store, not data belonging to it. A store owner
+/// must not be able to read, edit or delete it, and deleting a store must not quietly erase the
+/// record of what was done to its shoppers' data — so `tenantId` is nullable with SetNull and
+/// the actor's email is snapshotted, leaving a readable trail even when both rows are gone.
+model AnalyticsAuditLog {
+  id       String  @id @default(cuid())
+  tenantId String?
+  tenant   Tenant? @relation(fields: [tenantId], references: [id], onDelete: SetNull)
+
+  /// The platform admin who acted. Snapshotted, for the same reason as the tenant.
+  actorUserId String?
+  actorEmail  String
+
+  /// PRIVACY_SUMMARY | PRIVACY_EXPORT | PRIVACY_ERASE, and Phase 5's report access.
+  action String
+  /// What was acted on — a privacy identifier, never a name or a phone number.
+  subject String?
+  /// One line for a human: counts, not contents.
+  detail String?
+
+  at DateTime @default(now())
+
+  @@index([tenantId, at])
+  @@index([action, at])
 }

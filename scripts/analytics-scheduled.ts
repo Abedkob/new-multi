@@ -23,7 +23,6 @@ import { disconnectJobPrisma } from "../lib/prisma-job";
 const STAGES: Stage[] = [
   ...ANALYTICS_STAGES,
   // Still to come in this phase:
-  //   retention        (commit 6, D35)
   //   health-evaluate  (commit 7, D34)
 ];
 

@@ -48,6 +48,9 @@ export type ConsentCopy = {
     currentlyRefused: string;
     referenceLabel: string;
     referenceHint: string;
+    /** §4.7's privacy identifier: the one a request about stored DATA can be resolved by. */
+    dataIdLabel: string;
+    dataIdHint: string;
   };
   footer: {
     cookieSettings: string;
@@ -124,6 +127,10 @@ const en: ConsentCopy = {
     referenceLabel: "Your reference",
     referenceHint:
       "Quote this if you ask us about your data. It identifies your choice, not you.",
+    dataIdLabel: "Your measurement id",
+    dataIdHint:
+      "Quote this to ask for a copy of what this store has measured about your visits, or to " +
+      "have it deleted. It is the id this store's measurement already uses for your browser.",
   },
   footer: {
     cookieSettings: "Cookie settings",
@@ -228,6 +235,9 @@ const ar: ConsentCopy = {
     currentlyRefused: "مرفوض",
     referenceLabel: "رقمك المرجعي",
     referenceHint: "اذكره إذا سألتنا عن بياناتك. هو يعرّف قرارك، لا يعرّفك أنت.",
+    dataIdLabel: "معرّف القياس الخاص بك",
+    dataIdHint:
+      "اذكره لطلب نسخة من بيانات زياراتك التي قاسها هذا المتجر، أو لحذفها. هو المعرّف الذي يستخدمه القياس لمتصفحك أصلاً.",
   },
   footer: {
     cookieSettings: "إعدادات الكوكيز",

@@ -8,8 +8,10 @@ import {
 import { JOINT_CONTROLLER_SUMMARY } from "@/lib/consent/agreement";
 import { env } from "@/lib/env";
 import { describeTimeZone, listTimeZones } from "@/lib/time-zones";
+import { listPrivacyAudit } from "@/lib/analytics/privacy-request";
 import { loadStore } from "../load";
 import { AnalyticsPauseControl, StorePrivacyForm } from "./privacy-form";
+import { PrivacyRequestControl } from "./privacy-request-control";
 
 /**
  * Platform admin only: the store's privacy identity, its reporting basis, the joint-controller
@@ -25,6 +27,7 @@ export default async function StorePrivacyPage({
   const { slug } = await params;
   const tenant = await loadStore(slug);
   const timeZones = listTimeZones().map((value) => ({ value, label: describeTimeZone(value) }));
+  const audit = await listPrivacyAudit(tenant.id);
 
   const recorded = tenant.jointControllerRecordedAt;
   const utc = (value: Date) =>
@@ -92,6 +95,22 @@ export default async function StorePrivacyPage({
               {env.PLATFORM_PRIVACY_EMAIL ? ` · ${env.PLATFORM_PRIVACY_EMAIL}` : ""}
             </span>
           </p>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Shopper privacy requests</CardTitle>
+          <CardDescription>
+            Answer a &ldquo;what do you have about me&rdquo; or &ldquo;delete it&rdquo; request
+            for this store. Store owners deliberately do not get this: a privacy request is a
+            controller obligation that arrives to the platform, and an owner who could erase a
+            visitor&apos;s trail could also erase the record of having done so. Every lookup,
+            export and erasure here is logged below.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <PrivacyRequestControl slug={tenant.slug} audit={audit} />
         </CardContent>
       </Card>
 

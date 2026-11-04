@@ -46,7 +46,7 @@ import {
 } from "../../lib/consent/cookie";
 import { GRANT_ALL } from "../../lib/consent/types";
 import { env } from "../../lib/env";
-import { BASE, launch, makeStore } from "./browser";
+import { BASE, launch, login, makeStore } from "./browser";
 
 /** How many batches to fire at once. Comfortably more than the pool and the ceiling together. */
 const SATURATION_BATCHES = 200;
@@ -419,6 +419,35 @@ async function phase3() {
  *
  *   PHASE4_ONLY=1 BASE_URL=http://localhost:3300 pnpm e2e:analytics
  */
+/**
+ * Types into a search box and makes sure the box kept what was typed.
+ *
+ * A server-rendered input exists in the DOM before React has hydrated it, and a controlled
+ * input that hydrates mid-typing is reset to its initial state — so the characters land, the
+ * form submits an empty query, and the failure looks like a bug in the feature rather than a
+ * race in the check. `waitFor()` does not help: the element is already there.
+ *
+ * So this types, reads the value back, and types again if the field was reset. It cost a run to
+ * learn, and only on a cold dev server, which is exactly the kind of flake that gets explained
+ * away as "probably fine".
+ */
+async function typeSearch(page: Page, selector: string, term: string) {
+  const box = page.locator(selector).first();
+  await box.waitFor();
+  for (let attempt = 1; attempt <= 3; attempt++) {
+    await box.fill("");
+    // Character by character, with a human-ish gap: the claim under test is that a suggestion
+    // fetch per keystroke does NOT become an event per keystroke.
+    await box.pressSequentially(term, { delay: 120 });
+    if ((await box.inputValue()) === term) return box;
+    await page.waitForTimeout(500 * attempt);
+  }
+  throw new Error(
+    `the search box would not keep "${term}" (it reset to "${await box.inputValue()}") — the ` +
+      "page is probably not hydrated yet",
+  );
+}
+
 async function phase4() {
   const store = await makeStore("Search");
   const T = store.tenant.id;
@@ -465,11 +494,7 @@ async function phase4() {
 
     // ------------------------------------------------- P4-09: one submit, not one per keystroke
     // Typed character by character, the way a shopper types, through the navbar's own control.
-    const box = page.locator('header input[type="search"]').first();
-    await box.waitFor();
-    // Character by character, with a human-ish gap: the claim is that the suggestion fetch
-    // firing per keystroke does NOT become an event per keystroke.
-    await box.pressSequentially("jacket", { delay: 120 });
+    const box = await typeSearch(page, 'header input[type="search"]', "jacket");
     await page.waitForTimeout(1_500); // long enough for the suggestion fetch AND its settle timer
     await Promise.all([page.waitForURL(/\/search\?q=jacket/), box.press("Enter")]);
     await page.locator('[data-testid="catalog-page"]').waitFor();
@@ -504,9 +529,7 @@ async function phase4() {
     await prisma.analyticsEvent.deleteMany({ where: { tenantId: T } });
     const page2 = await context.newPage();
     await page2.goto(home, { waitUntil: "load" });
-    const box2 = page2.locator('header input[type="search"]').first();
-    await box2.waitFor();
-    await box2.pressSequentially("umbrella", { delay: 120 });
+    await typeSearch(page2, 'header input[type="search"]', "umbrella");
     await page2.waitForTimeout(2_000);
     await flush(page2);
 
@@ -520,6 +543,67 @@ async function phase4() {
     assert.equal(none[0].resultCount, 0);
     ok("P4-10", 'typing "umbrella" and never submitting reported one no-result search');
     await page2.close();
+
+    // ------------------------------------- the privacy identifier, and the console that uses it
+    // §4.7 wants the shopper able to ask about their own data, and D36 puts the answering in the
+    // platform admin's hands. Both halves are exercised here because they only work together: an
+    // id nobody can see is useless, and a console that cannot resolve one is worse.
+    const idPage = await context.newPage();
+    await idPage.goto(`${home}/privacy`, { waitUntil: "load" });
+    const shown = await idPage.locator('[data-testid="privacy-measurement-id"]').innerText();
+    const visitorRow = await prisma.analyticsVisitor.findFirstOrThrow({ where: { tenantId: T } });
+    assert.equal(shown.trim(), visitorRow.id, "the privacy page must show this browser's own id");
+    ok("P4-26", "the shopper's measurement id is shown on /privacy and matches their visitor row");
+
+    // The platform admin resolves that id, and only a platform admin can.
+    const adminEmail = process.env.PLATFORM_ADMIN_EMAIL;
+    const adminPassword = process.env.PLATFORM_ADMIN_PASSWORD;
+    assert.ok(
+      adminEmail && adminPassword,
+      "PLATFORM_ADMIN_EMAIL and PLATFORM_ADMIN_PASSWORD are needed to exercise the console",
+    );
+    const adminPage = await context.newPage();
+    await login(adminPage, adminEmail, adminPassword);
+    await adminPage.goto(`${BASE}/platform/stores/${slug}/privacy`, { waitUntil: "load" });
+    await adminPage.locator('[data-testid="privacy-request-control"]').waitFor();
+    await adminPage.fill('input[name="visitorId"]', visitorRow.id);
+    await adminPage.click('button:has-text("Look up")');
+    await adminPage.locator('[data-testid="privacy-request-summary"]').waitFor();
+    const summaryText = await adminPage.locator('[data-testid="privacy-request-summary"]').innerText();
+    assert.match(summaryText, /Sessions \/ events/, "the summary must say how much there is");
+    assert.match(summaryText, /kept/i, "and must say the linked orders are kept");
+    // Looking is itself an access to personal data, so it must already be logged.
+    const logged = await prisma.analyticsAuditLog.findFirst({
+      where: { tenantId: T, action: "PRIVACY_SUMMARY" },
+      orderBy: { at: "desc" },
+    });
+    assert.ok(logged, "a lookup must be audit-logged, not only an erasure");
+    assert.equal(logged.subject, visitorRow.id);
+    assert.equal(logged.actorEmail, adminEmail);
+    ok("P4-26a", `the platform console resolved the id and logged the lookup as ${adminEmail}`);
+
+    // The owner of this very store must not be able to reach that page at all.
+    // Its own context, because this one is signed in as the platform admin and /login would
+    // simply redirect — the check would then "pass" without ever having been an owner.
+    const ownerContext = await browser.newContext({ viewport: { width: 1280, height: 800 } });
+    const ownerPage = await ownerContext.newPage();
+    await login(ownerPage, store.user.email, store.password);
+    const ownerResponse = await ownerPage.goto(`${BASE}/platform/stores/${slug}/privacy`, {
+      waitUntil: "load",
+    });
+    assert.ok(
+      !ownerPage.url().includes("/platform/stores/"),
+      `a store owner reached the platform privacy console: ${ownerPage.url()} (${ownerResponse?.status()})`,
+    );
+    assert.equal(
+      await ownerPage.locator('[data-testid="privacy-request-control"]').count(),
+      0,
+      "the console must not render for a store owner",
+    );
+    ok("P4-26a", `a store owner asking for the console was sent to ${new URL(ownerPage.url()).pathname}`);
+    await idPage.close();
+    await adminPage.close();
+    await ownerContext.close();
 
     // ----------------------------------------------------------- the same, on a custom domain
     // Mandatory since 2026-11-04 (scripts/e2e/custom-domain.ts): a leg that cannot run FAILS.
@@ -538,9 +622,7 @@ async function phase4() {
         );
         assert.ok(decided, `P4-09 on ${domain}: ${PRODUCTION_BUILD_HINT}`);
 
-        const dBox = dPage.locator('header input[type="search"]').first();
-        await dBox.waitFor();
-        await dBox.pressSequentially("jacket", { delay: 120 });
+        const dBox = await typeSearch(dPage, 'header input[type="search"]', "jacket");
         await dPage.waitForTimeout(1_500);
         await Promise.all([dPage.waitForURL(/\/search\?q=jacket/), dBox.press("Enter")]);
         await dPage.locator('[data-testid="catalog-page"]').waitFor();

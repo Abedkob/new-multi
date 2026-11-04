@@ -1,7 +1,9 @@
 import type { Metadata } from "next";
+import { cookies } from "next/headers";
 import { notFound } from "next/navigation";
 import { CookieSettingsLink } from "@/components/consent/cookie-settings-link";
 import { consentCopy, fillConsentTokens } from "@/lib/consent/copy";
+import { decodeIdentity, visitorCookieName } from "@/lib/analytics/identity";
 import { CONSENT_COOKIE_PREFIX } from "@/lib/consent/cookie";
 import { readStoreConsent, tenantLocale } from "@/lib/consent/read";
 import { isConsentLocale } from "@/lib/consent/types";
@@ -48,6 +50,12 @@ export default async function StorePrivacyPage({
   if (!tenant || !canServeTenant(tenant)) notFound();
 
   const consent = await readStoreConsent(tenant);
+  // Only this visitor's own browser can present this cookie, and it is signed, so what is shown
+  // here is only ever the reader's own identifier — there is nothing to leak.
+  const measurementId = decodeIdentity(
+    "visitor",
+    (await cookies()).get(visitorCookieName(tenant.id))?.value,
+  );
   // ?lang= lets a visitor read this page in the other language without having to make a consent
   // choice first; otherwise it follows their recorded choice, then the store's default.
   const requested = (await searchParams).lang;
@@ -172,6 +180,25 @@ export default async function StorePrivacyPage({
         <section className="grid gap-3">
           <h2 className="text-lg font-semibold">{p.rightsTitle}</h2>
           <p className="text-sm text-muted-foreground">{p.rightsBody}</p>
+          {/*
+            * §4.7's privacy identifier. The reference below it identifies a consent DECISION
+            * and has no link to any stored browsing — so a request quoting only that could not
+            * be resolved to the data it was about. This is the id the measurement actually uses
+            * for this browser, read from the signed cookie it already holds: disclosing it to
+            * the person it belongs to adds nothing a third party could use, and without it a
+            * shopper has no way to ask for their own data.
+            */}
+          {measurementId ? (
+            <p className="text-sm">
+              <span className="font-medium">{copy.manage.dataIdLabel}:</span>{" "}
+              <span className="font-mono text-xs" data-testid="privacy-measurement-id">
+                {measurementId}
+              </span>
+              <span className="block text-xs text-muted-foreground">
+                {copy.manage.dataIdHint}
+              </span>
+            </p>
+          ) : null}
           {consent.publicRef ? (
             <p className="text-sm">
               <span className="font-medium">{copy.manage.referenceLabel}:</span>{" "}

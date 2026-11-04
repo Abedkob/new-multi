@@ -28,31 +28,24 @@ Last worked on **2026-11-04**. Branch `analytics/phase-1`, which is also what
 | `5f6ced7d` | 3. Search events, Arabic normalization, the PII scrub | done, `verify:search` 9/9, 4 browser legs |
 | `5b3e305` | 4. The acquisition ladder and the D24 session-touch fix | done, `verify:acquisition` 8/8 |
 | `c82a3f2` + `196995d` | 5. Aggregates, the three stages, D33's two routes | done, `verify:aggregates` 18/18 |
-| — | **6. Retention, privacy requests, the platform console** | **in progress** |
+| `6d5a298` | 6. Retention, privacy requests, the platform console | done, `verify:retention` 10/10, 3 browser legs |
 | — | 7. Health counters reaching the metric table (D34) | not started |
 | — | 8. The movable link builder (D37) | not started |
 | — | 9. Verification scripts and the acceptance record | not started |
 
-**Where commit 6 stopped.** `lib/analytics/retention.ts` is written — every §4.7 window,
-chunked deletes by primary key, a dry run that counts and deletes nothing — and its four env
-vars are wired into `lib/env.ts` and `.env.example`. It is **not yet registered as a stage** in
-`scripts/analytics-scheduled.ts`, and nothing calls it, so it has never run.
+**What commit 6 settled.** The open design question is resolved: §4.7's privacy identifier is
+the visitor's **measurement id**, shown on `/privacy` in both languages beside the consent
+reference. The consent receipt's `publicRef` stays what it was — it identifies a decision — and
+the page now says which is which. The console takes the measurement id.
 
-Still owed by commit 6:
+**Where commit 7 starts.** Nothing of it is written. D34 is the whole of it: the ingestion
+endpoint flushes its own counters into `AnalyticsOperationalMetric` (a table that does **not
+exist yet**) when the window is older than `ANALYTICS_HEALTH_FLUSH_MINUTES`, keyed by
+`hostname:pid`, after the response and never awaited; the scheduler only reads. Then P4-28 to
+P4-31a, of which P4-28 is the regression test for Phase 3's defect: a forced 400 must raise the
+contract-rejection signal **alone** and leave the operational drop rate at zero.
 
-1. Register a `retention` stage (and make `--dry-run` reach it).
-2. `lib/analytics/privacy-request.ts`: export and erase one visitor's data, reusing
-   `forgetOrderAttributionLinks()` so orders are detached and kept (P3-25).
-3. **An unresolved design question**: §4.7 says cookie settings expose "a privacy identifier",
-   and the only identifier a shopper can currently see is `AnalyticsConsentReceipt.publicRef` —
-   which identifies a consent DECISION and has no link to `AnalyticsVisitor`. So a privacy
-   request quoting it cannot resolve the visitor's data. The intended fix is to expose the
-   analytics **visitor id** (already in a signed cookie, already that visitor's own) on
-   `/privacy` beside the reference, and have the console accept it. Decide this before building
-   the console, because it changes what the console takes as input.
-4. The platform-admin console (D36) at `/platform/stores/[slug]`, plus an `AnalyticsAuditLog`
-   table (§9.3) — which does not exist yet — for the "every use is audit-logged" half of P4-26a.
-5. Checks P4-24, P4-24a, P4-25, P4-26, P4-26a, P4-27 in a new `scripts/verify-retention.ts`.
+Commits 8 (the movable link builder, D37) and 9 (the acceptance record) follow.
 
 **Known environment gotchas hit so far**, both worth remembering:
 
@@ -61,6 +54,11 @@ Still owed by commit 6:
   (`SELECT pg_terminate_backend(<pid>)`).
 - A verification script must not call `process.exit()` on Windows: exiting while a pooled socket
   is still closing trips a libuv assertion and the run reports failure after every check passed.
+- A `next dev` server started before the latest migration serves **route handlers as 404 while
+  pages still render**, which looks exactly like a broken feature. Restart it after migrating.
+- A browser check must read back what it typed. A server-rendered input exists before React
+  hydrates it, and a controlled input that hydrates mid-typing is reset — the form then submits
+  an empty query and the failure looks like a bug in the feature.
 
 ## 1. Scope
 

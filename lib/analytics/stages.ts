@@ -30,6 +30,7 @@ import {
   type AggregateTenant,
 } from "@/lib/analytics/aggregate";
 import { localDayOf, previousLocalDay, recentLocalDays, type LocalDay } from "@/lib/analytics/local-day";
+import { describeRetention, runRetention } from "@/lib/analytics/retention";
 import type { Stage, StageContext } from "@/lib/analytics/scheduled";
 import { jobPrisma, withJobBypass, withJobTenant } from "@/lib/prisma-job";
 
@@ -169,8 +170,51 @@ export const nightlyBackfill: Stage = {
     }),
 };
 
+/**
+ * Retention: the §4.7 windows, at most once a day (D35).
+ *
+ * Last in the list on purpose. Aggregates are computed FROM raw events, so deleting events
+ * before recomputing would build a day's figures from data that had just been thinned — wrong
+ * numbers, and only for the days nobody looks at any more, which is the worst place for a
+ * silent error. Compute first, delete after.
+ *
+ * This is also the one stage where `--dry-run` does something rather than nothing: it reports
+ * exactly what each window matches and removes none of it.
+ */
+export const retention: Stage = {
+  name: "retention",
+  leaseMinutes: 30,
+  run: async (ctx) => {
+    const last = await withJobBypass((tx) =>
+      tx.analyticsScheduledRun.findFirst({
+        where: { stage: "retention", status: "OK", dryRun: false },
+        orderBy: { startedAt: "desc" },
+        select: { startedAt: true },
+      }),
+    );
+    // Once a day is plenty for a window measured in months, and it keeps the other 287
+    // invocations of the day down to a single query.
+    if (!ctx.dryRun && last && ctx.now.getTime() - last.startedAt.getTime() < 20 * 3_600_000) {
+      return { items: 0, detail: "already run today" };
+    }
+
+    const result = await runRetention(ctx.now, ctx.dryRun);
+    return {
+      items: ctx.dryRun
+        ? result.windows.reduce((sum, w) => sum + w.matched, 0)
+        : result.totalDeleted,
+      detail: `${ctx.dryRun ? "DRY RUN - " : ""}${describeRetention(result)}`,
+    };
+  },
+};
+
 /** Everything the command runs, in order. */
-export const ANALYTICS_STAGES: Stage[] = [aggregateRecompute, orderStatusSweep, nightlyBackfill];
+export const ANALYTICS_STAGES: Stage[] = [
+  aggregateRecompute,
+  orderStatusSweep,
+  nightlyBackfill,
+  retention,
+];
 
 /** Exposed for a check that wants to recompute one store without the scheduler. */
 export async function recomputeTenantNow(tenantId: string, days: readonly LocalDay[]) {
