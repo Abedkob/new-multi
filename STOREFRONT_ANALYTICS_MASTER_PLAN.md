@@ -926,7 +926,17 @@ Verify financial reconciliation, WhatsApp/revenue separation, session deduplicat
 
 Build meaningful search events, PII scrubbing, first/last attribution, link builder, aggregate tables, timezone handling, the Dokploy scheduled command, and retention.
 
-Verify no-result searches, source classification, DST/midnight, late events, status changes, chunked retention, and overlapping-job protection.
+Also: **count contract rejections (HTTP 400) as their own health signal**, separate from both policy and operational drops, and carry them through the snapshot flush into `AnalyticsOperationalMetric` and the Phase 6 alert evaluation.
+
+The three kinds mean three different things and must never share a threshold:
+
+- A **policy** drop is the system working — consent refused, store outside the rollout. Alerting on these pages someone because consent is being honoured.
+- An **operational** drop is the system struggling — pool full, limiter bit, database timed out. This is what §11.10's "over 5% of at least 20 attempted batches in ten minutes" is written against.
+- A **contract rejection** is *our own code sending something the contract refuses*. It is never the shopper's fault, never load-dependent, and a non-zero rate means a browser is losing data right now. It warrants a separate, much lower threshold than operational drops — a single-digit count in a window is already a bug.
+
+Folding 400s into the operational percentage would hide exactly the defect Phase 3 found the hard way: off localhost, every batch was refused as malformed and lost, and the operational drop rate stayed at zero throughout. `lib/analytics/health.ts` already counts `invalidEnvelopes` separately and the endpoint already logs which field failed; Phase 4 owes the persistence, the threshold and the alert.
+
+Verify no-result searches, source classification, DST/midnight, late events, status changes, chunked retention, overlapping-job protection, and that a forced contract rejection raises the 400 signal alone while leaving the operational drop rate at zero.
 
 ### Phase 5 — Merchant and platform analytics UX
 
@@ -974,6 +984,8 @@ Verify:
 
 ### Phase 7 — Hardening, complete pilot, and full launch
 
+- **Force HTTPS on every custom domain via Cloudflare** (Always Use HTTPS + an edge certificate per store domain, HTTP→HTTPS redirect at the edge, HSTS once verified). Not cosmetic: a plaintext custom domain cannot carry a `Secure` cookie, so consent and identity cookies are refused by the browser, and it is not a secure context, so `crypto.randomUUID` and other secure-context APIs are unavailable — the two defects Phase 3 found. HTTPS everywhere is what makes the shared host and a store's own domain behave identically.
+- **Every E2E suite has its custom-domain leg** (the nine in `scripts/verify-e2e-policy.ts`'s `PENDING_LEG`). A silent pilot runs on a real store's own domain, so a suite that has never run against one has not been exercised against what is being piloted.
 - Security and privacy/legal review
 - Cross-tenant penetration testing
 - Performance/load testing
