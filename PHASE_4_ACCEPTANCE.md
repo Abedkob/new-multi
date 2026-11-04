@@ -3,7 +3,7 @@
 Results for [PHASE_4_PLAN.md](PHASE_4_PLAN.md) §6, run on 2026-11-04, including the seven
 additions the plan review asked for (D31–D37).
 
-**All 41 items pass: the 34 planned, plus 7 added while verifying.** Phase 4 is not a release —
+**All 42 items pass: the 34 planned, plus 8 added while verifying.** Phase 4 is not a release —
 §13 of the master plan holds the launch until Phase 7, and `ANALYTICS_ROLLOUT_MODE` stays `off`
 in production ([ANALYTICS_DEPLOY_CHECKLIST.md](ANALYTICS_DEPLOY_CHECKLIST.md)).
 
@@ -42,7 +42,7 @@ feature and cost a run here.
 | Command | Result |
 |---|---|
 | `pnpm verify:scheduled` | **6 passed** |
-| `pnpm verify:aggregates` | **19 passed** |
+| `pnpm verify:aggregates` | **20 passed**, plus 1 recorded gap printed |
 | `pnpm verify:search` | **9 passed** |
 | `pnpm verify:acquisition` | **11 passed** |
 | `pnpm verify:retention` | **10 passed** |
@@ -115,7 +115,8 @@ production-build figures stand.
 | P4-20a | A cancellation a week later corrects that older day | PASS | `verify:aggregates` — both routes: the `updatedAt` sweep corrected 2026-10-28, and the nightly 30-day pass repaired a day corrupted on purpose |
 | P4-21 | Daily totals reconcile against the raw events | PASS | `verify:aggregates` — 3 product views in 1 session count as 1 session; a product's `views` (3) and `viewSessions` (1) both recorded and different |
 | P4-22 | Order value and potential WhatsApp value never merge | PASS | `verify:aggregates` — 2 modules touch both columns, neither sums them |
-| P4-23 | A cross-tenant aggregate read returns nothing, by RLS | PASS | `verify:aggregates` — **in a subprocess as app_user**: another store's rows invisible, and a row written for another store refused by the policy's `WITH CHECK` |
+| P4-23 | A cross-tenant aggregate read returns nothing, by RLS | PASS | `verify:aggregates` — **in a subprocess as app_user** (whose `rolsuper`/`rolbypassrls` are asserted false): all **six** Phase 4 tables invisible across tenants, and a write for another store refused by each policy's `WITH CHECK` |
+| P4-23a | Every tenant-scoped table really has forced RLS and a policy | PASS | `verify:aggregates` — read from the catalog: 18 tables ENABLED + FORCED with a `tenant_isolation` policy, 1 documented exception (`AnalyticsAuditLog`), 2 platform tables deliberately excluded. **Found one gap: `TenantLicense` has no RLS** — recorded, printed every run, and the list may only shrink |
 
 ## Retention and privacy
 

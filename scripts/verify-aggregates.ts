@@ -514,18 +514,46 @@ async function isolationCheck() {
     );
     const line = (child.stdout ?? "").trim().split("\n").filter(Boolean).pop() ?? "{}";
     const result = JSON.parse(line) as {
-      leakedRows?: number;
-      ownRows?: number;
-      writeRefused?: boolean;
-      writeError?: string;
+      role?: { current_user: string; rolsuper: boolean; rolbypassrls: boolean };
+      results?: {
+        table: string;
+        leakedRows: number;
+        ownRows: number;
+        writeRefused: boolean;
+        writeError: string;
+      }[];
       threw?: string;
     };
     assert.ok(!result.threw, `the fixture failed: ${result.threw} ${child.stderr}`);
-    assert.equal(result.leakedRows, 0, `another store's aggregate rows were readable: ${line}`);
-    assert.equal(result.ownRows, 1, `the store's own row must still be visible: ${line}`);
-    assert.equal(result.writeRefused, true, `a row for another store was WRITTEN: ${line}`);
-    assert.match(result.writeError ?? "", /row-level security|violates/i);
-    ok("P4-23", "as app_user: another store's aggregates are invisible and unwritable (RLS)");
+
+    // The check is worthless unless the subprocess really is the restricted role, so that is
+    // asserted rather than assumed — a superuser or a BYPASSRLS role would pass everything
+    // below while proving nothing at all.
+    assert.ok(result.role, `the fixture reported no role: ${line}`);
+    assert.equal(result.role.rolsuper, false, "the fixture must not run as a superuser");
+    assert.equal(result.role.rolbypassrls, false, "and must not bypass RLS");
+
+    const perTable = result.results ?? [];
+    assert.equal(perTable.length, 6, `every Phase 4 table must be checked: ${line}`);
+    for (const row of perTable) {
+      assert.equal(row.leakedRows, 0, `${row.table}: another store's rows were readable`);
+      assert.equal(row.writeRefused, true, `${row.table}: a row for another store was WRITTEN`);
+      assert.match(
+        row.writeError,
+        /row-level security|violates/i,
+        `${row.table}: refused for the wrong reason (${row.writeError})`,
+      );
+    }
+    assert.equal(
+      perTable.find((r) => r.table === "AnalyticsDailyMetric")?.ownRows,
+      1,
+      "the store's own row must still be visible",
+    );
+    ok(
+      "P4-23",
+      `as ${result.role.current_user}: all ${perTable.length} Phase 4 tables are invisible and ` +
+        "unwritable across tenants (RLS, both halves)",
+    );
   } finally {
     for (const store of stores) {
       await prisma.tenant.deleteMany({ where: { id: store.tenant.id } });
@@ -534,10 +562,145 @@ async function isolationCheck() {
   }
 }
 
+/**
+ * P4-23a: every tenant-scoped table is actually under forced RLS, with a policy.
+ *
+ * This is a CONFIGURATION claim, not an access claim, so unlike P4-23 it does not matter which
+ * role runs it — it reads catalog metadata rather than anybody's rows. It exists because the
+ * access checks can only cover tables somebody thought to cover: a migration that creates a
+ * tenant-scoped table and forgets `ENABLE ROW LEVEL SECURITY`, or enables it without `FORCE`,
+ * or creates no policy, leaves a table wide open and every existing check still passes.
+ *
+ * FORCE matters as much as ENABLE: without it, policies do not apply to the table's OWNER, and
+ * the owner is what migrations and any future admin script connect as.
+ */
+async function rlsConfigurationCheck() {
+  type Row = { relname: string; relrowsecurity: boolean; relforcerowsecurity: boolean };
+  const tables = await prisma.$queryRaw<Row[]>`
+    SELECT c.relname, c.relrowsecurity, c.relforcerowsecurity
+    FROM pg_class c
+    JOIN pg_namespace n ON n.oid = c.relnamespace
+    WHERE n.nspname = 'public' AND c.relkind = 'r'
+    ORDER BY c.relname
+  `;
+  const policies = await prisma.$queryRaw<{ tablename: string; policyname: string }[]>`
+    SELECT tablename, policyname FROM pg_policies WHERE schemaname = 'public'
+  `;
+  const columns = await prisma.$queryRaw<{ table_name: string }[]>`
+    SELECT DISTINCT table_name FROM information_schema.columns
+    WHERE table_schema = 'public' AND column_name = 'tenantId'
+  `;
+
+  const withTenantId = new Set(columns.map((c) => c.table_name));
+  const byName = new Map(tables.map((t) => [t.relname, t]));
+  const policyFor = new Map<string, string[]>();
+  for (const p of policies) {
+    policyFor.set(p.tablename, [...(policyFor.get(p.tablename) ?? []), p.policyname]);
+  }
+
+  /**
+   * Tables that carry a tenantId and are deliberately NOT under RLS, each with the reason.
+   * Anything else with a tenantId must be protected, and a new one shows up as a failure rather
+   * than as silence.
+   */
+  const DELIBERATELY_OPEN: Record<string, string> = {
+    // An audit record ABOUT a store is not data belonging to it: a store owner must not be able
+    // to read or alter it, and it outlives the store (nullable tenantId, ON DELETE SET NULL).
+    AnalyticsAuditLog: "platform evidence about a store, not the store's data",
+  };
+
+  /**
+   * A gap this check FOUND, recorded rather than papered over. It may only shrink.
+   *
+   * TenantLicense carries a tenantId and has no row-level security, so the only thing keeping
+   * one store's licence rows out of another's reach is the application's own WHERE clauses.
+   *
+   * It cannot simply be switched on, which is why it is a recorded gap and not a one-line fix.
+   * Every accessor in lib/data/licenses.ts already goes through withBypass and would be
+   * unaffected — but the storefront reads the licence through getTenantBySlug, which includes it
+   * with NO tenant context. Under a tenant policy that include would return null, and
+   * isLicenseActive(null) is deliberately TRUE ("a missing licence is allowed during the opt-in
+   * rollout"). So enabling RLS without changing that accessor would not take storefronts down;
+   * it would silently stop enforcing licensing altogether, which is worse than the leak it
+   * closes. The fix is a migration PLUS reading the licence under bypass in getTenantBySlug,
+   * with its own verification that an expired licence still stops a store serving.
+   */
+  const KNOWN_UNPROTECTED: Record<string, string> = {
+    TenantLicense:
+      "no RLS; app-level WHERE clauses only. Needs getTenantBySlug to read the licence under " +
+      "bypass first, or enforcement silently stops (isLicenseActive(null) === true)",
+  };
+
+  const unprotected: string[] = [];
+  const unforced: string[] = [];
+  const policyless: string[] = [];
+  let protectedCount = 0;
+
+  for (const table of withTenantId) {
+    if (table in DELIBERATELY_OPEN) continue;
+    if (table in KNOWN_UNPROTECTED) continue;
+    const row = byName.get(table);
+    if (!row) continue;
+    if (!row.relrowsecurity) unprotected.push(table);
+    else if (!row.relforcerowsecurity) unforced.push(table);
+    else if (!(policyFor.get(table) ?? []).length) policyless.push(table);
+    else protectedCount += 1;
+  }
+
+  assert.deepEqual(
+    unprotected,
+    [],
+    `these tables carry a tenantId with NO row-level security: ${unprotected.join(", ")}`,
+  );
+  // The recorded gaps are printed on every run, so they cannot quietly become permanent — and
+  // the list may only shrink: a table that gains RLS must be removed from it.
+  for (const [table, why] of Object.entries(KNOWN_UNPROTECTED)) {
+    const row = byName.get(table);
+    assert.ok(row, `KNOWN_UNPROTECTED names ${table}, which no longer exists — remove it`);
+    assert.equal(
+      row.relrowsecurity,
+      false,
+      `${table} now has RLS — remove it from KNOWN_UNPROTECTED so a regression can be seen`,
+    );
+    console.log(`  --  gap   ${table}: ${why}`);
+  }
+  assert.deepEqual(
+    unforced,
+    [],
+    `RLS is enabled but not FORCED on: ${unforced.join(", ")} — policies would not apply to the ` +
+      "table owner, which is what migrations connect as",
+  );
+  assert.deepEqual(
+    policyless,
+    [],
+    `RLS is forced but no policy exists on: ${policyless.join(", ")} — which denies everything, ` +
+      "so this is a broken table rather than a safe one",
+  );
+  assert.ok(protectedCount >= 15, `expected the tenant-scoped tables, found ${protectedCount}`);
+
+  // And the platform-level tables must stay out, deliberately: putting the job's own run records
+  // under a tenant policy would make them invisible to the job.
+  for (const table of ["AnalyticsScheduledRun", "AnalyticsOperationalMetric"]) {
+    assert.ok(!withTenantId.has(table), `${table} must not carry a tenantId`);
+    assert.equal(
+      byName.get(table)?.relrowsecurity,
+      false,
+      `${table} is platform-level and must not be under RLS`,
+    );
+  }
+  ok(
+    "P4-23a",
+    `${protectedCount} tenant-scoped tables have FORCED RLS and a policy; ` +
+      `${Object.keys(DELIBERATELY_OPEN).length} documented exception, ` +
+      `${Object.keys(KNOWN_UNPROTECTED).length} recorded gap, 2 platform tables excluded`,
+  );
+}
+
 async function main() {
   timeZoneChecks();
   await aggregateChecks();
   await isolationCheck();
+  await rlsConfigurationCheck();
 
   // Every store carries a zone already (Phase 1's Tenant.analyticsTimezone); this phase is
   // where it starts deciding anything. A store with a zone the runtime cannot resolve would

@@ -481,6 +481,29 @@ async function main() {
         a.tenant.id,
       ]);
       assert.equal(seen.rows[0].c, 0, "store B must not see store A's events");
+
+      // Reading was only half of it. A policy with a USING clause and no working WITH CHECK
+      // hides another store's rows and still lets this one INSERT into it, which is the more
+      // damaging direction: one store's events landing in another's reports.
+      await assert.rejects(
+        client.query(
+          `insert into "AnalyticsEvent"
+             ("id","tenantId","eventId","type","occurredAt","sessionId","visitorId","pageKind")
+           values ($1, $2, $3, 'PAGE_VIEW', now(), $4, $5, 'home')`,
+          [
+            `x-${Date.now()}-ev`,
+            a.tenant.id,
+            randomUUID(),
+            `x-${Date.now()}-se`,
+            `x-${Date.now()}-vi`,
+          ],
+        ),
+        /row-level security|violates/i,
+        "store B must not be able to write an event for store A",
+      );
+      await client.query("ROLLBACK");
+      await client.query("BEGIN");
+      await client.query("SELECT set_config('app.tenant_id', $1, true)", [b.tenant.id]);
       await client.query("COMMIT");
 
       // A composite foreign key makes a cross-tenant link impossible even with direct SQL.
@@ -496,7 +519,7 @@ async function main() {
         "a session must not be able to reference another store's visitor",
       );
       await client.query("ROLLBACK");
-      ok("P2-22", "under RLS a store sees none of another's analytics rows");
+      ok("P2-22", "under RLS a store sees none of another's analytics rows, and cannot write one");
       ok("P2-23", "a composite foreign key blocks a cross-tenant session to visitor link");
     } finally {
       await client.end();
