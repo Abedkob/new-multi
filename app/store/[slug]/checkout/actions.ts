@@ -2,6 +2,7 @@
 
 import { headers } from "next/headers";
 import { z } from "zod";
+import { resolveOrderAttribution } from "@/lib/analytics/order-attribution";
 import { OrderError, placeOrder, previewCoupon } from "@/lib/data/orders";
 import { getTenantBySlug } from "@/lib/data/tenants";
 import { RATE_LIMITS, clientIp, rateLimit, retryAfterText } from "@/lib/rate-limit";
@@ -95,11 +96,17 @@ export async function placeOrderAction(
     return { error: "The displayed total is invalid. Refresh and try again." };
   }
 
+  // Resolved before the order transaction opens, and undefined whenever anything is missing or
+  // wrong — no consent, no session, an unreachable analytics pool. The order is then recorded
+  // with nulls and is otherwise identical. Measurement is never allowed to cost a sale.
+  const attribution = await resolveOrderAttribution(tenant);
+
   try {
     const order = await placeOrder(tenant.id, customer.data, lines.data, {
       expectedDeliveryFeeCents: input.expectedDeliveryFeeCents,
       couponCode: input.couponCode?.trim() || undefined,
       expectedTotalCents: input.expectedTotalCents,
+      attribution,
     });
     return { ok: true, orderId: order.id };
   } catch (e) {
