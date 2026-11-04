@@ -582,6 +582,7 @@ export function ProductShare({
   socialLinks: SocialLink[];
 }) {
   const { product, variant, content } = useProduct();
+  const firstParty = useAnalytics();
   const origin = useOrigin();
   const [copied, setCopied] = useState(false);
 
@@ -644,6 +645,24 @@ export function ProductShare({
         href={whatsappHref}
         target="_blank"
         rel="noopener noreferrer"
+        // Ordering on WhatsApp is a real intent to buy that leaves no order behind, so it is
+        // recorded — with the product and variant only. What it was potentially WORTH is
+        // computed on the server from canonical pricing; nothing here sends a money value.
+        //
+        // The event is beaconed immediately rather than queued, because this click can take the
+        // shopper away and the next flush may never happen. It is also fire-and-forget by
+        // construction: the queue swallows every failure, so the link opens whether analytics
+        // works, is refused, or is broken.
+        onClick={() => {
+          firstParty.track({
+            type: "WHATSAPP_ORDER_CLICK",
+            pageKind: "product",
+            productId: product.id,
+            ...(variant ? { variantId: variant.id } : {}),
+            quantity: 1,
+            immediate: true,
+          });
+        }}
         aria-label={content["product.whatsapp"]}
         title={content["product.whatsapp"]}
         data-testid="whatsapp-button"

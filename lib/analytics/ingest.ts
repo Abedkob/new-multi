@@ -25,6 +25,7 @@ import {
 } from "@/lib/analytics/contract";
 import { resolveAttribution, type DeviceClass } from "@/lib/analytics/request";
 import { sessionExpired } from "@/lib/analytics/identity";
+import { resolveWhatsappValues } from "@/lib/analytics/whatsapp-value";
 import { withAnalyticsTenant } from "@/lib/prisma-analytics";
 
 export type IngestTenant = { id: string; slug: string };
@@ -180,6 +181,11 @@ export async function ingestBatch(
           select: { id: true, lastActivityAt: true },
         });
 
+    // ---- step 9: the only server-computed money figure --------------------------------------
+    // Resolved from canonical pricing, for WhatsApp clicks only, and only after the ownership
+    // filter above — so a forged product id is already gone by the time anything is priced.
+    const values = await resolveWhatsappValues(db, tenant.id, accepted, now);
+
     // ---- steps 10 and 11: insert, then mark the session active ----------------------------
     // skipDuplicates against (tenantId, eventId) is what makes a retried beacon free, and is
     // why the browser keeps no durable retry queue.
@@ -195,10 +201,11 @@ export async function ingestBatch(
         productId: event.productId ?? null,
         variantId: event.variantId ?? null,
         quantity: event.quantity ?? null,
-        // Phase 4 emits searches; Phase 3 computes WhatsApp value. Never taken from a client.
+        // Phase 4 emits searches. Never taken from a client.
         searchQuery: null,
         resultCount: event.resultCount ?? null,
-        valueCents: null,
+        // Only a WhatsApp click has one, and only ever from the server's own pricing.
+        valueCents: values.get(event.eventId) ?? null,
       })),
       skipDuplicates: true,
     });

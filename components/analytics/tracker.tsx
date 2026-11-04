@@ -45,9 +45,15 @@ export type TrackInput = {
   variantId?: string;
   quantity?: number;
   resultCount?: number;
+  /**
+   * Send this event now, by beacon, instead of waiting for the next flush. For a click that
+   * takes the shopper off the page (the WhatsApp button), where the next flush may never come.
+   * Never put on the wire — the envelope is strict.
+   */
+  immediate?: boolean;
 };
 
-type QueuedEvent = Omit<TrackInput, "pageKind"> & {
+type QueuedEvent = Omit<TrackInput, "pageKind" | "immediate"> & {
   eventId: string;
   occurredAt: number;
   pageKind: PageKind;
@@ -149,8 +155,9 @@ export function AnalyticsTracker({
 
   const track = useCallback(
     (input: TrackInput) => {
+      const { immediate, ...rest } = input;
       const event: QueuedEvent = {
-        ...input,
+        ...rest,
         pageKind:
           input.pageKind ??
           (typeof window === "undefined"
@@ -168,7 +175,8 @@ export function AnalyticsTracker({
         attributionSent.current = true;
       }
       queue.current.push(event);
-      if (queue.current.length >= FLUSH_AT_EVENTS) flush(false);
+      if (immediate) flush(true);
+      else if (queue.current.length >= FLUSH_AT_EVENTS) flush(false);
     },
     [basePath, flush],
   );
