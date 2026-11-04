@@ -47,18 +47,22 @@ export async function rateLimit(
   key: string,
   opts: { limit: number; windowMs: number },
 ): Promise<RateLimitResult> {
-  // Try Redis first (production with distributed rate limiting)
+  // Try Redis first (production with distributed rate limiting). When it cannot answer, fall
+  // through to the in-memory limiter below rather than returning "allowed": a shared limiter
+  // that is briefly unreachable should degrade to per-instance limits, not to no limits.
   if (env.REDIS_URL) {
     const result = await redisRateLimit(key, opts);
-    return {
-      ok: result.allowed,
-      remaining: result.remaining,
-      limit: opts.limit,
-      retryAfterMs: result.retryAfterMs,
-    };
+    if (result.available) {
+      return {
+        ok: result.allowed,
+        remaining: result.remaining,
+        limit: opts.limit,
+        retryAfterMs: result.retryAfterMs,
+      };
+    }
   }
 
-  // Fallback to in-memory (development or Redis unavailable)
+  // Fallback to in-memory (development, or Redis unreachable)
   const now = Date.now();
   const windowStart = now - opts.windowMs;
 
