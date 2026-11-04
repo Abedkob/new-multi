@@ -144,6 +144,13 @@ export const envSchema = z
       .default("Asia/Beirut"),
     // The platform owner's own GA4 property (this deployment's traffic, not a store's). Was
     // hardcoded in app/layout.tsx, which also ran it on storefront routes — see §2.2.
+    // --- Phase 2: collection -------------------------------------------------------------
+    // A deliberately small, separate pool so analytics can never exhaust the connections
+    // checkout needs. See PRODUCTION.md for the per-instance arithmetic.
+    ANALYTICS_DATABASE_POOL_MAX: z.coerce.number().int().min(1).max(50).default(5),
+    ANALYTICS_MAX_BATCH_SIZE: z.coerce.number().int().min(1).max(100).default(20),
+    ANALYTICS_SESSION_TIMEOUT_MINUTES: z.coerce.number().int().min(1).max(1440).default(30),
+    ANALYTICS_ACTIVE_WINDOW_MINUTES: z.coerce.number().int().min(1).max(60).default(5),
     PLATFORM_GA_ID: z
       .string()
       .trim()
@@ -234,6 +241,10 @@ function load() {
       PLATFORM_PRIVACY_URL: raw.PLATFORM_PRIVACY_URL || undefined,
       PLATFORM_DEFAULT_LOCALE: (raw.PLATFORM_DEFAULT_LOCALE as "en" | "ar") || "en",
       PLATFORM_TIMEZONE: raw.PLATFORM_TIMEZONE || "Asia/Beirut",
+      ANALYTICS_DATABASE_POOL_MAX: Number(raw.ANALYTICS_DATABASE_POOL_MAX) || 5,
+      ANALYTICS_MAX_BATCH_SIZE: Number(raw.ANALYTICS_MAX_BATCH_SIZE) || 20,
+      ANALYTICS_SESSION_TIMEOUT_MINUTES: Number(raw.ANALYTICS_SESSION_TIMEOUT_MINUTES) || 30,
+      ANALYTICS_ACTIVE_WINDOW_MINUTES: Number(raw.ANALYTICS_ACTIVE_WINDOW_MINUTES) || 5,
       PLATFORM_GA_ID: raw.PLATFORM_GA_ID || undefined,
     };
   }
@@ -270,6 +281,10 @@ function load() {
         "PLATFORM_DEFAULT_LOCALE",
         "PLATFORM_TIMEZONE",
         "PLATFORM_GA_ID",
+        "ANALYTICS_DATABASE_POOL_MAX",
+        "ANALYTICS_MAX_BATCH_SIZE",
+        "ANALYTICS_SESSION_TIMEOUT_MINUTES",
+        "ANALYTICS_ACTIVE_WINDOW_MINUTES",
       ] as const
     ).map((k) => [k, process.env[k] === "" ? undefined : process.env[k]]),
   );
