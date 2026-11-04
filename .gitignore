@@ -49,3 +49,6 @@ next-env.d.ts
 
 # playwright
 /.playwright-mcp/
+
+# Screenshots written by pnpm e2e:consent
+consent-screenshots/

@@ -42,7 +42,13 @@ const R2_KEYS = [
   "R2_PUBLIC_URL",
 ] as const;
 
-const schema = z
+/**
+ * Exported so the verification scripts can assert the refinements (pilot mode needs a pilot
+ * store, production needs a signing secret, a bad time zone is rejected) by parsing candidate
+ * environments directly. Importing this module runs `load()` once against the real process
+ * environment, so testing those rules any other way would mean spawning child processes.
+ */
+export const envSchema = z
   .object({
     // Owner/superuser role — migrations, seeds and dev scripts. Bypasses RLS.
     DATABASE_URL: pgUrl.optional(),
@@ -268,7 +274,7 @@ function load() {
     ).map((k) => [k, process.env[k] === "" ? undefined : process.env[k]]),
   );
 
-  const parsed = schema.safeParse(input);
+  const parsed = envSchema.safeParse(input);
   if (!parsed.success) {
     const issues = parsed.error.issues
       .map((i) => `  • ${i.path.join(".") || "(env)"}: ${i.message}`)
