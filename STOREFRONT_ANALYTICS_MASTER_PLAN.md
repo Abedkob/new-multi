@@ -938,11 +938,18 @@ Folding 400s into the operational percentage would hide exactly the defect Phase
 
 Verify no-result searches, source classification, DST/midnight, late events, status changes, chunked retention, overlapping-job protection, and that a forced contract rejection raises the 400 signal alone while leaving the operational drop rate at zero.
 
-### Phase 5 — Merchant and platform analytics UX
+### Phase 5 — Marketing, merchant reports, and the platform console
 
 Build Overview, Products, Acquisition, Searches, branched funnel, heatmap, accessible alternatives, insights, platform store trends, system health, bilingual mobile states, and audit logging.
 
+Also, agreed before [PHASE_5_PLAN.md](PHASE_5_PLAN.md) was written, because they decide what this product *is* to the person paying for it:
+
+- **One Marketing section** in the owner's admin — campaigns, tracked links, integrations, results — instead of the same work scattered between settings and analytics. The storefront is a shop; this section is the reason an owner opens the admin on a week when nothing has sold.
+- **Owner self-service integrations**: the owner connects their own Google and Meta accounts, which today only a platform admin can do. Needing to ask someone else to paste a pixel id is what makes software feel like it belongs to somebody else.
+
 Verify small-store exact values, insight thresholds, no person-level access, platform aggregate-only boundaries, and order/aggregate reconciliation.
+
+**After launch, deliberately not in Phase 5** (each would slow the build, and none is needed to launch): a coupon tied to a campaign and what it earned; shopper-facing push notifications ("back in stock", "new offer"), which are a different audience and consent basis from Phase 6's merchant push; and server-side conversion reporting to Meta and Google. §8 of the Phase 5 plan notes what to avoid now so each stays cheap later.
 
 ### Phase 6 — Admin PWA, Web Push, and Notification Control
 
