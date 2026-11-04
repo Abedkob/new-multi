@@ -273,8 +273,8 @@ async function main() {
     ok(
       "P2-13",
       `every batch answered 202; ${stored}/${offered} events stored and the rest dropped ` +
-        "silently - the per-IP limit and the concurrency ceiling both bit, which is the " +
-        "designed behaviour under a burst this far past capacity",
+        "silently at the concurrency ceiling, which is the designed behaviour for a burst " +
+        "this far past capacity (GET /api/internal/analytics-health attributes each drop)",
     );
 
   } finally {

@@ -63,10 +63,23 @@ export const analyticsPrisma =
  * Process-local concurrency ceiling (§7.5), sitting in front of the pool.
  *
  * Without it, a flood of beacons all wait on `connectionTimeoutMillis` and each holds a request
- * handler for a second. The ceiling turns that into an immediate, cheap refusal. It is set
- * slightly above the pool so a brief overlap still gets served.
+ * handler for a second. The ceiling turns that into an immediate, cheap refusal.
+ *
+ * Four times the pool rather than twice, as a conservative default.
+ *
+ * Measured, via the counters at /api/internal/analytics-health:
+ *   - Sustained realistic load (200 concurrent visitors, 3 minutes): this never engages. Zero
+ *     drops of any kind, p95 38ms.
+ *   - A deliberate burst (200 simultaneous batches): every single drop was this ceiling — 179
+ *     of 203 batches, with no rate limiter involved. So under a burst it IS the limiter that
+ *     bites, which is the intent: refuse immediately rather than let hundreds of handlers each
+ *     wait out connectionTimeoutMillis.
+ *
+ * Raising it costs no connections — the pool stays at 5 and peaked at exactly 5 in every run —
+ * it only lets a brief overlap wait for a connection instead of being turned away.
+ * ANALYTICS_MAX_IN_FLIGHT overrides it. The pool, not this number, is what protects checkout.
  */
-const MAX_IN_FLIGHT = env.ANALYTICS_DATABASE_POOL_MAX * 2;
+const MAX_IN_FLIGHT = env.ANALYTICS_MAX_IN_FLIGHT ?? env.ANALYTICS_DATABASE_POOL_MAX * 4;
 let inFlight = 0;
 let droppedForConcurrency = 0;
 

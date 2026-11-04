@@ -1,8 +1,11 @@
 import { NextResponse, type NextRequest } from "next/server";
+import { MAX_BODY_BYTES, analyticsEnvelopeSchema } from "@/lib/analytics/contract";
 import {
-  MAX_BODY_BYTES,
-  analyticsEnvelopeSchema,
-} from "@/lib/analytics/contract";
+  recordAccepted,
+  recordAttempt,
+  recordDrop,
+  recordInvalidEnvelope,
+} from "@/lib/analytics/health";
 import { ingestBatch } from "@/lib/analytics/ingest";
 import {
   decodeIdentity,
@@ -33,58 +36,84 @@ export const dynamic = "force-dynamic";
  * envelope we decline to store — no consent, rate limited, pool busy, database unavailable — is
  * none of a shopper's business and must never become a visible failure on a storefront.
  *
- * Nothing here is cached, and nothing it returns describes the store's data.
+ * Every refusal is counted (lib/analytics/health.ts) and separated into policy and operational,
+ * because a batch dropped for honouring consent is the system working and a batch dropped for
+ * a full pool is the system struggling. Only the second kind should ever page anyone.
  */
 
-const ACCEPTED = { status: 202 } as const;
-const accepted = () => new NextResponse(null, { ...ACCEPTED, headers: { "Cache-Control": "no-store" } });
+const accepted = () =>
+  new NextResponse(null, { status: 202, headers: { "Cache-Control": "no-store" } });
 const badRequest = () =>
-  NextResponse.json({ error: "Invalid analytics envelope." }, { status: 400, headers: { "Cache-Control": "no-store" } });
+  NextResponse.json(
+    { error: "Invalid analytics envelope." },
+    { status: 400, headers: { "Cache-Control": "no-store" } },
+  );
 
 export async function POST(req: NextRequest, { params }: { params: Promise<{ slug: string }> }) {
   const { slug } = await params;
+  recordAttempt();
 
-  // ---- step 4 (first half): bound the public surface before doing any work ----------------
+  // ---- step 4a: an abuse backstop, before any parsing ---------------------------------------
+  // Loose on purpose: carrier-grade NAT puts hundreds of real shoppers behind one address, and
+  // the meaningful limit is the per-visitor one further down. See RATE_LIMITS.
   const ip = clientIp(req.headers);
-  const perIp = await rateLimit(`analytics:ip:${ip}`, RATE_LIMITS.analyticsIngest);
-  if (!perIp.ok) return accepted();
+  if (!(await rateLimit(`analytics:ip:${ip}`, RATE_LIMITS.analyticsIp)).ok) {
+    recordDrop("rate-limit-ip");
+    return accepted();
+  }
 
-  // ---- step 5 (first half): refuse an oversized body before parsing it ---------------------
+  // ---- step 5a: refuse an oversized body before parsing it -----------------------------------
   const declared = Number(req.headers.get("content-length") ?? "0");
-  if (declared > MAX_BODY_BYTES) return badRequest();
+  if (declared > MAX_BODY_BYTES) {
+    recordInvalidEnvelope();
+    return badRequest();
+  }
   const raw = await req.text();
-  if (raw.length > MAX_BODY_BYTES) return badRequest();
+  if (raw.length > MAX_BODY_BYTES) {
+    recordInvalidEnvelope();
+    return badRequest();
+  }
 
   let parsedJson: unknown;
   try {
     parsedJson = JSON.parse(raw);
   } catch {
+    recordInvalidEnvelope();
     return badRequest();
   }
   const envelope = analyticsEnvelopeSchema.safeParse(parsedJson);
-  if (!envelope.success) return badRequest();
+  if (!envelope.success) {
+    recordInvalidEnvelope();
+    return badRequest();
+  }
 
-  // ---- step 1: resolve the tenant from the route -------------------------------------------
+  // ---- step 1: resolve the tenant from the route ---------------------------------------------
   const tenant = await loadTenant(slug);
-  if (!tenant || !canServeTenant(tenant)) return accepted();
+  if (!tenant || !canServeTenant(tenant)) {
+    recordDrop("unknown-tenant");
+    return accepted();
+  }
 
-  // ---- step 2: the tenant-bound bootstrap token --------------------------------------------
-  if (!verifyBootstrapToken(envelope.data.token, tenant.id).ok) return accepted();
+  // ---- step 2: the tenant-bound bootstrap token ----------------------------------------------
+  if (!verifyBootstrapToken(envelope.data.token, tenant.id).ok) {
+    recordDrop("bad-token");
+    return accepted();
+  }
 
-  // Collection is gated by the rollout; consent and the notice are not (that is Phase 1's D1).
-  if (!rolloutIncludes(tenant)) return accepted();
+  // Collection is gated by the rollout; consent and the notice are not (Phase 1's D1).
+  if (!rolloutIncludes(tenant)) {
+    recordDrop("out-of-rollout");
+    return accepted();
+  }
 
-  // ---- step 3: analytics consent ------------------------------------------------------------
+  // ---- step 3: analytics consent ---------------------------------------------------------------
   // The decisive check. Without a valid, current grant nothing is written and no identifier is
   // minted, so a refusing visitor leaves no trace of having been here.
   const consent = decodeConsent(req.cookies.get(consentCookieName(tenant.id))?.value);
   if (!consent || consent.v !== tenant.consentNoticeVersion || !consent.grants.analytics) {
+    recordDrop("no-consent");
     return accepted();
   }
-
-  // ---- step 4 (second half): a per-tenant bound as well ------------------------------------
-  const perTenant = await rateLimit(`analytics:tenant:${tenant.id}`, RATE_LIMITS.analyticsTenant);
-  if (!perTenant.ok) return accepted();
 
   const facts = {
     country: countryFrom(req.headers),
@@ -93,23 +122,57 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ slu
     sessionId: decodeIdentity("session", req.cookies.get(sessionCookieName(tenant.id))?.value),
   };
 
-  // ---- steps 7 to 11, under the concurrency ceiling ----------------------------------------
+  // ---- step 4b: the limit that actually shapes traffic ----------------------------------------
+  // Keyed on the signed visitor cookie, which we minted — fairer than an address shared by a
+  // whole carrier, and harder to rotate than one.
+  if (facts.visitorId) {
+    const perVisitor = await rateLimit(
+      `analytics:visitor:${tenant.id}:${facts.visitorId}`,
+      RATE_LIMITS.analyticsVisitor,
+    );
+    if (!perVisitor.ok) {
+      recordDrop("rate-limit-visitor");
+      return accepted();
+    }
+  } else {
+    // No cookie yet, so this batch may mint a visitor row. Bound identity creation per address
+    // rather than leaving it open, but keep it well above what a carrier NAT really produces.
+    const minting = await rateLimit(
+      `analytics:new-visitor:${tenant.id}:${ip}`,
+      RATE_LIMITS.analyticsNewVisitorIp,
+    );
+    if (!minting.ok) {
+      recordDrop("rate-limit-new-visitor");
+      return accepted();
+    }
+  }
+
+  if (!(await rateLimit(`analytics:tenant:${tenant.id}`, RATE_LIMITS.analyticsTenant)).ok) {
+    recordDrop("rate-limit-tenant");
+    return accepted();
+  }
+
+  // ---- steps 7 to 11, under the concurrency ceiling -------------------------------------------
   let outcome;
   try {
     outcome = await withAnalyticsSlot(() => ingestBatch(tenant, envelope.data, facts));
   } catch (error) {
     // Step 13: a database timeout or failure drops the batch. There is no server-side retry,
     // and the shopper never learns this happened.
+    recordDrop("database");
     console.error(
       "[analytics] batch dropped:",
       error instanceof Error ? error.message : "unknown error",
     );
     return accepted();
   }
-  // null means the process-local ceiling turned it away.
-  if (!outcome) return accepted();
+  if (!outcome) {
+    recordDrop("concurrency");
+    return accepted();
+  }
+  recordAccepted(outcome.inserted, outcome.rejectedOwnership);
 
-  // ---- step 12 is Phase 2's presence commit; step 13: answer -------------------------------
+  // ---- step 13: answer, carrying the identity forward -----------------------------------------
   const response = accepted();
   const isHttps = (req.headers.get("x-forwarded-proto") ?? "").split(",")[0]?.trim() === "https";
   const storePath = consentCookiePath(tenant);

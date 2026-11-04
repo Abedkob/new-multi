@@ -149,6 +149,10 @@ export const envSchema = z
     // checkout needs. See PRODUCTION.md for the per-instance arithmetic.
     ANALYTICS_DATABASE_POOL_MAX: z.coerce.number().int().min(1).max(50).default(5),
     ANALYTICS_MAX_BATCH_SIZE: z.coerce.number().int().min(1).max(100).default(20),
+    // How many batches may be in flight in one process before further ones are dropped. It sits
+    // in front of the pool so a burst becomes an immediate refusal rather than hundreds of
+    // handlers each waiting out connectionTimeoutMillis. Defaults to twice the pool.
+    ANALYTICS_MAX_IN_FLIGHT: z.coerce.number().int().min(1).max(500).optional(),
     ANALYTICS_SESSION_TIMEOUT_MINUTES: z.coerce.number().int().min(1).max(1440).default(30),
     ANALYTICS_ACTIVE_WINDOW_MINUTES: z.coerce.number().int().min(1).max(60).default(5),
     PLATFORM_GA_ID: z
@@ -243,6 +247,7 @@ function load() {
       PLATFORM_TIMEZONE: raw.PLATFORM_TIMEZONE || "Asia/Beirut",
       ANALYTICS_DATABASE_POOL_MAX: Number(raw.ANALYTICS_DATABASE_POOL_MAX) || 5,
       ANALYTICS_MAX_BATCH_SIZE: Number(raw.ANALYTICS_MAX_BATCH_SIZE) || 20,
+      ANALYTICS_MAX_IN_FLIGHT: Number(raw.ANALYTICS_MAX_IN_FLIGHT) || undefined,
       ANALYTICS_SESSION_TIMEOUT_MINUTES: Number(raw.ANALYTICS_SESSION_TIMEOUT_MINUTES) || 30,
       ANALYTICS_ACTIVE_WINDOW_MINUTES: Number(raw.ANALYTICS_ACTIVE_WINDOW_MINUTES) || 5,
       PLATFORM_GA_ID: raw.PLATFORM_GA_ID || undefined,
@@ -283,6 +288,7 @@ function load() {
         "PLATFORM_GA_ID",
         "ANALYTICS_DATABASE_POOL_MAX",
         "ANALYTICS_MAX_BATCH_SIZE",
+        "ANALYTICS_MAX_IN_FLIGHT",
         "ANALYTICS_SESSION_TIMEOUT_MINUTES",
         "ANALYTICS_ACTIVE_WINDOW_MINUTES",
       ] as const

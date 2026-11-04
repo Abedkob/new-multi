@@ -277,11 +277,10 @@ on `(id, tenantId)`, so a row can never point across tenants even if application
 - **The ingestion pool is the dangerous part.** The whole point is that analytics cannot starve
   checkout, and the only honest proof is P2-30: saturate it and place an order. Built first, and
   passing — see the checklist row.
-- **The concurrency ceiling is the dominant limiter under a burst, not the pool.** Measured: of
-  200 simultaneous batches, 12 were stored and the rest were dropped at the ceiling and the
-  per-IP limit. That is the designed behaviour at 20x capacity on one instance, and dropping is
-  correct — but if real traffic ever approaches it, raise `MAX_IN_FLIGHT` in
-  `lib/prisma-analytics.ts` before raising the pool, since the pool is what protects checkout.
+- **The concurrency ceiling is the dominant limiter under a burst, not the pool.** Measured via
+  the health counters: of 203 batches in a deliberate burst, 179 were dropped and every one of
+  them at the ceiling, with no rate limiter involved. That is the designed behaviour at ~20x
+  capacity on one instance. Under sustained realistic load it never engages at all.
 - **`PAGE_VIEW` on every navigation is the first real write volume.** Watch table growth against
   §12.4 during the pilot; partitioning stays off the table until volume approaches tens of
   millions, as the master plan says.
@@ -293,6 +292,39 @@ on `(id, tenantId)`, so a row can never point across tenants even if application
   the first time; without the bounded connect it would reintroduce the hang on a different path.
 
 ---
+
+## 8.1 Measured so far
+
+All against a **production build** (`next build && next start`), since a dev server recompiles
+routes and would make any capacity figure fiction.
+
+**Sustained realistic load** — `pnpm load:analytics`, 200 concurrent visitors browsing for three
+minutes, each flushing a small batch every ~10s with jitter:
+
+| | |
+|---|---|
+| Batches / events | 3573 sent, 7161 events |
+| Rate | ~1200 batches/min |
+| **Events stored** | **7161 of 7161 — 0.00% loss** |
+| Operational drops | 0 (health counters confirm: none of any kind) |
+| Ingestion latency | p50 24ms, **p95 38ms**, p99 173ms (budget: p95 < 150ms) |
+| Identity | exactly 200 visitor rows, 200 session rows |
+| Analytics connections | peak 5 of 5 |
+
+**Burst** — `pnpm e2e:analytics`, 200 simultaneous batches while a real order is placed:
+
+| | |
+|---|---|
+| Checkout under saturation | **192ms vs 192ms idle — 1.00x** |
+| Analytics connections | peak 5 of 5, never a sixth |
+| Batches | 203 attempted, 24 accepted, 179 dropped — **all at the concurrency ceiling** |
+| Responses | 200/200 answered 202 |
+
+**Capacity per instance.** At 200 concurrent visitors nothing was under strain — p95 38ms, five
+connections, no drops — so this is not a hardware ceiling. The first limit traffic actually
+meets is the configured per-store rate limit of 3000 batches/min, which at this browsing rate
+is **~500 concurrent visitors per store**. That is a number in `lib/rate-limit.ts`, not a
+property of the machine, and it is per store rather than per instance.
 
 ## 9. What "Phase 2 complete" means
 

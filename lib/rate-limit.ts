@@ -98,10 +98,32 @@ export const RATE_LIMITS = {
   // choice to a rate limit would be the worst possible failure here); only the receipt insert
   // is skipped, so the limit protects the table, never the visitor.
   consent: { limit: 30, windowMs: 10 * 60_000 },
-  // Analytics ingestion, per IP. A browsing visitor flushes a batch every ten seconds at most
-  // (lib/analytics tracker), so this is generous for a real person and bounded against a flood.
-  // Being blocked costs page views, never anything the shopper can see.
-  analyticsIngest: { limit: 120, windowMs: 60_000 },
+  // --- Analytics ingestion ----------------------------------------------------------------
+  // Limited primarily per VISITOR, not per IP. Carrier-grade NAT means a large share of mobile
+  // traffic — most of it, on Lebanese mobile networks — arrives from a handful of shared
+  // addresses. An IP-shaped limit tight enough to be meaningful would throttle a whole carrier
+  // and quietly delete the measurement for exactly the audience most stores care about, while
+  // an attacker just rotates addresses. The visitor cookie is signed and minted by us, so it is
+  // both the fairer key and the harder one to forge.
+  //
+  // A browsing visitor flushes at most one batch per ten seconds (the tracker's flush interval),
+  // so six a minute is normal and this is ten times that.
+  analyticsVisitor: { limit: 60, windowMs: 60_000 },
+  // Per IP, as an abuse backstop only — set high enough that a shared carrier address carrying
+  // hundreds of real shoppers never reaches it, and low enough to stop one machine hammering.
+  analyticsIp: { limit: 3_000, windowMs: 60_000 },
+  // Cookieless batches cannot be keyed by visitor yet, and each one can mint a visitor row, so
+  // identity creation gets its own bound — keyed per STORE AND address, so a burst at one
+  // storefront cannot consume another's allowance.
+  //
+  // The number is large because the failure mode is silent and bad. Measured: with this at
+  // 300/min, a burst of new arrivals from a single address exhausted it and then every
+  // following batch from those visitors was still cookieless, so they kept missing. A
+  // sustained run that should have lost 0.04% of events lost 11.37%, and nothing in the
+  // response said so. On a carrier NAT, "hundreds of genuinely new visitors from one address in
+  // a minute" is a normal campaign morning, not an attack. The per-store limit below is the
+  // real bound on how fast rows can be created.
+  analyticsNewVisitorIp: { limit: 1_200, windowMs: 60_000 },
   // And per store, so one busy or abused storefront cannot fill the table on everyone's behalf.
   analyticsTenant: { limit: 3_000, windowMs: 60_000 },
   // Importing an image from a pasted link makes the server fetch an outside URL: keyed per
