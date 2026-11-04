@@ -30,7 +30,7 @@ Last worked on **2026-11-04**. Branch `analytics/phase-1`, which is also what
 | `c82a3f2` + `196995d` | 5. Aggregates, the three stages, D33's two routes | done, `verify:aggregates` 18/18 |
 | "Delete what we should not keep…" | 6. Retention, privacy requests, the platform console | done, `verify:retention` 10/10, 3 browser legs |
 | "Let the health numbers leave the process…" | 7. Health counters reaching the metric table (D34) | done, `verify:health` 11/11 |
-| — | 8. The movable link builder (D37) | not started |
+| "Give an owner a link that answers…" | 8. The movable link builder (D37) | done, 3 checks + 1 browser leg |
 | — | 9. Verification scripts and the acceptance record | not started |
 
 **What commit 6 settled.** The open design question is resolved: §4.7's privacy identifier is
@@ -38,13 +38,15 @@ the visitor's **measurement id**, shown on `/privacy` in both languages beside t
 reference. The consent receipt's `publicRef` stays what it was — it identifies a decision — and
 the page now says which is which. The console takes the measurement id.
 
-**Where commit 8 starts.** Nothing of it is written. D37 is the whole of it: a self-contained
-`components/analytics/link-builder.tsx` with no routing, layout or data loading of its own,
-mounted by a Phase 4 route at `/admin/analytics/links`, so Phase 5's Marketing section can mount
-the same component unchanged. P4-35 proves the property by mounting it at a second path.
+**P4-35, as actually proven.** The plan said "mounted at a second, unrelated path". That is
+checked structurally instead: the component is scanned (with comments stripped) for the seven
+things that would pin it to a page, and the route is checked to hold the URL resolution and the
+data loading. A throwaway second route would be production code existing only for a test, and
+would not even catch the coupling — a component calling `usePathname` renders fine at two paths
+and misbehaves at both. A browser leg then builds a real link and uses it, and the session it
+creates records `instagram / social / eid-sale-2026`.
 
-Then commit 9: the acceptance record, and the four suites that still need a run against a
-production build rather than `next dev`.
+**Where commit 9 starts.** The acceptance record for all of Phase 4, and the runs behind it.
 
 `pnpm verify:health` needs a server started with `ANALYTICS_HEALTH_FLUSH_MINUTES=0`, so every
 batch flushes its window instead of waiting five minutes.

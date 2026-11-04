@@ -601,6 +601,49 @@ async function phase4() {
       "the console must not render for a store owner",
     );
     ok("P4-26a", `a store owner asking for the console was sent to ${new URL(ownerPage.url()).pathname}`);
+
+    // ------------------------------------------------- the link builder, in the owner's hands
+    // Structural movability is checked in verify:acquisition; what a browser adds is that the
+    // thing actually builds a usable link for the store it is open on.
+    await ownerPage.goto(`${BASE}/admin/analytics/links`, { waitUntil: "load" });
+    await ownerPage.locator('[data-testid="link-builder"]').waitFor();
+    await ownerPage.selectOption('[data-testid="link-builder-channel"]', "instagram");
+    await ownerPage.fill('[data-testid="link-builder-campaign"]', "Eid Sale 2026");
+    await ownerPage.fill('[data-testid="link-builder-content"]', "Story 1");
+    const built = await ownerPage.locator('[data-testid="link-builder-url"]').inputValue();
+    const builtUrl = new URL(built);
+    assert.equal(builtUrl.searchParams.get("utm_source"), "instagram");
+    assert.equal(builtUrl.searchParams.get("utm_medium"), "social");
+    assert.equal(
+      builtUrl.searchParams.get("utm_campaign"),
+      "eid-sale-2026",
+      "a campaign name a person typed must be normalized, or two spellings become two campaigns",
+    );
+    assert.equal(builtUrl.searchParams.get("utm_content"), "story-1");
+    assert.equal(
+      builtUrl.pathname,
+      `/store/${slug}`,
+      `the link must point at this store, got ${built}`,
+    );
+    // The ORIGIN is PLATFORM_BASE_URL, not this test server: the builder hands a merchant a
+    // link to paste in public, so it must use the store's real public origin rather than
+    // whatever port a check happens to run on. Which is exactly why the visit below is made
+    // against BASE with the built path and query — the part the builder is responsible for.
+    const linkPage = await ownerContext.newPage();
+    await linkPage.goto(`${BASE}${builtUrl.pathname}${builtUrl.search}`, { waitUntil: "load" });
+    await linkPage.locator('[data-testid="consent-accept-all"]').click();
+    await linkPage.waitForTimeout(12_000);
+    const fromLink = await prisma.analyticsSession.findFirst({
+      where: { tenantId: T, source: "instagram" },
+      orderBy: { startedAt: "desc" },
+    });
+    assert.ok(fromLink, "a visit through the built link must record its campaign");
+    assert.equal(fromLink.sourceKind, "campaign");
+    assert.equal(fromLink.medium, "social");
+    assert.equal(fromLink.campaign, "eid-sale-2026");
+    await linkPage.close();
+    ok("P4-35", "a link built in the admin recorded instagram / social / eid-sale-2026 when used");
+
     await idPage.close();
     await adminPage.close();
     await ownerContext.close();

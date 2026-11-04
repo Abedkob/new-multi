@@ -10,6 +10,9 @@ export const en = {
   "nav.discounts": "Discounts",
   "nav.categories": "Categories",
   "nav.storeContent": "Store content",
+  "nav.trackedLinks": "Tracked links",
+  "trackedLinks.page.description":
+    "Build a link that tells you where your visitors came from. Post it instead of your plain store link, and its channel and campaign show up in your own reports.",
   "nav.socialLinks": "Social links",
   "nav.viewStore": "View your store",
   "nav.changePassword": "Change password",

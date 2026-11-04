@@ -12,6 +12,9 @@ export const ar: Record<DictionaryKey, string> = {
   "nav.discounts": "الخصومات",
   "nav.categories": "الفئات",
   "nav.storeContent": "محتوى المتجر",
+  "nav.trackedLinks": "روابط مُتابَعة",
+  "trackedLinks.page.description":
+    "أنشئ رابطاً يخبرك من أين جاء زوّارك. انشره بدلاً من رابط متجرك العادي، وستظهر القناة والحملة في تقاريرك.",
   "nav.socialLinks": "روابط التواصل الاجتماعي",
   "nav.viewStore": "عرض متجرك",
   "nav.changePassword": "تغيير كلمة المرور",

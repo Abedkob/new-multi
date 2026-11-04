@@ -15,6 +15,7 @@ import "dotenv/config";
 import "./_owner";
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
+import { readFileSync } from "node:fs";
 import { prisma } from "../lib/prisma";
 import {
   ANALYTICS_SCHEMA_VERSION,
@@ -251,8 +252,85 @@ async function storedChecks() {
   }
 }
 
+/**
+ * P4-35: the link builder is movable, and builds a link the server will classify.
+ *
+ * "Movable" is a structural property, so it is checked structurally: what would stop Phase 5
+ * mounting this component in its Marketing tab is a dependency on the page it is on today.
+ * Mounting it at a throwaway second route to prove the same thing would add production code
+ * that exists only for a test, and would still not catch the coupling — a component that calls
+ * usePathname renders fine at two paths and behaves wrongly at both.
+ *
+ * The second half is the one that would actually hurt a merchant: the UTM values this produces
+ * must be the values lib/analytics/attribution.ts classifies, or a tagged Instagram link lands
+ * in a different report row from untagged Instagram traffic and one channel reads as two.
+ */
+function linkBuilderChecks() {
+  const raw = readFileSync("components/analytics/link-builder.tsx", "utf8");
+  // Comments are stripped first. The component's own header EXPLAINS that it must not reach for
+  // usePathname, and a scan over the prose would match that sentence and fail a component that
+  // is correct — a check that cannot tell code from a comment about code is worse than none.
+  const source = raw.replace(/\/\*[\s\S]*?\*\//g, "").replace(/^\s*\/\/.*$/gm, "");
+
+  const forbidden = [
+    ["usePathname", "the path it is mounted at"],
+    ["useRouter", "navigation"],
+    ["useSearchParams", "the query it is mounted with"],
+    ["use server", "a server action"],
+    ["@/lib/data/", "data loading"],
+    ["@/lib/prisma", "the database"],
+    ["next/navigation", "the router"],
+  ] as const;
+  for (const [needle, what] of forbidden) {
+    assert.ok(
+      !source.includes(needle),
+      `the link builder reaches for ${what} (${needle}), so Phase 5 cannot move it unchanged`,
+    );
+  }
+  assert.ok(raw.includes('"use client"'), "it is a client component");
+  assert.ok(
+    /export function LinkBuilder\(\{[\s\S]*?storeUrl[\s\S]*?destinations/.test(source),
+    "its inputs must arrive as props: the store URL and the destinations",
+  );
+  ok("P4-35", `the builder depends on none of ${forbidden.length} things that would pin it to a page`);
+
+  // The route is where the coupling lives, which is the point.
+  const page = readFileSync("app/admin/(panel)/analytics/links/page.tsx", "utf8");
+  assert.ok(page.includes("getStoreUrl"), "the route resolves the store's own URL");
+  assert.ok(page.includes("requireOwner"), "and it is the owner's page");
+  assert.ok(page.includes("<LinkBuilder"), "and it mounts the component");
+  ok("P4-35", "the route holds the URL resolution and the data loading, the component holds none");
+
+  // Every channel the builder offers must be a channel the ladder recognises, or a merchant's
+  // own link splits from their organic traffic from the same place.
+  const channels = [...source.matchAll(/source: "([a-z-]*)", medium: "([a-z-]+)"/g)].map((m) => ({
+    source: m[1],
+    medium: m[2],
+  }));
+  assert.ok(channels.length >= 5, `expected the channel table, found ${channels.length} entries`);
+  for (const channel of channels) {
+    if (!channel.source) continue; // the "something else" row, named by the merchant
+    const classified = resolveAttribution({ referrerHost: `${channel.source}.com` });
+    const tagged = resolveAttribution({ source: channel.source, medium: channel.medium });
+    assert.equal(tagged.source, channel.source, `a tagged ${channel.source} link keeps its source`);
+    assert.equal(tagged.sourceKind, "campaign", "an explicit utm_source is always a campaign");
+    // Where the host is one the ladder knows, the tagged medium must match what it infers, so
+    // the two land in one row rather than two.
+    if (classified.sourceKind === "social" || classified.sourceKind === "search") {
+      assert.equal(
+        channel.medium,
+        classified.medium,
+        `${channel.source}: the builder tags medium "${channel.medium}" while the ladder infers ` +
+          `"${classified.medium}" for the same place, so one channel would read as two`,
+      );
+    }
+  }
+  ok("P4-35", `all ${channels.length} offered channels tag what the server's ladder classifies`);
+}
+
 async function main() {
   ladderChecks();
+  linkBuilderChecks();
   await storedChecks();
 }
 
