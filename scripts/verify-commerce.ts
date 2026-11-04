@@ -6,6 +6,8 @@
 import "dotenv/config";
 import "./_owner";
 import assert from "node:assert/strict";
+import { en } from "../lib/i18n/dictionaries/en";
+import { MSG_SEP, resolveMessage } from "../lib/i18n/types";
 import { prisma } from "../lib/prisma";
 import { descendantIds, flattenCategories } from "../lib/categories";
 import {
@@ -222,8 +224,16 @@ async function main() {
       variants: [v({})],
       ...over,
     });
+    // ProductError.message carries a dictionary key (or an encodeMessage "key|params" string)
+    // since the admin became bilingual, not the English sentence it used to. Assert on what a
+    // user is actually shown by resolving through the English dictionary, rather than relaxing
+    // these patterns to match keys - the point of each check is the message, not its id.
+    const human = (raw: string) => {
+      const [key] = raw.split(MSG_SEP);
+      return key in en ? resolveMessage((k) => en[k], raw) : raw;
+    };
     const productErr = (p: Promise<unknown>, pattern: RegExp) =>
-      assert.rejects(p, (e) => e instanceof ProductError && pattern.test(e.message));
+      assert.rejects(p, (e) => e instanceof ProductError && pattern.test(human(e.message)));
 
     let shirt: Awaited<ReturnType<typeof createProduct>>;
     let mug: Awaited<ReturnType<typeof createProduct>>;

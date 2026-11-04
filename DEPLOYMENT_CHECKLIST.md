@@ -84,6 +84,40 @@ Fast-track checklist for deploying to Dockploy.
   ```
   Without this, consent decisions cannot be recorded in an RLS-enforced environment.
 
+- [ ] **Verify the restricted role is real in production**
+
+  Row-Level Security only bites for a role that is neither superuser nor BYPASSRLS. If
+  `APP_DATABASE_URL` names a role that does not exist, or the app falls back to the owner,
+  every RLS policy is inert and nothing says so. Run all five inside the database container:
+
+  ```bash
+  # 1. The role exists and is restricted — expect rolsuper=f, rolbypassrls=f, rolcanlogin=t
+  docker exec -it multitenant-postgres psql -U postgres -d multitenant -c     "select rolname, rolsuper, rolbypassrls, rolcanlogin from pg_roles where rolname='app_user';"
+  ```
+
+  ```bash
+  # 2. The app is actually connecting as it — expect app_user, not postgres
+  docker exec -it multitenant-postgres psql -U postgres -d multitenant -c     "select usename, count(*) from pg_stat_activity where datname=current_database() group by 1;"
+  ```
+
+  ```bash
+  # 3. Every tenant table has RLS enabled AND forced — expect zero rows back
+  docker exec -it multitenant-postgres psql -U postgres -d multitenant -c     "select relname from pg_class where relnamespace='public'::regnamespace and relkind='r' and relname in ('Category','Product','ProductVariant','ProductImage','TenantContent','Order','OrderItem','DiscountCampaign','DiscountProduct','Coupon','CouponProduct','AnalyticsConsentReceipt') and not (relrowsecurity and relforcerowsecurity);"
+  ```
+
+  ```bash
+  # 4. Fail-closed smoke test: as app_user with no tenant context, every count must be 0
+  docker exec -it multitenant-postgres psql -U app_user -d multitenant -c     "select (select count(*) from \"Product\") products, (select count(*) from \"Order\") orders, (select count(*) from \"AnalyticsConsentReceipt\") receipts;"
+  ```
+
+  ```bash
+  # 5. Connection headroom — compare max_connections against the app's pool size
+  docker exec -it multitenant-postgres psql -U postgres -d multitenant -c     "show max_connections; select count(*) from pg_stat_activity where datname=current_database();"
+  ```
+
+  Step 4 is the one that catches a silently-disabled RLS: if it returns real counts, the app
+  role is privileged and tenant isolation is resting on application code alone.
+
 - [ ] **Verify consent before announcing anything**
   ```bash
   pnpm verify:consent   # 43 checks: cookie signing, RLS, contrast, tag gating, env
