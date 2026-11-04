@@ -25,6 +25,7 @@ import {
   type AttributionContext,
   type PageKind,
 } from "@/lib/analytics/contract";
+import { pageKindFromPath } from "@/lib/analytics/request";
 
 /** Flush on this cadence, or sooner when the queue fills. */
 const FLUSH_INTERVAL_MS = 10_000;
@@ -34,16 +35,22 @@ const PRESENCE_INTERVAL_MS = 60_000;
 
 export type TrackInput = {
   type: AnalyticsEventType;
-  pageKind: PageKind;
+  /**
+   * Omit it and the tracker derives it from the current path. Emitters that sit in shared state
+   * (the cart provider) or deep inside a template then do not each need to know the store's
+   * base path, and cannot disagree with each other about what kind of page this is.
+   */
+  pageKind?: PageKind;
   productId?: string;
   variantId?: string;
   quantity?: number;
   resultCount?: number;
 };
 
-type QueuedEvent = TrackInput & {
+type QueuedEvent = Omit<TrackInput, "pageKind"> & {
   eventId: string;
   occurredAt: number;
+  pageKind: PageKind;
   attributionContext?: AttributionContext;
 };
 
@@ -144,6 +151,11 @@ export function AnalyticsTracker({
     (input: TrackInput) => {
       const event: QueuedEvent = {
         ...input,
+        pageKind:
+          input.pageKind ??
+          (typeof window === "undefined"
+            ? "other"
+            : pageKindFromPath(window.location.pathname, basePath)),
         eventId:
           typeof crypto !== "undefined" && crypto.randomUUID
             ? crypto.randomUUID()
@@ -158,7 +170,7 @@ export function AnalyticsTracker({
       queue.current.push(event);
       if (queue.current.length >= FLUSH_AT_EVENTS) flush(false);
     },
-    [flush],
+    [basePath, flush],
   );
 
   useEffect(() => {

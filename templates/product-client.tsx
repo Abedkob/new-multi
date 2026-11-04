@@ -2,7 +2,8 @@
 
 import Link from "next/link";
 import { Check, Share2 } from "lucide-react";
-import { createContext, useContext, useEffect, useMemo, useState, useSyncExternalStore } from "react";
+import { createContext, useContext, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
+import { useAnalytics } from "@/components/analytics/tracker";
 import { SocialPlatformIcon } from "@/components/social-platform-icon";
 import { whatsappBrandClass } from "@/components/whatsapp-contact-button";
 import { Badge } from "@/components/ui/badge";
@@ -97,6 +98,17 @@ export function ProductProvider({
   useEffect(() => {
     track.viewItem({ id, name, priceCents, quantity: 1 });
   }, [track, id, name, priceCents]);
+
+  // The same moment, for first-party analytics: PRODUCT_VIEW, carrying the product id and
+  // nothing else. React runs effects twice in development and a product view is not idempotent
+  // on our side (each event gets its own id), so the last product reported is remembered.
+  const firstParty = useAnalytics();
+  const lastViewed = useRef<string | null>(null);
+  useEffect(() => {
+    if (lastViewed.current === id) return;
+    lastViewed.current = id;
+    firstParty.track({ type: "PRODUCT_VIEW", pageKind: "product", productId: id });
+  }, [firstParty, id]);
 
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }

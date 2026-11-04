@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
+import { CartViewTracker } from "@/components/analytics/commerce-events";
 import { privatePageMeta } from "@/lib/seo";
 import { loadStorefrontData, loadTenant } from "@/lib/data/storefront";
 import { getTemplate } from "@/templates";
@@ -21,13 +22,16 @@ export default async function CartPage({ params }: PageProps<"/store/[slug]/cart
   if (!tenant || !data) notFound();
 
   return (
-    <CartView
-      slug={slug}
-      basePath={data.store.basePath}
-      content={data.content}
-      deliveryFeeCents={tenant.deliveryFeeCents}
-      deliveryNote={tenant.deliveryNote}
-      style={getTemplate(tenant.templateId).pageStyle}
-    />
+    <>
+      <CartViewTracker />
+      <CartView
+        slug={slug}
+        basePath={data.store.basePath}
+        content={data.content}
+        deliveryFeeCents={tenant.deliveryFeeCents}
+        deliveryNote={tenant.deliveryNote}
+        style={getTemplate(tenant.templateId).pageStyle}
+      />
+    </>
   );
 }
