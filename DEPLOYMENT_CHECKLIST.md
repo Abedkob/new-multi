@@ -17,6 +17,10 @@ Fast-track checklist for deploying to Dockploy.
 
 ### Environment Variables Ready
 - [ ] Generate `AUTH_SECRET`: `openssl rand -base64 32`
+- [ ] Generate `ANALYTICS_SIGNING_SECRET`: `openssl rand -base64 32` (required in production)
+- [ ] Decide `PLATFORM_PRIVACY_NAME` / `PLATFORM_PRIVACY_EMAIL` (required in production - they
+      appear on every store's privacy page)
+- [ ] Confirm `PLATFORM_TIMEZONE` is the right reporting basis for new stores
 - [ ] Set strong passwords:
   - `DB_PASSWORD` (PostgreSQL)
   - `APP_DB_PASSWORD` (RLS-bound app user)
@@ -71,6 +75,21 @@ Fast-track checklist for deploying to Dockploy.
   docker logs multitenant-app | grep -i migration
   # Should see: "✓ Migration applied" or similar
   ```
+
+- [ ] **Refresh the restricted database role**
+  ```bash
+  # Grants the RLS-bound app_user access to tables added by new migrations
+  # (AnalyticsConsentReceipt in this release). Safe to re-run.
+  psql -d <database> -v app_pw="<APP_PASSWORD>" -f scripts/sql/rls-role.sql
+  ```
+  Without this, consent decisions cannot be recorded in an RLS-enforced environment.
+
+- [ ] **Verify consent before announcing anything**
+  ```bash
+  pnpm verify:consent   # 43 checks: cookie signing, RLS, contrast, tag gating, env
+  ```
+  Then load a storefront with DevTools open on the Network tab, filter for `google`, and
+  reload: it must stay empty until Accept is clicked.
 
 - [ ] **Seed Platform Admin**
   ```bash

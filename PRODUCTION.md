@@ -35,6 +35,25 @@ REDIS_PASSWORD="STRONG_REDIS_PASSWORD"
 PLATFORM_ADMIN_EMAIL="admin@example.com"
 PLATFORM_ADMIN_PASSWORD="STRONG_ADMIN_PASSWORD"
 
+# Storefront analytics and consent (required in production)
+# ANALYTICS_SIGNING_SECRET signs each store's consent cookie. Generate a fresh one:
+#   openssl rand -base64 32
+# PLATFORM_PRIVACY_NAME/EMAIL identify the platform as a joint controller on every
+# store's privacy page; the app refuses to start in production without them.
+ANALYTICS_SIGNING_SECRET="GENERATE_A_32_CHAR_SECRET"
+ANALYTICS_SIGNING_KEY_VERSION="1"
+PLATFORM_PRIVACY_NAME="Your Company"
+PLATFORM_PRIVACY_EMAIL="privacy@example.com"
+PLATFORM_PRIVACY_URL="https://example.com/privacy"
+PLATFORM_DEFAULT_LOCALE="en"
+PLATFORM_TIMEZONE="Asia/Beirut"
+# off | pilot | all. Gates first-party COLLECTION only: the consent notice and the
+# gating of per-store GA/Ads/Meta tags apply to every store regardless.
+ANALYTICS_ROLLOUT_MODE="off"
+ANALYTICS_PILOT_TENANT_SLUG=""
+# The platform's own GA4 property, loaded on admin/platform/login only - never a storefront.
+PLATFORM_GA_ID=""
+
 # Cloudflare R2 (optional for production image uploads)
 # R2_ACCOUNT_ID="your-32-char-account-id"
 # R2_ACCESS_KEY_ID="..."
@@ -80,6 +99,12 @@ In Dockploy Dashboard:
      Referrer-Policy: no-referrer-when-downgrade
      Strict-Transport-Security: max-age=31536000; includeSubDomains
      ```
+
+### Rotating the consent signing secret
+
+Changing `ANALYTICS_SIGNING_SECRET` invalidates every stored consent decision: visitors are
+asked again rather than the platform honouring a grant it can no longer verify. Bump
+`ANALYTICS_SIGNING_KEY_VERSION` alongside it so the change is recorded.
 
 ## Deployment Process
 
