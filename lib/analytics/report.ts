@@ -47,14 +47,50 @@ function dayFilter(range: DayRange) {
 
 const zero = (n: number | null | undefined) => n ?? 0;
 
+/**
+ * A total over a column that some days never measured, or null.
+ *
+ * Several columns were added to the aggregates after they had history (D44, D48, D48a), so an
+ * older day holds null rather than 0 — "nobody asked" is not "nobody came". Postgres's `sum`
+ * skips nulls, so totalling such a range silently under-reports: a 30-day window containing 10
+ * measured days returns a third of the real figure and looks like a decline.
+ *
+ * `rows` is how many rows the range has and `measured` how many of them carry the column. When
+ * they differ the answer is null, and the view says the period is not fully measured instead of
+ * showing a number that is confidently too small.
+ */
+function totalIfComplete(
+  sum: number | null | undefined,
+  measured: number,
+  rows: number,
+): number | null {
+  if (rows === 0) return 0;
+  return measured === rows ? zero(sum) : null;
+}
+
+/** Adds two possibly-unmeasured totals. Unmeasured wins: a partial sum is worse than no sum. */
+const addMeasured = (a: number | null, b: number | null) => (a === null || b === null ? null : a + b);
+
 // ---------------------------------------------------------------------------------------------
 // Daily totals
 // ---------------------------------------------------------------------------------------------
 
-/** The daily aggregate's columns, summed over a range. Named exactly as the table names them. */
+/**
+ * The daily aggregate's columns, summed over a range.
+ *
+ * One column is renamed on the way out, and it is the most important line in this file (D49).
+ * `AnalyticsDailyMetric.visitors` is *distinct visitors that day*. Summing it over a week does
+ * not give distinct visitors for the week: someone who came on Monday and Thursday is counted
+ * twice. The honest name for the sum is **visitor-days**, so that is what it is called here.
+ * Nothing downstream can label it "visitors" by accident, and a view that wants real distinct
+ * visitors for a period has to add a column to the aggregate rather than add up this one.
+ *
+ * `newVisitors` needs no such treatment: a visitor is new on exactly one day, so the sum over a
+ * range really is the number of first-time visitors in it.
+ */
 export type StoreTotals = {
   sessions: number;
-  visitors: number;
+  visitorDays: number;
   newVisitors: number;
   productViewSessions: number;
   addToCartSessions: number;
@@ -69,7 +105,8 @@ export type StoreTotals = {
   cancelledOrderValueCents: number;
 };
 
-const TOTAL_KEYS = [
+/** The table's own column names, which differ from `StoreTotals` by exactly one (see above). */
+const DAILY_COLUMNS = [
   "sessions",
   "visitors",
   "newVisitors",
@@ -84,19 +121,32 @@ const TOTAL_KEYS = [
   "orderValueCents",
   "cancelledOrders",
   "cancelledOrderValueCents",
-] as const satisfies readonly (keyof StoreTotals)[];
+] as const;
+
+type DailyColumn = (typeof DAILY_COLUMNS)[number];
+
+/** The one rename, in one place: the table's `visitors` becomes `visitorDays`. */
+const totalKeyFor = (column: DailyColumn): keyof StoreTotals =>
+  column === "visitors" ? "visitorDays" : column;
+
+export const TOTAL_KEYS = DAILY_COLUMNS.map(totalKeyFor);
 
 export const EMPTY_TOTALS: StoreTotals = Object.fromEntries(
   TOTAL_KEYS.map((k) => [k, 0]),
 ) as StoreTotals;
 
+function totalsFrom(row: Partial<Record<DailyColumn, number | null>>): StoreTotals {
+  return Object.fromEntries(
+    DAILY_COLUMNS.map((column) => [totalKeyFor(column), zero(row[column])]),
+  ) as StoreTotals;
+}
+
 async function sumDaily(db: TxClient, tenantId: string, range: DayRange): Promise<StoreTotals> {
   const summed = await db.analyticsDailyMetric.aggregate({
     where: { tenantId, localDay: dayFilter(range) },
-    _sum: Object.fromEntries(TOTAL_KEYS.map((k) => [k, true])) as Record<string, true>,
+    _sum: Object.fromEntries(DAILY_COLUMNS.map((k) => [k, true])) as Record<string, true>,
   });
-  const sums = summed._sum as unknown as Record<string, number | null>;
-  return Object.fromEntries(TOTAL_KEYS.map((k) => [k, zero(sums[k])])) as StoreTotals;
+  return totalsFrom(summed._sum as unknown as Record<string, number | null>);
 }
 
 /** One row per local day in the range, including days with no row at all, as zeros. */
@@ -116,10 +166,7 @@ async function dailySeries(
   // segment over it and shows a quiet Sunday as if it had been busy.
   return daysIn(range).map((day) => {
     const row = byDay.get(day);
-    const point = row
-      ? (Object.fromEntries(TOTAL_KEYS.map((k) => [k, zero(row[k])])) as StoreTotals)
-      : EMPTY_TOTALS;
-    return { day, ...point };
+    return { day, ...(row ? totalsFrom(row) : EMPTY_TOTALS) };
   });
 }
 
@@ -128,7 +175,12 @@ export type StoreRates = {
   conversionRate: number | null;
   whatsappClickRate: number | null;
   averageOrderValueCents: number | null;
-  newVisitorShare: number | null;
+  /**
+   * First-time visitors as a share of visitor-days, which over a multi-day range is "the share
+   * of daily visitors who were there for the first time" — not a share of people. Named for
+   * what it divides by, because the tempting reading of it is wrong.
+   */
+  newVisitorShareOfVisitorDays: number | null;
 };
 
 function ratesOf(t: StoreTotals): StoreRates {
@@ -136,7 +188,7 @@ function ratesOf(t: StoreTotals): StoreRates {
     conversionRate: rate(t.orders, t.sessions),
     whatsappClickRate: rate(t.whatsappClickSessions, t.sessions),
     averageOrderValueCents: averageCents(t.orderValueCents, t.orders),
-    newVisitorShare: rate(t.newVisitors, t.visitors),
+    newVisitorShareOfVisitorDays: rate(t.newVisitors, t.visitorDays),
   };
 }
 
@@ -285,8 +337,17 @@ export function funnelReport(tenantId: string, range: DayRange): Promise<FunnelR
 
 export type ProductRow = {
   productId: string;
+  /**
+   * The name the product carried on the most recent day in the range (D44), or null when no day
+   * recorded one — a product deleted before the snapshot column existed. Null is the view's cue
+   * to print "Deleted product", never an empty name.
+   */
+  productName: string | null;
   viewSessions: number;
   views: number;
+  /** Distinct viewers per day, summed: see `visitorDays` on StoreTotals. Null if unmeasured. */
+  viewerDays: number | null;
+  returningViewerDays: number | null;
   addToCartSessions: number;
   whatsappClickSessions: number;
   purchasingSessions: number;
@@ -302,6 +363,8 @@ export type ProductRow = {
 const PRODUCT_SUMS = {
   viewSessions: true,
   views: true,
+  viewVisitors: true,
+  returningViewVisitors: true,
   addToCartSessions: true,
   whatsappClickSessions: true,
   purchasingSessions: true,
@@ -314,33 +377,64 @@ async function productSums(db: TxClient, tenantId: string, range: DayRange) {
     by: ["productId"],
     where: { tenantId, localDay: dayFilter(range) },
     _sum: PRODUCT_SUMS,
+    // _count over a nullable column counts the rows that HAVE it, which is how a partly
+    // measured range is told apart from a quiet one (see totalIfComplete).
+    _count: { _all: true, viewVisitors: true, returningViewVisitors: true },
   });
-  return new Map(rows.map((r) => [r.productId, r._sum]));
+  return new Map(rows.map((r) => [r.productId, r]));
+}
+
+/**
+ * The name to show for each product: the newest non-null snapshot in the range.
+ *
+ * Newest rather than oldest because a renamed product should read as what it is called now,
+ * while a deleted one keeps the last name anyone recorded for it.
+ */
+async function productNames(db: TxClient, tenantId: string, range: DayRange) {
+  const rows = await db.analyticsProductDaily.findMany({
+    where: { tenantId, localDay: dayFilter(range), productName: { not: null } },
+    select: { productId: true, productName: true },
+    orderBy: { localDay: "desc" },
+  });
+  const names = new Map<string, string>();
+  for (const row of rows) {
+    if (row.productName && !names.has(row.productId)) names.set(row.productId, row.productName);
+  }
+  return names;
 }
 
 /**
  * Per-product figures for the range, busiest first.
  *
- * It returns `productId` only. Naming the product is the caller's job for now, and a product
- * deleted since cannot be named at all — which is D44's gap: `AnalyticsProductDaily` stores no
- * name, so the snapshot and its backfill land in their own commit rather than being faked here.
+ * `productName` is the snapshot the recompute stored (D44), so a product deleted since still
+ * names itself. Null means no day in the range recorded a name — a product that was already
+ * gone before the column existed — and the view prints "Deleted product" for it.
  */
 export function productReport(tenantId: string, range: DayRange): Promise<ProductRow[]> {
   const comparedWith = previousPeriod(range);
   return withTenant(tenantId, async (db) => {
-    const [now, before] = await Promise.all([
+    const [now, before, names] = await Promise.all([
       productSums(db, tenantId, range),
       productSums(db, tenantId, comparedWith),
+      productNames(db, tenantId, range),
     ]);
-    const rows: ProductRow[] = [...now.entries()].map(([productId, s]) => {
-      const past = before.get(productId);
+    const rows: ProductRow[] = [...now.entries()].map(([productId, row]) => {
+      const s = row._sum;
+      const past = before.get(productId)?._sum;
       const viewSessions = zero(s.viewSessions);
       const acted =
         zero(s.addToCartSessions) + zero(s.whatsappClickSessions) + zero(s.purchasingSessions);
       return {
         productId,
+        productName: names.get(productId) ?? null,
         viewSessions,
         views: zero(s.views),
+        viewerDays: totalIfComplete(s.viewVisitors, row._count.viewVisitors, row._count._all),
+        returningViewerDays: totalIfComplete(
+          s.returningViewVisitors,
+          row._count.returningViewVisitors,
+          row._count._all,
+        ),
         addToCartSessions: zero(s.addToCartSessions),
         whatsappClickSessions: zero(s.whatsappClickSessions),
         purchasingSessions: zero(s.purchasingSessions),
@@ -379,17 +473,27 @@ export type AcquisitionRow = {
   orders: number;
   orderValueCents: number;
   whatsappClickSessions: number;
+  /** Intent per source, in its own field. Never added to `orderValueCents` (§3.4). */
+  whatsappPotentialValueCents: number | null;
+  /** Null when some day in the range never measured it (D48). See `totalIfComplete`. */
+  visitorDays: number | null;
+  productViewSessions: number | null;
+  cartSessions: number | null;
   conversionRate: number | null;
   change: { sessions: Delta; orders: Delta; orderValueCents: Delta };
 };
 
 const ACQUISITION_SUMS = {
   sessions: true,
+  visitors: true,
+  productViewSessions: true,
+  cartSessions: true,
   lastTouchOrders: true,
   lastTouchOrderValueCents: true,
   firstTouchOrders: true,
   firstTouchOrderValueCents: true,
   whatsappClickSessions: true,
+  whatsappPotentialValueCents: true,
 } as const;
 
 type SourceKey = { sourceKind: string; source: string; medium: string; campaign: string };
@@ -402,6 +506,13 @@ async function acquisitionSums(db: TxClient, tenantId: string, range: DayRange) 
     by: ["sourceKind", "source", "medium", "campaign"],
     where: { tenantId, localDay: dayFilter(range) },
     _sum: ACQUISITION_SUMS,
+    _count: {
+      _all: true,
+      visitors: true,
+      productViewSessions: true,
+      cartSessions: true,
+      whatsappPotentialValueCents: true,
+    },
   });
   return new Map(rows.map((r) => [acquisitionKey(r), r]));
 }
@@ -409,11 +520,12 @@ async function acquisitionSums(db: TxClient, tenantId: string, range: DayRange) 
 /**
  * Where the traffic came from, and what it did.
  *
- * Fewer columns than §5.5 asks for: the aggregate holds sessions, orders, order value and
- * WhatsApp click sessions per source, but not visitors, product viewers, cart sessions or
- * potential WhatsApp value. Those are a change to `AnalyticsAcquisitionDaily` and a recompute,
- * not something to derive here — a per-source figure apportioned from a store-wide one would be
- * wrong in exactly the way that cannot be noticed. The view shows what exists.
+ * All nine of §5.5's figures, now that the recompute counts the four it was missing (D48). The
+ * four are nullable: a day recorded before that change holds null rather than 0, so a range
+ * that reaches back past it reports null instead of a total that is quietly too small.
+ *
+ * They are counted per source by the recompute, never apportioned here from a store-wide
+ * figure — a share-of-sessions estimate would look complete and be wrong with no way to tell.
  */
 export function acquisitionReport(
   tenantId: string,
@@ -447,6 +559,18 @@ export function acquisitionReport(
         orders,
         orderValueCents: valueOf(s),
         whatsappClickSessions: zero(s.whatsappClickSessions),
+        whatsappPotentialValueCents: totalIfComplete(
+          s.whatsappPotentialValueCents,
+          r._count.whatsappPotentialValueCents,
+          r._count._all,
+        ),
+        visitorDays: totalIfComplete(s.visitors, r._count.visitors, r._count._all),
+        productViewSessions: totalIfComplete(
+          s.productViewSessions,
+          r._count.productViewSessions,
+          r._count._all,
+        ),
+        cartSessions: totalIfComplete(s.cartSessions, r._count.cartSessions, r._count._all),
         conversionRate: rate(orders, sessions),
         change: {
           sessions: delta(sessions, zero(past?.sessions)),
@@ -479,6 +603,19 @@ export async function campaignResults(
     existing.orders += row.orders;
     existing.orderValueCents += row.orderValueCents;
     existing.whatsappClickSessions += row.whatsappClickSessions;
+    // Null plus a number is null, not the number: a campaign whose Instagram traffic predates
+    // these columns has no honest visitor-day total, and showing the WhatsApp half alone would
+    // be a figure that is too small and looks precise.
+    existing.whatsappPotentialValueCents = addMeasured(
+      existing.whatsappPotentialValueCents,
+      row.whatsappPotentialValueCents,
+    );
+    existing.visitorDays = addMeasured(existing.visitorDays, row.visitorDays);
+    existing.productViewSessions = addMeasured(
+      existing.productViewSessions,
+      row.productViewSessions,
+    );
+    existing.cartSessions = addMeasured(existing.cartSessions, row.cartSessions);
     existing.conversionRate = rate(existing.orders, existing.sessions);
     existing.change = {
       sessions: delta(

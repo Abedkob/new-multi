@@ -22,11 +22,13 @@ all be "working software" and still cost a merchant money.
 | Commit | What landed | State |
 |---|---|---|
 | 1 | `lib/analytics/report.ts`, `lib/analytics/compare.ts`, `scripts/verify-reports.ts` (18 checks). The read layer and the rules that stop it misleading anyone: aggregate-only enforced by walking report.ts's own imports, day ranges proven across Beirut's 23- and 25-hour days, null rates instead of zeros, a trend that refuses to judge below its sample floor, the two money figures kept apart, and an empty funnel step shown as zero. No UI. | done |
-| 2–10 | §5's sequence. | not started |
+| 2 | **Was commit 3**, brought forward: `20261106120000_report_columns` and the recompute that fills it. D44's product-name snapshot (which survives a later recompute, or the nightly pass would erase the name of every product deleted in the last month), D48a's per-product viewers, D48's four per-source columns, and D49's `visitorDays` rename. Also a bug this work exposed: `AnalyticsAcquisitionDaily.whatsappClickSessions` was initialised to 0 and never assigned, so every campaign would have reported no WhatsApp clicks. `verify:reports` is 23 checks. | done |
+| 3 | `insights.ts` — **was commit 2**. Swapped, because §6's "frequently revisited product" needs the columns above; writing the rule first would have meant writing it against data that did not exist. | in progress |
+| 4–10 | §5's sequence, unchanged. | not started |
 
-Found while building, recorded as decisions rather than worked around: **D48** (four of §5.5's
-per-source columns are not in the aggregate) and **D44** (no product name is). Both are fixed by
-one migration in commit 3; neither is faked in the view meanwhile.
+Four gaps found by building rather than by planning, each recorded as a decision instead of
+worked around: **D44**, **D48**, **D48a** and **D49**. The first three were missing columns; the
+last was a column that existed and meant something other than its name.
 
 ## 1. Scope
 
@@ -72,6 +74,8 @@ one migration in commit 3; neither is faked in the view meanwhile.
 | **D45** | What does a date range mean? | **Store-local days, end-inclusive, resolved by `lib/analytics/local-day.ts`.** "Last 7 days" is seven local days ending today, and a comparison period is the seven before it — not 168 hours, which would silently shift on the 23- and 25-hour days this platform's default zone actually has. Every view carries the store's timezone indicator (§5.1). |
 | **D46** | What does the funnel show when a step is missing? | The step, with zero, and the drop-off above it. A funnel that hides an empty step makes a broken storefront look like a narrow one. Website and WhatsApp paths stay visually separate and never share a monetary total (§5.4, and §3.4's rule that intent is not revenue). |
 | **D48** | Acquisition is missing four of the columns §5.5 asks for. Where do they come from? | **From the aggregate, in commit 3, not from arithmetic in the view.** Found while writing `report.ts`: `AnalyticsAcquisitionDaily` holds sessions, first/last-touch orders and value, and WhatsApp click sessions — but §5.5 also asks for visitors, product viewers, cart sessions and potential WhatsApp value **per source**. Those cannot be derived from a store-wide total: apportioning 40 store visitors across three sources by their session share produces a number that is plausible, wrong, and impossible to notice. So the columns are added beside D44's migration (the recompute already groups by attribution, so it is the same query learning four more counts) and backfilled by the 30-day recompute. Until then the view shows what exists rather than what looks complete. |
+| **D48a** | §5.3 wants returning viewers per product, and §6 a "frequently revisited product". From what? | **Two counted columns, not a ratio.** `AnalyticsProductDaily` had views and view sessions but no visitors, so "10 visitors plus a repeat-view rate" had nothing to stand on. `viewVisitors` and `returningViewVisitors` are added beside D44's name, and "returning" is read from the visitor's own `firstSeenAt` rather than from view count: two views in one afternoon is one interested person, not a returning one. |
+| **D49** | What does "visitors" mean over a range? | **It does not mean visitors, so it is not called that.** `AnalyticsDailyMetric.visitors` is distinct visitors *that day*; summing it over a week counts Monday-and-Thursday's visitor twice. The report layer therefore exposes **`visitorDays`**, and the rate built on it is `newVisitorShareOfVisitorDays`. Nothing downstream can label it "visitors" by accident, and a view that needs true distinct visitors for a period must add a column to the aggregate rather than add up this one. `newVisitors` is exempt and stays a plain sum: a visitor is new on exactly one day. |
 | **D47** | Does an admin-only browser suite need a custom-domain leg? | **No, and the exemption is written down rather than assumed.** `/admin` and `/platform` are refused on a store's own domain by `proxy.ts` (`PLATFORM_ONLY_PREFIXES`), so there is no custom-domain behaviour to test — unlike the storefront, where two phases of defects hid there. `verify:e2e-policy` gains an `ADMIN_ONLY` set with that reason, and a suite in it must prove the refusal instead: `/admin/marketing` on a store domain must not render. |
 
 ## 3. Data model

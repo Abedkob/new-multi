@@ -207,26 +207,39 @@ export async function recomputeDay(tenant: AggregateTenant, day: LocalDay): Prom
         productId: string;
         view_sessions: bigint;
         views: bigint;
+        view_visitors: bigint;
+        returning_view_visitors: bigint;
         cart_sessions: bigint;
         whatsapp_sessions: bigint;
       }[]
     >(Prisma.sql`
       SELECT
-        "productId",
-        count(DISTINCT CASE WHEN "type" = 'PRODUCT_VIEW' THEN "sessionId" END) AS view_sessions,
-        count(CASE WHEN "type" = 'PRODUCT_VIEW' THEN 1 END)                    AS views,
-        count(DISTINCT CASE WHEN "type" = 'ADD_TO_CART' THEN "sessionId" END)  AS cart_sessions,
-        count(DISTINCT CASE WHEN "type" = 'WHATSAPP_ORDER_CLICK' THEN "sessionId" END) AS whatsapp_sessions
-      FROM "AnalyticsEvent"
-      WHERE "tenantId" = ${tenant.id}
-        AND "occurredAt" >= ${start} AND "occurredAt" < ${end}
-        AND "productId" IS NOT NULL
-      GROUP BY "productId"
+        e."productId",
+        count(DISTINCT CASE WHEN e."type" = 'PRODUCT_VIEW' THEN e."sessionId" END) AS view_sessions,
+        count(CASE WHEN e."type" = 'PRODUCT_VIEW' THEN 1 END)                      AS views,
+        count(DISTINCT CASE WHEN e."type" = 'PRODUCT_VIEW' THEN e."visitorId" END) AS view_visitors,
+        -- "Returning" means the visitor had seen this store before today, read from the
+        -- visitor's own firstSeenAt rather than from how many times they viewed the product:
+        -- two views in one afternoon is one interested person, not a returning one.
+        count(DISTINCT CASE
+          WHEN e."type" = 'PRODUCT_VIEW' AND v."firstSeenAt" < ${start} THEN e."visitorId"
+        END) AS returning_view_visitors,
+        count(DISTINCT CASE WHEN e."type" = 'ADD_TO_CART' THEN e."sessionId" END)  AS cart_sessions,
+        count(DISTINCT CASE WHEN e."type" = 'WHATSAPP_ORDER_CLICK' THEN e."sessionId" END) AS whatsapp_sessions
+      FROM "AnalyticsEvent" e
+      LEFT JOIN "AnalyticsVisitor" v ON v."id" = e."visitorId"
+      WHERE e."tenantId" = ${tenant.id}
+        AND e."occurredAt" >= ${start} AND e."occurredAt" < ${end}
+        AND e."productId" IS NOT NULL
+      GROUP BY e."productId"
     `);
+
 
     type ProductRow = {
       viewSessions: number;
       views: number;
+      viewVisitors: number;
+      returningViewVisitors: number;
       addToCartSessions: number;
       whatsappClickSessions: number;
       purchasingSessions: number;
@@ -240,6 +253,8 @@ export async function recomputeDay(tenant: AggregateTenant, day: LocalDay): Prom
       const fresh: ProductRow = {
         viewSessions: 0,
         views: 0,
+        viewVisitors: 0,
+        returningViewVisitors: 0,
         addToCartSessions: 0,
         whatsappClickSessions: 0,
         purchasingSessions: 0,
@@ -253,6 +268,8 @@ export async function recomputeDay(tenant: AggregateTenant, day: LocalDay): Prom
       const slot = productBucket(row.productId);
       slot.viewSessions = Number(row.view_sessions);
       slot.views = Number(row.views);
+      slot.viewVisitors = Number(row.view_visitors);
+      slot.returningViewVisitors = Number(row.returning_view_visitors);
       slot.addToCartSessions = Number(row.cart_sessions);
       slot.whatsappClickSessions = Number(row.whatsapp_sessions);
     }
@@ -279,6 +296,31 @@ export async function recomputeDay(tenant: AggregateTenant, day: LocalDay): Prom
     for (const [productId, sessions] of purchasingSessions) {
       productBucket(productId).purchasingSessions = sessions.size;
     }
+    // What each product was called on this day (D44). A product deleted since has no row here
+    // and keeps the name the last recompute saw — which is the point of a snapshot. One that was
+    // already gone before this column existed stays null, and the report says "Deleted product"
+    // rather than showing a blank where a name belongs.
+    const productNames = new Map<string, string>(
+      products.size === 0
+        ? []
+        : (
+            await tx.product.findMany({
+              where: { tenantId: tenant.id, id: { in: [...products.keys()] } },
+              select: { id: true, name: true },
+            })
+          ).map((p) => [p.id, p.name]),
+    );
+    // A recompute rewrites the day, so the name already stored has to survive it. Without this,
+    // the nightly 30-day pass would quietly erase the name of every product deleted in the last
+    // month — the exact case the snapshot exists for.
+    const storedNames = new Map(
+      (
+        await tx.analyticsProductDaily.findMany({
+          where: { tenantId: tenant.id, localDay },
+          select: { productId: true, productName: true },
+        })
+      ).map((r) => [r.productId, r.productName]),
+    );
     await tx.analyticsProductDaily.deleteMany({ where: { tenantId: tenant.id, localDay } });
     if (products.size > 0) {
       await tx.analyticsProductDaily.createMany({
@@ -287,6 +329,7 @@ export async function recomputeDay(tenant: AggregateTenant, day: LocalDay): Prom
           localDay,
           timeZone: zone,
           productId,
+          productName: productNames.get(productId) ?? storedNames.get(productId) ?? null,
           ...row,
         })),
       });
@@ -340,21 +383,62 @@ export async function recomputeDay(tenant: AggregateTenant, day: LocalDay): Prom
         medium: string | null;
         campaign: string | null;
         sessions: bigint;
+        visitors: bigint;
       }[]
     >(Prisma.sql`
-      SELECT "sourceKind", "source", "medium", "campaign", count(*) AS sessions
+      SELECT "sourceKind", "source", "medium", "campaign",
+             count(*) AS sessions,
+             count(DISTINCT "visitorId") AS visitors
       FROM "AnalyticsSession"
       WHERE "tenantId" = ${tenant.id} AND "startedAt" >= ${start} AND "startedAt" < ${end}
       GROUP BY "sourceKind", "source", "medium", "campaign"
     `);
 
+    /**
+     * What each channel's sessions DID, which until now was missing from this table: the
+     * WhatsApp column existed, was initialised to 0, and was never assigned — so every report
+     * would have said each campaign produced no WhatsApp clicks, confidently and wrongly.
+     *
+     * Joined to the session rather than taken from the event, because the channel belongs to
+     * the session: an event carries no attribution of its own. Sessions are filtered by the
+     * same day window as above, so a click tonight on a session that started yesterday counts
+     * to yesterday's channel row — the same rule the funnel uses.
+     */
+    const channelActions = await tx.$queryRaw<
+      {
+        sourceKind: string | null;
+        source: string | null;
+        medium: string | null;
+        campaign: string | null;
+        product_sessions: bigint;
+        cart_sessions: bigint;
+        whatsapp_sessions: bigint;
+        whatsapp_value: bigint | null;
+      }[]
+    >(Prisma.sql`
+      SELECT s."sourceKind", s."source", s."medium", s."campaign",
+        count(DISTINCT CASE WHEN e."type" = 'PRODUCT_VIEW' THEN e."sessionId" END) AS product_sessions,
+        count(DISTINCT CASE WHEN e."type" = 'ADD_TO_CART'  THEN e."sessionId" END) AS cart_sessions,
+        count(DISTINCT CASE WHEN e."type" = 'WHATSAPP_ORDER_CLICK' THEN e."sessionId" END) AS whatsapp_sessions,
+        sum(CASE WHEN e."type" = 'WHATSAPP_ORDER_CLICK' THEN e."valueCents" ELSE 0 END) AS whatsapp_value
+      FROM "AnalyticsEvent" e
+      JOIN "AnalyticsSession" s ON s."id" = e."sessionId"
+      WHERE e."tenantId" = ${tenant.id}
+        AND s."startedAt" >= ${start} AND s."startedAt" < ${end}
+      GROUP BY s."sourceKind", s."source", s."medium", s."campaign"
+    `);
+
     type ChannelRow = {
       sessions: number;
+      visitors: number;
+      productViewSessions: number;
+      cartSessions: number;
       lastTouchOrders: number;
       lastTouchOrderValueCents: number;
       firstTouchOrders: number;
       firstTouchOrderValueCents: number;
       whatsappClickSessions: number;
+      whatsappPotentialValueCents: number;
     };
     const key = (kind: string, source: string, medium: string, campaign: string) =>
       [kind, source, medium, campaign].join("\u0000");
@@ -366,22 +450,40 @@ export async function recomputeDay(tenant: AggregateTenant, day: LocalDay): Prom
       const fresh = {
         parts: [kind, source, medium, campaign] as [string, string, string, string],
         sessions: 0,
+        visitors: 0,
+        productViewSessions: 0,
+        cartSessions: 0,
         lastTouchOrders: 0,
         lastTouchOrderValueCents: 0,
         firstTouchOrders: 0,
         firstTouchOrderValueCents: 0,
         whatsappClickSessions: 0,
+        whatsappPotentialValueCents: 0,
       };
       acquisition.set(k, fresh);
       return fresh;
     };
     for (const row of channels) {
-      channelBucket(
+      const slot = channelBucket(
         row.sourceKind ?? "direct",
         row.source ?? "",
         row.medium ?? "",
         row.campaign ?? "",
-      ).sessions += Number(row.sessions);
+      );
+      slot.sessions += Number(row.sessions);
+      slot.visitors += Number(row.visitors);
+    }
+    for (const row of channelActions) {
+      const slot = channelBucket(
+        row.sourceKind ?? "direct",
+        row.source ?? "",
+        row.medium ?? "",
+        row.campaign ?? "",
+      );
+      slot.productViewSessions += Number(row.product_sessions);
+      slot.cartSessions += Number(row.cart_sessions);
+      slot.whatsappClickSessions += Number(row.whatsapp_sessions);
+      slot.whatsappPotentialValueCents += Number(row.whatsapp_value ?? 0);
     }
     // Orders carry their own snapshot of both touches (Phase 3), so this needs no join back to
     // the sessions — which is the whole point of snapshotting them: an order's channel cannot

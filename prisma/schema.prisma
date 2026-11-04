@@ -712,9 +712,19 @@ model AnalyticsProductDaily {
   timeZone  String
   /// Not a foreign key: a product deleted next year must not erase what it sold today.
   productId String
+  /// What the product was called THAT DAY, snapshotted like an order item's name (D44). Without
+  /// it, deleting a product makes every past row unnameable. Nullable because rows written
+  /// before this column existed have no honest value: null means "not recorded", which the
+  /// report shows as "Deleted product" rather than as an empty name.
+  productName String?
 
   viewSessions          Int @default(0)
   views                 Int @default(0)
+  /// Distinct visitors who viewed it, and how many of them had seen the store before today.
+  /// Nullable for the same reason as productName: a 0 on a day that never measured them would
+  /// read as "nobody", which is a different claim from "unknown" (D48a).
+  viewVisitors          Int?
+  returningViewVisitors Int?
   addToCartSessions     Int @default(0)
   whatsappClickSessions Int @default(0)
   /// Sessions that bought this product. Reached through OrderItem.variantId -> ProductVariant,
@@ -775,6 +785,14 @@ model AnalyticsAcquisitionDaily {
   campaign   String   @default("")
 
   sessions Int @default(0)
+  /// The rest of what §5.5 asks for per source (D48). Nullable, not 0: these were added after
+  /// the table, and a zero on a day that never counted them is indistinguishable from a day
+  /// when nothing happened. The report refuses to total a range that contains either.
+  visitors            Int?
+  productViewSessions Int?
+  cartSessions        Int?
+  /// Intent, per source. Separate column, never added to an order value (§3.4).
+  whatsappPotentialValueCents Int?
 
   lastTouchOrders           Int @default(0)
   lastTouchOrderValueCents  Int @default(0)

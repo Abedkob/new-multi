@@ -21,8 +21,11 @@ import "./_owner";
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
 import { readFileSync } from "node:fs";
+import { randomUUID } from "node:crypto";
 import { prisma } from "../lib/prisma";
 import { createStoreWithOwner } from "../lib/data/tenants";
+import { createProduct, deleteProduct } from "../lib/data/products";
+import { recomputeDay } from "../lib/analytics/aggregate";
 import {
   TREND_RULES,
   delta,
@@ -35,8 +38,10 @@ import {
 } from "../lib/analytics/compare";
 import {
   localDayLengthHours,
+  localDayOf,
   localDayToDate,
   shiftLocalDay,
+  startOfLocalDay,
   type LocalDay,
 } from "../lib/analytics/local-day";
 import {
@@ -118,7 +123,13 @@ function aggregateOnlyCheck() {
   // And the other half of the rule, which the walk above cannot see: no module may hand the
   // report layer a function that reads events. Checked at the only place such a module could
   // come from — the files that import report.ts.
-  const consumers = gitGrepFiles('from "@/lib/analytics/report"');
+  //
+  // Verification scripts are exempt, and this check caught itself on its first run: a script
+  // that writes event fixtures and then reads a report is doing exactly what it should. The
+  // rule is about what serves a merchant a number, so it covers the runtime modules only.
+  const consumers = gitGrepFiles('from "@/lib/analytics/report"').filter(
+    (f) => !f.startsWith("scripts/"),
+  );
   for (const file of consumers) {
     assert.ok(
       !RAW.test(readFileSync(file, "utf8")),
@@ -231,6 +242,137 @@ async function writeDaily(tenantId: string, rows: DailyFixture[]) {
     await prisma.analyticsDailyMetric.create({
       data: { tenantId, localDay: localDayToDate(day), timeZone: BEIRUT, ...numbers },
     });
+  }
+}
+
+/**
+ * The two claims that only the real recompute can settle: that a product keeps its name after
+ * it is deleted, and that a source's figures are counted rather than apportioned.
+ *
+ * Its own store, so the fixture rows written by hand above cannot stand in for the recompute's
+ * own output.
+ */
+async function recomputeChecks() {
+  const run = Date.now().toString(36);
+  const store = await createStoreWithOwner({
+    storeName: `Report C ${run}`,
+    ownerName: "C",
+    ownerEmail: `report-c-${run}@example.test`,
+    passwordHash: "x",
+  });
+  const T = store.tenant.id;
+  await prisma.tenant.update({ where: { id: T }, data: { analyticsTimezone: BEIRUT } });
+  const tenant = { id: T, analyticsTimezone: BEIRUT };
+
+  try {
+    const product = await createProduct(T, {
+      name: "Linen shirt",
+      description: "d",
+      basePriceCents: 4000,
+      imageUrl: "",
+      images: [],
+      isBestSeller: false,
+      categoryId: null,
+      variants: [{ attributes: {}, stock: 5, priceCentsOverride: null, imageUrl: null }],
+    });
+
+    const day = localDayOf(new Date(), BEIRUT);
+    const noon = startOfLocalDay(day, BEIRUT).getTime() + 12 * 3_600_000;
+    const at = new Date(noon);
+    const range: DayRange = { from: day, to: day, timeZone: BEIRUT };
+
+    // Two visitors, one of whom the store had seen before today, so "returning" has a real case.
+    const newcomer = await prisma.analyticsVisitor.create({
+      data: { tenantId: T, firstSeenAt: at, lastSeenAt: at },
+    });
+    const regular = await prisma.analyticsVisitor.create({
+      data: { tenantId: T, firstSeenAt: new Date(noon - 5 * 86_400_000), lastSeenAt: at },
+    });
+    const sessionFor = (visitorId: string) =>
+      prisma.analyticsSession.create({
+        data: {
+          tenantId: T,
+          visitorId,
+          startedAt: at,
+          lastActivityAt: at,
+          sourceKind: "campaign",
+          source: "instagram",
+          medium: "social",
+          campaign: "launch",
+        },
+      });
+    const sessions = [await sessionFor(newcomer.id), await sessionFor(regular.id)];
+    const addEvent = (
+      session: { id: string; visitorId: string },
+      type: string,
+      over: Record<string, unknown> = {},
+    ) =>
+      prisma.analyticsEvent.create({
+        data: {
+          tenantId: T,
+          eventId: randomUUID(),
+          type: type as never,
+          occurredAt: at,
+          sessionId: session.id,
+          visitorId: session.visitorId,
+          pageKind: "product",
+          ...over,
+        },
+      });
+    for (const session of sessions) {
+      await addEvent(session, "PRODUCT_VIEW", { productId: product.id });
+      await addEvent(session, "PRODUCT_VIEW", { productId: product.id });
+    }
+    await addEvent(sessions[0], "ADD_TO_CART", { productId: product.id, quantity: 1 });
+    await addEvent(sessions[1], "WHATSAPP_ORDER_CLICK", {
+      productId: product.id,
+      quantity: 2,
+      valueCents: 8000,
+    });
+
+    await recomputeDay(tenant, day);
+
+    const [named] = await productReport(T, range);
+    assert.equal(named.productName, "Linen shirt", "the recompute must snapshot the name");
+    assert.equal(named.viewSessions, 2);
+    assert.equal(named.views, 4);
+    assert.equal(named.viewerDays, 2, "two distinct viewers, counted not inferred");
+    assert.equal(named.returningViewerDays, 1, "one of whom had seen the store before today");
+    ok("P5-07", "a recompute stores the name a product carried that day, with its viewers counted");
+
+    // The case the snapshot exists for — and the one a recompute could undo.
+    await deleteProduct(T, product.id);
+    const [afterDelete] = await productReport(T, range);
+    assert.equal(afterDelete.productName, "Linen shirt");
+    await recomputeDay(tenant, day);
+    const [afterRecompute] = await productReport(T, range);
+    assert.equal(
+      afterRecompute.productName,
+      "Linen shirt",
+      "recomputing a day after the product was deleted must not erase the name it stored",
+    );
+    assert.equal(afterRecompute.viewSessions, 2, "and must keep the figures too");
+    ok("P5-07", "a deleted product still names itself, and the nightly recompute cannot erase it");
+
+    const [source] = await acquisitionReport(T, range);
+    assert.equal(source.campaign, "launch");
+    assert.equal(source.sessions, 2);
+    assert.equal(source.visitorDays, 2, "visitors per source, counted by the recompute (D48)");
+    assert.equal(source.productViewSessions, 2);
+    assert.equal(source.cartSessions, 1);
+    // This column existed, was initialised to 0 and was never assigned, so every report would
+    // have said each campaign produced no WhatsApp clicks.
+    assert.equal(source.whatsappClickSessions, 1, "the WhatsApp column must no longer be always 0");
+    assert.equal(source.whatsappPotentialValueCents, 8000);
+    assert.notEqual(
+      source.orderValueCents,
+      source.whatsappPotentialValueCents,
+      "intent and revenue must stay different fields",
+    );
+    ok("P5-19", "all of §5.5's per-source figures are counted, including the WhatsApp ones");
+  } finally {
+    await prisma.tenant.delete({ where: { id: T } }).catch(() => {});
+    await prisma.user.delete({ where: { id: store.user.id } }).catch(() => {});
   }
 }
 
@@ -526,6 +668,43 @@ async function main() {
     const byOrders = await activityHeatmap(A, range, "orders");
     assert.deepEqual(byOrders.map((c) => c.value), [2, 0]);
     ok("P5-04", "the heatmap buckets by store-local weekday and shows one measure at a time");
+
+    // ------------------------------------------------- D49: what "visitors" over a range means
+    assert.ok(
+      !Object.keys(overview.totals).includes("visitors"),
+      "a summed daily visitor count is visitor-days and must not be called visitors",
+    );
+    assert.ok(Object.keys(overview.totals).includes("visitorDays"));
+    ok("P5-02", "the summed daily visitor count is named visitorDays, so it cannot be mislabelled");
+
+    // ------------------------------- D48: a partly measured range reports null, not a part-sum
+    // The acquisition fixtures above were written without the columns added in this commit, so
+    // they hold null. A range mixing measured and unmeasured days is the dangerous case: SUM
+    // skips nulls, so the total would come back too small and perfectly plausible.
+    const partial = await acquisitionReport(A, range);
+    assert.equal(
+      partial.find((r) => r.source === "instagram")!.visitorDays,
+      null,
+      "an unmeasured day must make the total null rather than a smaller number",
+    );
+    await prisma.analyticsAcquisitionDaily.updateMany({
+      where: { tenantId: A, source: "instagram" },
+      data: { visitors: 21, productViewSessions: 12, cartSessions: 5, whatsappPotentialValueCents: 7000 },
+    });
+    const measured = (await acquisitionReport(A, range)).find((r) => r.source === "instagram")!;
+    assert.equal(measured.visitorDays, 21);
+    assert.equal(measured.cartSessions, 5);
+    assert.equal(measured.whatsappPotentialValueCents, 7000);
+    // And a campaign that merges a measured source with an unmeasured one is still null.
+    const mergedCampaign = (await campaignResults(A, range))[0];
+    assert.equal(
+      mergedCampaign.visitorDays,
+      null,
+      "merging a measured source with an unmeasured one must not produce a confident total",
+    );
+    ok("P5-19", "a partly measured period reports null per source, and null survives a merge");
+
+    await recomputeChecks();
   } finally {
     await prisma.tenant.deleteMany({ where: { id: { in: [A, B] } } });
     await prisma.user.deleteMany({ where: { id: { in: [a.user.id, b.user.id] } } });
