@@ -31,10 +31,38 @@ import {
   nextLocalDay,
   previousLocalDay,
   recentLocalDays,
+  shiftLocalDay,
   startOfLocalDay,
 } from "../lib/analytics/local-day";
+import { execSync, spawnSync } from "node:child_process";
+import { randomUUID } from "node:crypto";
+import { readFileSync } from "node:fs";
+import { parse as parseEnvFile } from "dotenv";
+import { recomputeDays } from "../lib/analytics/aggregate";
+import { runScheduled } from "../lib/analytics/scheduled";
+import { nightlyBackfill, orderStatusSweep } from "../lib/analytics/stages";
+import { placeOrder, updateOrderStatus } from "../lib/data/orders";
+import { createProduct } from "../lib/data/products";
+import { createStoreWithOwner } from "../lib/data/tenants";
+import { hashPassword } from "../lib/passwords";
+import { disconnectJobPrisma } from "../lib/prisma-job";
 import { prisma } from "../lib/prisma";
 import { closeRedis } from "../lib/redis";
+
+/**
+ * Files mentioning a fixed string, via git so nothing outside the repository is searched.
+ * `git grep -lF` exits 1 when there are no matches, which is not an error here.
+ */
+function gitGrepFiles(needle: string): string[] {
+  try {
+    return execSync(`git grep -lF "${needle}" -- "*.ts" "*.tsx"`, { encoding: "utf8" })
+      .split("\n")
+      .map((line) => line.trim())
+      .filter(Boolean);
+  } catch {
+    return [];
+  }
+}
 
 let checks = 0;
 const ok = (id: string, message: string) => {
@@ -124,8 +152,369 @@ function timeZoneChecks() {
   ok("P4-06", "an unknown zone throws instead of quietly reporting UTC days");
 }
 
+/**
+ * The aggregate half (P4-12, P4-18 to P4-23).
+ *
+ * Built on data this check creates itself, at timestamps it chooses, because the claims are all
+ * about WHEN something happened: a late event, a cancellation a week after the order, a day that
+ * is not today. Nothing here depends on what happens to be in the database.
+ */
+async function aggregateChecks() {
+  const run = Date.now().toString(36);
+  const { tenant, user } = await createStoreWithOwner({
+    storeName: `Aggregates ${run}`,
+    ownerName: "Phase4",
+    ownerEmail: `aggregates-${run}@example.test`,
+    passwordHash: await hashPassword("x".repeat(24)),
+    privacy: {
+      privacyControllerName: "Phase 4 Ltd",
+      privacyEmail: `privacy-${run}@example.test`,
+      privacyPolicyUrl: null,
+      defaultLocale: "en",
+      analyticsTimezone: BEIRUT,
+      jointControllerRecordedBy: "verify-aggregates",
+      jointControllerVersion: "2026-11",
+    },
+  });
+  const T = tenant.id;
+  const zone = BEIRUT;
+  const agg = { id: T, analyticsTimezone: zone };
+
+  try {
+    const product = await createProduct(T, {
+      name: "Aggregated Item",
+      description: "",
+      basePriceCents: 1000,
+      imageUrl: "",
+      images: [],
+      isBestSeller: false,
+      categoryId: null,
+      variants: [{ attributes: {}, stock: 500, priceCentsOverride: null, imageUrl: null }],
+    });
+    const variantId = product.variants[0].id;
+
+    const now = new Date();
+    const today = localDayOf(now, zone);
+    const yesterday = previousLocalDay(today);
+    const weekAgo = shiftLocalDay(today, -7);
+    /** Noon local, so nothing in this check sits near a boundary by accident. */
+    const noon = (day: string) => new Date(startOfLocalDay(day, zone).getTime() + 12 * 3_600_000);
+
+    const visitor = await prisma.analyticsVisitor.create({
+      data: { tenantId: T, firstSeenAt: noon(yesterday), lastSeenAt: now, country: "LB", deviceClass: "mobile" },
+    });
+    const session = async (day: string, over: Record<string, unknown> = {}) =>
+      prisma.analyticsSession.create({
+        data: {
+          tenantId: T,
+          visitorId: visitor.id,
+          startedAt: noon(day),
+          lastActivityAt: noon(day),
+          country: "LB",
+          deviceClass: "mobile",
+          sourceKind: "campaign",
+          source: "newsletter",
+          medium: "email",
+          campaign: "nov",
+          ...over,
+        },
+      });
+    const yesterdaySession = await session(yesterday);
+    const todaySession = await session(today, { sourceKind: "social", source: "facebook", medium: "social", campaign: null });
+
+    const addEvent = (
+      sessionId: string,
+      day: string,
+      type: string,
+      over: Record<string, unknown> = {},
+    ) =>
+      prisma.analyticsEvent.create({
+        data: {
+          tenantId: T,
+          eventId: randomUUID(),
+          type: type as never,
+          occurredAt: noon(day),
+          sessionId,
+          visitorId: visitor.id,
+          pageKind: "other",
+          ...over,
+        },
+      });
+
+    // Yesterday: one session that looked at the product three times, added to cart, and searched.
+    await addEvent(yesterdaySession.id, yesterday, "PRODUCT_VIEW", { productId: product.id, pageKind: "product" });
+    await addEvent(yesterdaySession.id, yesterday, "PRODUCT_VIEW", { productId: product.id, pageKind: "product" });
+    await addEvent(yesterdaySession.id, yesterday, "PRODUCT_VIEW", { productId: product.id, pageKind: "product" });
+    await addEvent(yesterdaySession.id, yesterday, "ADD_TO_CART", { productId: product.id, quantity: 1 });
+    await addEvent(yesterdaySession.id, yesterday, "CART_VIEW", { pageKind: "cart" });
+    await addEvent(yesterdaySession.id, yesterday, "SEARCH_SUBMITTED", { searchQuery: "jacket", resultCount: 2, pageKind: "search" });
+    await addEvent(yesterdaySession.id, yesterday, "SEARCH_SUBMITTED", { searchQuery: "umbrella", resultCount: 0, pageKind: "search" });
+    await addEvent(yesterdaySession.id, yesterday, "SEARCH_SUBMITTED", { searchQuery: "[redacted]", resultCount: 0, pageKind: "search" });
+    await addEvent(yesterdaySession.id, yesterday, "WHATSAPP_ORDER_CLICK", { productId: product.id, quantity: 2, valueCents: 2000 });
+
+    // Today: a session that reached checkout.
+    await addEvent(todaySession.id, today, "PRODUCT_VIEW", { productId: product.id, pageKind: "product" });
+    await addEvent(todaySession.id, today, "CHECKOUT_STARTED", { pageKind: "checkout" });
+
+    // Two real orders: one today, one a week ago.
+    const customer = {
+      customerName: "Aggregate Shopper",
+      customerPhone: "+961 70 000 020",
+      customerAddress: "4 Aggregate Street",
+      deliveryLocation: "Test location",
+      notes: "",
+    };
+    const todayOrder = await placeOrder(T, customer, [{ variantId, quantity: 2 }], {
+      expectedDeliveryFeeCents: 0,
+      attribution: {
+        analyticsSessionId: todaySession.id,
+        isReturningVisitor: false,
+        attributionSource: "facebook",
+        attributionMedium: "social",
+        attributionCampaign: null,
+        firstTouchSource: "newsletter",
+        firstTouchMedium: "email",
+        firstTouchCampaign: "nov",
+        analyticsCountry: "LB",
+        analyticsDeviceClass: "mobile",
+      },
+    });
+    const oldOrder = await placeOrder(T, customer, [{ variantId, quantity: 1 }], {
+      expectedDeliveryFeeCents: 0,
+    });
+    // Backdate it, and its updatedAt with it, so it looks like an order placed a week ago that
+    // nothing has touched since.
+    await prisma.$executeRaw`
+      UPDATE "Order" SET "createdAt" = ${noon(weekAgo)}, "updatedAt" = ${noon(weekAgo)}
+      WHERE "id" = ${oldOrder.id}
+    `;
+
+    // ------------------------------------------------------------- P4-21: it reconciles
+    await recomputeDays(agg, [weekAgo, yesterday, today]);
+    const dailyRow = async (day: string) =>
+      prisma.analyticsDailyMetric.findUniqueOrThrow({
+        where: { tenantId_localDay: { tenantId: T, localDay: new Date(`${day}T00:00:00.000Z`) } },
+      });
+
+    const yRow = await dailyRow(yesterday);
+    assert.equal(yRow.sessions, 1, "one session yesterday");
+    assert.equal(yRow.productViewSessions, 1, "three views in one session is ONE session");
+    assert.equal(yRow.addToCartSessions, 1);
+    assert.equal(yRow.cartViewSessions, 1);
+    assert.equal(yRow.checkoutSessions, 0, "yesterday's session never reached checkout");
+    assert.equal(yRow.whatsappClickSessions, 1);
+    assert.equal(yRow.whatsappPotentialValueCents, 2000);
+    assert.equal(yRow.orders, 0, "no order was placed yesterday");
+    assert.equal(yRow.timeZone, zone, "the row records which zone computed it");
+    ok("P4-21", "yesterday reconciles: 3 product views in 1 session counted as 1 session");
+
+    const tRow = await dailyRow(today);
+    assert.equal(tRow.sessions, 1);
+    assert.equal(tRow.checkoutSessions, 1);
+    assert.equal(tRow.orders, 1, "today's order");
+    assert.equal(tRow.orderValueCents, 2000, "2 x 1000, totalled by lib/orders.ts's own helper");
+    assert.equal(tRow.cancelledOrders, 0);
+    // The two money figures never merge: §3.4's rule, now in a row a merchant reads.
+    assert.equal(tRow.whatsappPotentialValueCents, 0, "today had no WhatsApp click");
+    ok("P4-21", "today reconciles: 1 order worth 2000, and potential value kept apart from it");
+
+    const products = await prisma.analyticsProductDaily.findMany({ where: { tenantId: T, localDay: new Date(`${yesterday}T00:00:00.000Z`) } });
+    assert.equal(products.length, 1);
+    assert.equal(products[0].views, 3, "the product's VIEWS are the raw count");
+    assert.equal(products[0].viewSessions, 1, "its view SESSIONS are the unique ones");
+    assert.equal(products[0].whatsappClickSessions, 1);
+    ok("P4-21", "a product's views and its view sessions are both recorded, and differ");
+
+    // ------------------------------------------------------- P4-12: a redacted phrase counts
+    const searches = await prisma.analyticsSearchDaily.findMany({
+      where: { tenantId: T, localDay: new Date(`${yesterday}T00:00:00.000Z`) },
+      orderBy: { phrase: "asc" },
+    });
+    assert.deepEqual(searches.map((s) => s.phrase).sort(), ["[redacted]", "jacket", "umbrella"]);
+    const redacted = searches.find((s) => s.phrase === "[redacted]")!;
+    assert.equal(redacted.searches, 1, "a redacted search still counts as a search");
+    assert.equal(redacted.redacted, true, "and is flagged, so no stocking suggestion can use it");
+    const umbrella = searches.find((s) => s.phrase === "umbrella")!;
+    assert.equal(umbrella.noResultSearches, 1, "a no-result search is counted as one");
+    assert.equal(searches.find((s) => s.phrase === "jacket")!.noResultSearches, 0);
+    ok("P4-12", "the redacted phrase counts as a search and carries the flag that excludes it");
+
+    // -------------------------------------------------------------- P4-18: twice is the same
+    const snapshot = async () => {
+      const strip = <T extends { id: string; computedAt: Date }>(rows: T[]) =>
+        rows.map(({ id, computedAt, ...rest }) => rest);
+      return JSON.stringify([
+        strip(await prisma.analyticsDailyMetric.findMany({ where: { tenantId: T }, orderBy: { localDay: "asc" } })),
+        strip(await prisma.analyticsHourlyMetric.findMany({ where: { tenantId: T }, orderBy: [{ localDay: "asc" }, { hour: "asc" }] })),
+        strip(await prisma.analyticsProductDaily.findMany({ where: { tenantId: T }, orderBy: [{ localDay: "asc" }, { productId: "asc" }] })),
+        strip(await prisma.analyticsSearchDaily.findMany({ where: { tenantId: T }, orderBy: [{ localDay: "asc" }, { phrase: "asc" }] })),
+        strip(await prisma.analyticsAcquisitionDaily.findMany({ where: { tenantId: T }, orderBy: [{ localDay: "asc" }, { sourceKind: "asc" }, { source: "asc" }] })),
+      ]);
+    };
+    const first = await snapshot();
+    await recomputeDays(agg, [weekAgo, yesterday, today]);
+    const second = await snapshot();
+    assert.equal(second, first, "recomputing the same days must produce identical rows");
+    const dayCount = await prisma.analyticsDailyMetric.count({ where: { tenantId: T } });
+    assert.equal(dayCount, 3, "and must not grow a duplicate row per run");
+    ok("P4-18", "recomputing three days twice produced byte-identical rows and no duplicates");
+
+    // --------------------------------------------------------- P4-19: a late event corrects
+    const lateSession = await session(yesterday);
+    await addEvent(lateSession.id, yesterday, "PRODUCT_VIEW", { productId: product.id, pageKind: "product" });
+    await recomputeDays(agg, [yesterday]);
+    const corrected = await dailyRow(yesterday);
+    assert.equal(corrected.sessions, 2, "the late session must appear");
+    assert.equal(corrected.productViewSessions, 2);
+    ok("P4-19", "an event arriving late for yesterday corrected yesterday on the next run");
+
+    // ------------------------------------------ P4-20: a cancellation keeps the conversion
+    await updateOrderStatus(T, todayOrder.id, "CANCELLED");
+    await recomputeDays(agg, [today]);
+    const afterCancel = await dailyRow(today);
+    assert.equal(afterCancel.orders, 0, "a cancelled order leaves the live order count");
+    assert.equal(afterCancel.orderValueCents, 0, "and leaves the value total");
+    assert.equal(afterCancel.cancelledOrders, 1, "but is still counted — somebody chose to buy");
+    assert.equal(afterCancel.cancelledOrderValueCents, 2000);
+    assert.equal(afterCancel.checkoutSessions, 1, "the funnel step itself is untouched");
+    ok("P4-20", "cancelling moved 2000 out of the value total and kept the conversion visible");
+
+    // --------------------------- P4-20a: a cancellation a WEEK later, by both routes (D33)
+    // The ordinary window is today and yesterday, so nothing in it would ever revisit this day.
+    assert.ok(weekAgo < previousLocalDay(today), "the old order must be outside the daily window");
+    const beforeSweep = await dailyRow(weekAgo);
+    assert.equal(beforeSweep.orders, 1, "the week-old order starts as a live order");
+    assert.equal(beforeSweep.orderValueCents, 1000);
+
+    await updateOrderStatus(T, oldOrder.id, "CANCELLED");
+    // Route one: the status sweep, which asks the orders which days they belong to.
+    const swept = await runScheduled([orderStatusSweep], { log: () => {}, now: new Date() });
+    assert.equal(swept.failed, 0, JSON.stringify(swept));
+    const afterSweep = await dailyRow(weekAgo);
+    assert.equal(afterSweep.orders, 0, "the sweep must correct the day the order was PLACED");
+    assert.equal(afterSweep.cancelledOrders, 1);
+    assert.equal(afterSweep.cancelledOrderValueCents, 1000);
+    ok("P4-20a", `a cancellation 7 days later corrected ${weekAgo} via the updatedAt sweep`);
+
+    // Route two: the nightly backfill, which would have caught it even if the sweep had not.
+    // Proven by breaking the day on purpose and letting the backfill find it.
+    await prisma.analyticsDailyMetric.update({
+      where: { tenantId_localDay: { tenantId: T, localDay: new Date(`${weekAgo}T00:00:00.000Z`) } },
+      data: { orders: 99, orderValueCents: 99_999 },
+    });
+    const backfilled = await runScheduled([nightlyBackfill], { log: () => {}, now: new Date() });
+    assert.equal(backfilled.failed, 0, JSON.stringify(backfilled));
+    const afterBackfill = await dailyRow(weekAgo);
+    assert.equal(afterBackfill.orders, 0, "the nightly 30-day pass must repair a wrong day");
+    assert.equal(afterBackfill.orderValueCents, 0);
+    ok("P4-20a", "the nightly 30-day backfill repaired a day that had been corrupted on purpose");
+
+    // --------------------------------------------- P4-22: the two money figures never merge
+    const moneyReaders = gitGrepFiles("whatsappPotentialValueCents");
+    const orderValueReaders = gitGrepFiles("orderValueCents");
+    assert.ok(orderValueReaders.length > 0, "the search for order value readers found nothing");
+    const both = moneyReaders.filter((f) => orderValueReaders.includes(f));
+    // The aggregate writes both columns, which is exactly where they must stay separate; what
+    // must not exist is a module that ADDS them. Checked textually, since that is the shape the
+    // mistake would take.
+    for (const file of both) {
+      const source = readFileSync(file, "utf8");
+      assert.ok(
+        !/whatsappPotentialValueCents\s*\+\s*\w*[oO]rderValueCents/.test(source) &&
+          !/orderValueCents\s*\+\s*\w*hatsappPotentialValueCents/.test(source),
+        `${file} adds potential WhatsApp value to order value`,
+      );
+    }
+    ok("P4-22", `${both.length} module(s) touch both money figures and none of them sums them`);
+  } finally {
+    await prisma.tenant.deleteMany({ where: { id: T } });
+    await prisma.user.deleteMany({ where: { id: user.id } });
+  }
+}
+
+/**
+ * P4-23: the isolation of the new tables, with RLS doing the refusing.
+ *
+ * Run in a subprocess as app_user, because scripts/_owner makes this process a superuser and
+ * RLS does not apply to one — an isolation check that passes as the owner has proven only that
+ * a WHERE clause was typed correctly.
+ */
+async function isolationCheck() {
+  const run = Date.now().toString(36);
+  const stores = [];
+  for (const which of ["a", "b"]) {
+    const made = await createStoreWithOwner({
+      storeName: `Isolation ${which} ${run}`,
+      ownerName: "Phase4",
+      ownerEmail: `isolation-${which}-${run}@example.test`,
+      passwordHash: await hashPassword("x".repeat(24)),
+      privacy: {
+        privacyControllerName: "Phase 4 Ltd",
+        privacyEmail: `privacy-${which}-${run}@example.test`,
+        privacyPolicyUrl: null,
+        defaultLocale: "en",
+        analyticsTimezone: BEIRUT,
+        jointControllerRecordedBy: "verify-aggregates",
+        jointControllerVersion: "2026-11",
+      },
+    });
+    stores.push(made);
+  }
+  const [a, b] = stores;
+
+  try {
+    // One day of figures for each, so there is something to leak.
+    for (const [i, store] of stores.entries()) {
+      await prisma.analyticsDailyMetric.create({
+        data: {
+          tenantId: store.tenant.id,
+          localDay: new Date("2026-02-02T00:00:00.000Z"),
+          timeZone: BEIRUT,
+          sessions: 10 + i,
+          orders: 1 + i,
+          orderValueCents: 1000 * (i + 1),
+        },
+      });
+    }
+
+    const ownerUrl = process.env.DATABASE_URL;
+    assert.ok(ownerUrl, "DATABASE_URL is needed to read the restricted role's URL from .env");
+    const appUrl = parseEnvFile(readFileSync(".env", "utf8")).APP_DATABASE_URL;
+    assert.ok(
+      appUrl && new URL(appUrl).username !== new URL(ownerUrl).username,
+      "APP_DATABASE_URL must point at a restricted role for this check to mean anything",
+    );
+
+    const child = spawnSync(
+      `npx tsx scripts/fixtures/aggregate-cross-tenant.ts ${a.tenant.id} ${b.tenant.id}`,
+      { shell: true, encoding: "utf8", env: { ...process.env, APP_DATABASE_URL: appUrl } },
+    );
+    const line = (child.stdout ?? "").trim().split("\n").filter(Boolean).pop() ?? "{}";
+    const result = JSON.parse(line) as {
+      leakedRows?: number;
+      ownRows?: number;
+      writeRefused?: boolean;
+      writeError?: string;
+      threw?: string;
+    };
+    assert.ok(!result.threw, `the fixture failed: ${result.threw} ${child.stderr}`);
+    assert.equal(result.leakedRows, 0, `another store's aggregate rows were readable: ${line}`);
+    assert.equal(result.ownRows, 1, `the store's own row must still be visible: ${line}`);
+    assert.equal(result.writeRefused, true, `a row for another store was WRITTEN: ${line}`);
+    assert.match(result.writeError ?? "", /row-level security|violates/i);
+    ok("P4-23", "as app_user: another store's aggregates are invisible and unwritable (RLS)");
+  } finally {
+    for (const store of stores) {
+      await prisma.tenant.deleteMany({ where: { id: store.tenant.id } });
+      await prisma.user.deleteMany({ where: { id: store.user.id } });
+    }
+  }
+}
+
 async function main() {
   timeZoneChecks();
+  await aggregateChecks();
+  await isolationCheck();
 
   // Every store carries a zone already (Phase 1's Tenant.analyticsTimezone); this phase is
   // where it starts deciding anything. A store with a zone the runtime cannot resolve would
@@ -150,18 +539,20 @@ async function main() {
 }
 
 async function shutdown() {
+  await disconnectJobPrisma().catch(() => {});
   await prisma.$disconnect().catch(() => {});
   await closeRedis().catch(() => {});
 }
 
+// No process.exit(): see the note in scripts/verify-search.ts — on Windows it trips a libuv
+// assertion while a pooled socket is still closing, after every check has already passed.
 main()
   .then(async () => {
     await shutdown();
     console.log(`\n${checks} checks passed.`);
-    process.exit(0);
   })
   .catch(async (error) => {
     await shutdown();
     console.error("\nFAILED:", error instanceof Error ? error.stack : error);
-    process.exit(1);
+    process.exitCode = 1;
   });

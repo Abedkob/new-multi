@@ -103,14 +103,20 @@ model Tenant {
   license                   TenantLicense?
   createdAt                 DateTime       @default(now())
 
-  contents          TenantContent[]
-  products          Product[]
-  categories        Category[]
-  orders            Order[]
-  discounts         DiscountCampaign[]
-  coupons           Coupon[]
-  consentReceipts   AnalyticsConsentReceipt[]
-  analyticsVisitors AnalyticsVisitor[]
+  contents                  TenantContent[]
+  products                  Product[]
+  categories                Category[]
+  orders                    Order[]
+  discounts                 DiscountCampaign[]
+  coupons                   Coupon[]
+  consentReceipts           AnalyticsConsentReceipt[]
+  analyticsVisitors         AnalyticsVisitor[]
+  analyticsDaily            AnalyticsDailyMetric[]
+  analyticsHourly           AnalyticsHourlyMetric[]
+  analyticsProductDaily     AnalyticsProductDaily[]
+  analyticsSearchDaily      AnalyticsSearchDaily[]
+  analyticsAcquisitionDaily AnalyticsAcquisitionDaily[]
+  analyticsCursors          AnalyticsAggregationCursor[]
 }
 
 // One row per consent decision a storefront visitor makes. It records THAT a decision was made
@@ -386,6 +392,11 @@ model Order {
   couponDiscountCentsSnapshot            Int          @default(0)
   status                                 OrderStatus  @default(PENDING)
   createdAt                              DateTime     @default(now())
+  /// Touched by every write, including a status change. Phase 4's aggregates need it: cash on
+  /// delivery means a cancellation routinely lands days after the order, and the daily figures
+  /// for the day it was PLACED have to be recomputed when that happens (D33). Without this
+  /// column there is no way to ask which days a late change affected.
+  updatedAt                              DateTime     @updatedAt @default(now())
   items                                  OrderItem[]
 
   // Analytics attribution, snapshotted at purchase time (Phase 3, master plan 9.1). All
@@ -407,20 +418,21 @@ model Order {
   // which is exactly what the privacy rules forbid. What a merchant actually needs from it is
   // "had this shopper been here before", so that is what is stored — a boolean, which cannot be
   // re-identified. Null means unknown (no consent, or no identity yet).
-  analyticsSessionId                     String?
-  isReturningVisitor                     Boolean?
+  analyticsSessionId   String?
+  isReturningVisitor   Boolean?
   // Last non-direct touch of the session that placed the order.
-  attributionSource                      String?
-  attributionMedium                      String?
-  attributionCampaign                    String?
+  attributionSource    String?
+  attributionMedium    String?
+  attributionCampaign  String?
   // The visitor's first ever touch for this store.
-  firstTouchSource                       String?
-  firstTouchMedium                       String?
-  firstTouchCampaign                     String?
-  analyticsCountry                       String?
-  analyticsDeviceClass                   String?
+  firstTouchSource     String?
+  firstTouchMedium     String?
+  firstTouchCampaign   String?
+  analyticsCountry     String?
+  analyticsDeviceClass String?
 
   @@index([tenantId, createdAt])
+  @@index([tenantId, updatedAt])
 }
 
 // Name, attributes and price are copied at order time, so later edits to (or deletion of) the
@@ -499,7 +511,7 @@ model AnalyticsSession {
   /// Which rung of §3.5's ladder this arrival came from: campaign, paid, social, search,
   /// referral or direct. Classified once, server-side (lib/analytics/attribution.ts), so no two
   /// reports can disagree about what a channel is.
-  sourceKind  String?
+  sourceKind   String?
   /// Hostname only. Never a full referring URL: a path can carry a search query or a username.
   referrerHost String?
 
@@ -580,13 +592,13 @@ model AnalyticsScheduledRun {
   id    String @id @default(cuid())
   stage String
 
-  startedAt  DateTime  @default(now())
+  startedAt  DateTime           @default(now())
   finishedAt DateTime?
   leaseUntil DateTime
   status     AnalyticsRunStatus @default(RUNNING)
 
   /// Whatever the stage counts: tenants processed, rows deleted, days recomputed.
-  items Int @default(0)
+  items  Int     @default(0)
   /// A one-line note for the platform admin; never a stack trace, never store data.
   detail String?
   /// Set when the stage threw. The run keeps going; the command exits non-zero.
@@ -604,4 +616,192 @@ enum AnalyticsRunStatus {
   FAILED
   /// The process died holding this stage; a later run found the lease expired.
   EXPIRED
+}
+
+// --- Storefront analytics: aggregates (§9.3, §10, Phase 4) ------------------------------------
+//
+// Reports read these, never the raw events. Three reasons, in order of how much they matter:
+// a merchant page must not scan millions of rows; raw events are deleted after 90 days while
+// these are kept for 24 months; and a figure computed once is a figure two reports cannot
+// disagree about.
+//
+// Every one of them is a RECOMPUTE, never an increment (D25). Each run deletes the rows for a
+// local day and writes them again from the raw data, which makes late events, retried beacons
+// and order-status changes self-correcting and the whole job safely re-runnable. Nothing here
+// is ever "+1"-ed in place.
+//
+// All tenant-scoped and all under forced RLS, like every other table a store owns.
+//
+// `localDay` is a DATE in the STORE's zone and `timeZone` records which zone computed it, so a
+// store that changes zone later produces visibly different rows rather than silently rewriting
+// its own history (P4-08).
+
+model AnalyticsDailyMetric {
+  id       String @id @default(cuid())
+  tenantId String
+  tenant   Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  localDay DateTime @db.Date
+  timeZone String
+
+  /// Unique sessions, which is the unit the whole funnel is counted in (§3.2) — not page views.
+  sessions    Int @default(0)
+  visitors    Int @default(0)
+  /// Visitors whose first-ever session for this store started on this day.
+  newVisitors Int @default(0)
+
+  // The funnel, in sessions that reached each step.
+  productViewSessions Int @default(0)
+  addToCartSessions   Int @default(0)
+  cartViewSessions    Int @default(0)
+  checkoutSessions    Int @default(0)
+  searchSessions      Int @default(0)
+
+  /// Sessions that clicked "order on WhatsApp", and what those clicks were worth IF they all
+  /// converted. Intent, never revenue (§3.4) — kept in its own column so no helper can add it
+  /// to the order value next to it.
+  whatsappClickSessions       Int @default(0)
+  whatsappPotentialValueCents Int @default(0)
+
+  /// Website orders, from the orders themselves. Analytics stores no second copy of an order's
+  /// money: these are totalled with lib/orders.ts's orderTotal, the same function the order
+  /// page uses, so the two cannot drift (P3-01).
+  orders                   Int @default(0)
+  orderValueCents          Int @default(0)
+  /// Cancelled orders stay conversions (someone chose to buy) and leave the value totals above.
+  cancelledOrders          Int @default(0)
+  cancelledOrderValueCents Int @default(0)
+
+  computedAt DateTime @default(now())
+
+  @@unique([tenantId, localDay])
+  @@index([tenantId, localDay])
+}
+
+/// The shape of a day. Deliberately narrow: an hourly row per metric would quadruple the table
+/// for a question nobody asks hourly.
+model AnalyticsHourlyMetric {
+  id       String @id @default(cuid())
+  tenantId String
+  tenant   Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  localDay DateTime @db.Date
+  timeZone String
+  /// 0-23 as the store's clock showed it. A spring-forward day simply has no row for the hour
+  /// that did not happen, and a fall-back day's repeated hour is one row (lib/analytics/
+  /// local-day.ts explains why an hour is a label, not a duration).
+  hour     Int
+
+  sessions        Int @default(0)
+  orders          Int @default(0)
+  orderValueCents Int @default(0)
+
+  computedAt DateTime @default(now())
+
+  @@unique([tenantId, localDay, hour])
+  @@index([tenantId, localDay])
+}
+
+model AnalyticsProductDaily {
+  id       String @id @default(cuid())
+  tenantId String
+  tenant   Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  localDay  DateTime @db.Date
+  timeZone  String
+  /// Not a foreign key: a product deleted next year must not erase what it sold today.
+  productId String
+
+  viewSessions          Int @default(0)
+  views                 Int @default(0)
+  addToCartSessions     Int @default(0)
+  whatsappClickSessions Int @default(0)
+  /// Sessions that bought this product. Reached through OrderItem.variantId -> ProductVariant,
+  /// because an order item snapshots a NAME, not a product id; an item whose variant was
+  /// deleted outright can no longer name its product and is left out rather than guessed at.
+  purchasingSessions    Int @default(0)
+  unitsOrdered          Int @default(0)
+  orderValueCents       Int @default(0)
+
+  computedAt DateTime @default(now())
+
+  @@unique([tenantId, localDay, productId])
+  @@index([tenantId, localDay])
+  @@index([tenantId, productId, localDay])
+}
+
+model AnalyticsSearchDaily {
+  id       String @id @default(cuid())
+  tenantId String
+  tenant   Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  localDay DateTime @db.Date
+  timeZone String
+  /// The normalized phrase (lib/analytics/search-text.ts), or "[redacted]".
+  phrase   String
+
+  searches            Int     @default(0)
+  searchSessions      Int     @default(0)
+  noResultSearches    Int     @default(0)
+  resultClickSessions Int     @default(0)
+  /// True for the "[redacted]" row. It still counts as searching — hiding it would understate
+  /// every total — but it must never reach a "what should I stock" suggestion, because whoever
+  /// typed it was not shopping (D22, P4-12).
+  redacted            Boolean @default(false)
+
+  computedAt DateTime @default(now())
+
+  @@unique([tenantId, localDay, phrase])
+  @@index([tenantId, localDay])
+}
+
+/// Channels, with first touch and last touch side by side so §5.5's switch is a column choice
+/// rather than a different query.
+model AnalyticsAcquisitionDaily {
+  id       String @id @default(cuid())
+  tenantId String
+  tenant   Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  localDay   DateTime @db.Date
+  timeZone   String
+  /// campaign | paid | social | search | referral | direct (lib/analytics/attribution.ts).
+  sourceKind String
+  /// Empty strings rather than nulls: these are part of a unique key, and in Postgres every
+  /// NULL is distinct from every other, so a nullable key would let the same channel insert
+  /// itself twice and make the recompute non-idempotent.
+  source     String   @default("")
+  medium     String   @default("")
+  campaign   String   @default("")
+
+  sessions Int @default(0)
+
+  lastTouchOrders           Int @default(0)
+  lastTouchOrderValueCents  Int @default(0)
+  firstTouchOrders          Int @default(0)
+  firstTouchOrderValueCents Int @default(0)
+
+  whatsappClickSessions Int @default(0)
+
+  computedAt DateTime @default(now())
+
+  @@unique([tenantId, localDay, sourceKind, source, medium, campaign])
+  @@index([tenantId, localDay])
+}
+
+/// How far each stage has got for each store, and what went wrong if it did (§10).
+model AnalyticsAggregationCursor {
+  id       String @id @default(cuid())
+  tenantId String
+  tenant   Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  stage           String
+  /// The most recent local day this stage has computed for this store.
+  lastComputedDay DateTime? @db.Date
+  lastRunAt       DateTime?
+  /// Consecutive failures. Phase 6 alerts on a store that keeps failing while others succeed.
+  failures        Int       @default(0)
+  lastError       String?
+
+  @@unique([tenantId, stage])
+  @@index([stage, lastRunAt])
 }

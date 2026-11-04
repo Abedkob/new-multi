@@ -43,3 +43,37 @@ export async function disconnectJobPrisma(): Promise<void> {
   await client?.$disconnect();
   client = undefined;
 }
+
+/**
+ * The RLS wrappers the job uses, mirroring lib/prisma.ts's `withTenant` / `withBypass` but on
+ * this client.
+ *
+ * Not imported from there on purpose: those are bound to the application's pool, and the point
+ * of a separate pool is that nothing the job does can consume a connection checkout might need.
+ * The policies are the same, so the isolation is the same.
+ */
+export type JobTx = Omit<
+  PrismaClient,
+  "$connect" | "$disconnect" | "$on" | "$transaction" | "$extends"
+>;
+
+/** Runs `fn` with the tenant context set, so RLS filters every statement inside it. */
+export function withJobTenant<T>(tenantId: string, fn: (tx: JobTx) => Promise<T>): Promise<T> {
+  return jobPrisma().$transaction(async (tx) => {
+    await tx.$executeRaw`SELECT set_config('app.tenant_id', ${tenantId}, true)`;
+    return fn(tx as unknown as JobTx);
+  });
+}
+
+/**
+ * Runs `fn` with RLS bypassed — for the job's cross-tenant bookkeeping only (reading its own
+ * run records, listing which stores exist). Never for a store's numbers: those go through
+ * `withJobTenant`, so a bug in a WHERE clause cannot write one store's figures into another's
+ * row. Keep the callback small.
+ */
+export function withJobBypass<T>(fn: (tx: JobTx) => Promise<T>): Promise<T> {
+  return jobPrisma().$transaction(async (tx) => {
+    await tx.$executeRaw`SELECT set_config('app.bypass', 'on', true)`;
+    return fn(tx as unknown as JobTx);
+  });
+}

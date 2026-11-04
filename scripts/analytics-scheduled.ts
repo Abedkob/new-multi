@@ -9,24 +9,22 @@
  *   0  the run did its work, or another run already held the lock (both normal)
  *   1  at least one stage failed
  *
- * The stage list is empty in this commit, and that is deliberate. The orchestration — one run
- * at a time, a failure that stays inside its stage, a crashed run that recovers — is what the
- * rest of Phase 4 is built on, so it ships and is verified first, with stages injected by
- * `pnpm verify:scheduled` that succeed, throw and run long on purpose. Real stages arrive with
- * the features that need them.
+ * The orchestration shipped before any stage did — one run at a time, a failure that stays
+ * inside its stage, a crashed run that recovers — and `pnpm verify:scheduled` still proves it
+ * with injected stages that succeed, throw and run long on purpose, so none of those checks
+ * depends on what the real stages happen to do.
  */
 
 import "dotenv/config";
 import { runScheduled, type Stage } from "../lib/analytics/scheduled";
+import { ANALYTICS_STAGES } from "../lib/analytics/stages";
 import { disconnectJobPrisma } from "../lib/prisma-job";
 
 const STAGES: Stage[] = [
-  // Phase 4, in order of arrival:
-  //   aggregate-recompute   (commit 5)
-  //   order-status-sweep    (commit 5, D33)
-  //   nightly-backfill      (commit 5, D33)
-  //   retention             (commit 6, D35)
-  //   health-evaluate       (commit 7, D34)
+  ...ANALYTICS_STAGES,
+  // Still to come in this phase:
+  //   retention        (commit 6, D35)
+  //   health-evaluate  (commit 7, D34)
 ];
 
 async function main() {
