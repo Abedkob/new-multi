@@ -5,6 +5,10 @@
 
 Fast-track checklist for deploying to Dockploy.
 
+Deploying the analytics phases (collection, funnel, order attribution) has its own ordered
+checklist, including the one switch you cannot set after the merge:
+[ANALYTICS_DEPLOY_CHECKLIST.md](ANALYTICS_DEPLOY_CHECKLIST.md).
+
 ## Pre-Deployment
 
 ### Code & Infrastructure
