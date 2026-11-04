@@ -21,6 +21,9 @@ export function setupStatus(tenant: Awaited<ReturnType<typeof loadStore>>) {
   const i = storeIntegrations(tenant);
   return {
     domain: !!tenant.domain,
+    // Privacy setup is incomplete until a store can name a responsible business and a contact
+    // on its storefront privacy page - until then it must stay out of the analytics rollout.
+    privacy: !!(tenant.privacyControllerName && tenant.privacyEmail),
     // A DNS-TXT-verified Search Console property leaves nothing to store here, so this can only
     // say "the HTML-tag token is set"; the checklist wording accounts for that.
     searchConsoleTag: !!i.googleSiteVerification,

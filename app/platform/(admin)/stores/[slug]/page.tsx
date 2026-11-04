@@ -26,6 +26,14 @@ export default async function StoreOverviewPage({
 
   const checklist = [
     {
+      done: status.privacy,
+      label: "Privacy and reporting setup",
+      detail: status.privacy
+        ? `Responsible business and contact set · ${tenant.analyticsTimezone}.`
+        : "Needed before this store can be measured: shoppers must be able to see who is responsible and how to get in touch.",
+      href: `${base}/privacy`,
+    },
+    {
       done: status.domain,
       label: "Connect a custom domain",
       detail: status.domain

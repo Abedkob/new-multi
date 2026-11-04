@@ -92,6 +92,74 @@ export function setTenantPaused(id: string, reason: string | null) {
   );
 }
 
+/**
+ * A store's privacy identity and reporting basis, edited after creation.
+ *
+ * Changing the reporting zone re-buckets future days only — past aggregates are not rewritten,
+ * so a zone change is visible as a seam in the history rather than a silent restatement of it.
+ */
+export function updateTenantPrivacy(
+  id: string,
+  input: {
+    privacyControllerName: string;
+    privacyEmail: string;
+    privacyPolicyUrl: string | null;
+    defaultLocale: string;
+    analyticsTimezone: string;
+  },
+) {
+  return withBypass((db) =>
+    db.tenant.update({ where: { id }, data: input, select: { id: true } }),
+  );
+}
+
+/**
+ * Records that the joint-controller terms were accepted for a store that predates them, so a
+ * backfilled store carries the same audit trail as a newly created one.
+ */
+export function recordJointController(id: string, version: string, operatorId: string) {
+  return withBypass((db) =>
+    db.tenant.update({
+      where: { id },
+      data: {
+        jointControllerVersion: version,
+        jointControllerRecordedBy: operatorId,
+        jointControllerRecordedAt: new Date(),
+      },
+      select: { id: true },
+    }),
+  );
+}
+
+/**
+ * The platform's emergency stop for analytics alone. Deliberately separate from setTenantPaused:
+ * that one takes the storefront offline, this one leaves the store selling and only stops
+ * measurement. A reason is required to pause and cleared on resume, matching the pause control.
+ */
+export function setTenantAnalyticsPaused(id: string, reason: string | null) {
+  return withBypass((db) =>
+    db.tenant.update({
+      where: { id },
+      data:
+        reason === null
+          ? { analyticsPausedAt: null, analyticsPauseReason: null }
+          : { analyticsPausedAt: new Date(), analyticsPauseReason: reason },
+      select: { id: true },
+    }),
+  );
+}
+
+/** Bumping the notice version asks every visitor of this store for consent again (§4.3). */
+export function bumpConsentNoticeVersion(id: string) {
+  return withBypass((db) =>
+    db.tenant.update({
+      where: { id },
+      data: { consentNoticeVersion: { increment: 1 } },
+      select: { id: true, consentNoticeVersion: true },
+    }),
+  );
+}
+
 /** null disconnects the domain (the store falls back to /store/[slug]). The caller is
  * responsible for the DNS-resolves check and the "verified and live" invariant on this column
  * (see schema.prisma) — this just writes it. */
@@ -198,11 +266,28 @@ export function getPlatformStats() {
  * Creates the owner User and Tenant (plus default content) in one transaction.
  * Only the password hash is ever passed in here.
  */
+/**
+ * A store's privacy identity and reporting basis, recorded at creation (§4.2). Optional on the
+ * type so the e2e/demo fixtures can create a store without restating all of it; the platform
+ * form always sends it, and verify:consent reports any store in the rollout still missing it.
+ */
+export type TenantPrivacyInput = {
+  privacyControllerName: string;
+  privacyEmail: string;
+  privacyPolicyUrl: string | null;
+  defaultLocale: string;
+  analyticsTimezone: string;
+  /** Which platform operator recorded the joint-controller terms (a User id). */
+  jointControllerRecordedBy: string;
+  jointControllerVersion: string;
+};
+
 export async function createStoreWithOwner(input: {
   storeName: string;
   ownerName: string;
   ownerEmail: string;
   passwordHash: string;
+  privacy?: TenantPrivacyInput;
 }) {
   const base = slugify(input.storeName);
 
@@ -249,6 +334,20 @@ export async function createStoreWithOwner(input: {
             name: input.storeName,
             ownerId: user.id,
             contents: { create: SEED_CONTENT },
+            ...(input.privacy
+              ? {
+                  privacyControllerName: input.privacy.privacyControllerName,
+                  privacyEmail: input.privacy.privacyEmail,
+                  privacyPolicyUrl: input.privacy.privacyPolicyUrl,
+                  defaultLocale: input.privacy.defaultLocale,
+                  analyticsTimezone: input.privacy.analyticsTimezone,
+                  jointControllerVersion: input.privacy.jointControllerVersion,
+                  jointControllerRecordedBy: input.privacy.jointControllerRecordedBy,
+                  // Stamped here, not passed in: the record of WHEN the terms were recorded
+                  // should be the server's clock at the moment of the write.
+                  jointControllerRecordedAt: new Date(),
+                }
+              : {}),
           },
         });
         return { tenant, user };

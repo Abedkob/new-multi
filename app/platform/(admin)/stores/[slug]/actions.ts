@@ -10,8 +10,11 @@ import {
   getTenantByDomain,
   getTenantBySlug,
   isUniqueViolation,
+  recordJointController,
   resetOwnerPassword,
+  setTenantAnalyticsPaused,
   setTenantPaused,
+  updateTenantPrivacy,
   updateTenantDomain,
   updateTenantFavicon,
   updateTenantIntegrations,
@@ -30,9 +33,11 @@ import { activateTenantLicense } from "@/lib/license/service";
 import { RATE_LIMITS, rateLimit, retryAfterText } from "@/lib/rate-limit";
 import { requirePlatformAdmin } from "@/lib/session";
 import { importImageFromUrl, isOwnImageUrl, storeImage } from "@/lib/storage";
+import { JOINT_CONTROLLER_VERSION } from "@/lib/consent/agreement";
 import {
   analyticsSettingsSchema,
   createStoreSchema,
+  storePrivacySchema,
   domainFormSchema,
   isImageUrl,
   searchSettingsSchema,
@@ -45,6 +50,81 @@ import {
 function revalidateStore(slug: string) {
   revalidatePath(`/platform/stores/${slug}`, "layout");
   revalidatePath("/platform/stores");
+}
+
+/**
+ * A store's privacy identity and reporting basis (§4.2).
+ *
+ * Revalidates the storefront too: the privacy page and the consent notice both read these
+ * values, so an edit here has to be visible to shoppers on the next request rather than after a
+ * cache expiry.
+ */
+export async function saveStorePrivacyAction(
+  slug: string,
+  _prev: FormState,
+  formData: FormData,
+): Promise<FormState> {
+  const admin = await requirePlatformAdmin();
+  const tenant = await getTenantBySlug(slug);
+  if (!tenant) return { error: "Store not found." };
+
+  const parsed = storePrivacySchema.safeParse({
+    privacyControllerName: formData.get("privacyControllerName"),
+    privacyEmail: formData.get("privacyEmail"),
+    privacyPolicyUrl: formData.get("privacyPolicyUrl") ?? "",
+    defaultLocale: formData.get("defaultLocale"),
+    analyticsTimezone: formData.get("analyticsTimezone"),
+  });
+  if (!parsed.success) {
+    return { fieldErrors: z.flattenError(parsed.error).fieldErrors };
+  }
+
+  await updateTenantPrivacy(tenant.id, parsed.data);
+  // A store created before the joint-controller terms existed gets the same audit trail as a
+  // new one the first time an operator completes its privacy setup.
+  if (!tenant.jointControllerVersion) {
+    await recordJointController(tenant.id, JOINT_CONTROLLER_VERSION, admin.userId);
+  }
+  revalidateStore(slug);
+  revalidatePath(`/store/${slug}`, "layout");
+  return { ok: true };
+}
+
+/**
+ * The analytics-only kill switch. Separate from the storefront pause: this leaves the store
+ * selling and only stops measurement, which is what makes it usable during an incident.
+ */
+export async function pauseStoreAnalyticsAction(
+  slug: string,
+  _prev: FormState,
+  formData: FormData,
+): Promise<FormState> {
+  await requirePlatformAdmin();
+  const tenant = await getTenantBySlug(slug);
+  if (!tenant) return { error: "Store not found." };
+  if (tenant.analyticsPausedAt) return { error: "Analytics is already paused for this store." };
+
+  const reason = String(formData.get("reason") ?? "").trim();
+  if (reason.length < 3 || reason.length > 500) {
+    return { fieldErrors: { reason: ["Enter a reason between 3 and 500 characters."] } };
+  }
+  await setTenantAnalyticsPaused(tenant.id, reason);
+  revalidateStore(slug);
+  revalidatePath(`/store/${slug}`, "layout");
+  return { ok: true };
+}
+
+export async function resumeStoreAnalyticsAction(
+  slug: string,
+  _prev: FormState,
+): Promise<FormState> {
+  await requirePlatformAdmin();
+  const tenant = await getTenantBySlug(slug);
+  if (!tenant) return { error: "Store not found." };
+  await setTenantAnalyticsPaused(tenant.id, null);
+  revalidateStore(slug);
+  revalidatePath(`/store/${slug}`, "layout");
+  return { ok: true };
 }
 
 export async function setStorePausedAction(

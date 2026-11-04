@@ -7,11 +7,46 @@ import { CONTENT_KEY_NAMES, IMAGE_CONTENT_KEYS } from "@/lib/content";
 import { isValidDomainFormat, normalizeHostname } from "@/lib/domain-format";
 import { INTEGRATION_FORMATS, extractMetaContent, type IntegrationKey } from "@/lib/integrations";
 import { encodeMessage } from "@/lib/i18n/types";
+// Pure Intl check, same reasoning as domain-format above: this file reaches a client bundle.
+import { isIanaTimeZone } from "@/lib/time-zones";
 import { variantSetIssues } from "@/lib/variants";
 
 export const loginSchema = z.object({
   email: z.string().trim().toLowerCase().pipe(z.email("Enter a valid email")),
   password: z.string().min(1, "Password is required"),
+});
+
+/**
+ * A store's privacy identity and reporting basis.
+ *
+ * Required, not optional, because a storefront that measures visitors has to be able to name a
+ * controller and a contact on its privacy page — a store with these blank cannot lawfully be put
+ * into the analytics rollout, and leaving them to "later" is how that gets forgotten.
+ *
+ * The joint-controller version is NOT collected here: it is a constant
+ * (lib/consent/agreement.ts) and is recorded automatically with the timestamp and the operator.
+ * The operator only confirms it applies.
+ */
+export const storePrivacySchema = z.object({
+  privacyControllerName: z
+    .string()
+    .trim()
+    .min(2, "At least 2 characters")
+    .max(120, "Too long"),
+  privacyEmail: z.string().trim().toLowerCase().pipe(z.email("Enter a valid email")),
+  // Empty clears it (same convention as the domain form).
+  privacyPolicyUrl: z
+    .string()
+    .trim()
+    .transform((v) => (v === "" ? null : v))
+    .refine((v) => v === null || /^https?:\/\/\S+$/.test(v), "Enter a full URL, or leave empty")
+    .refine((v) => v === null || v.length <= 500, "Too long"),
+  defaultLocale: z.enum(["en", "ar"], { message: "Choose a language" }),
+  analyticsTimezone: z
+    .string()
+    .trim()
+    .min(1, "Choose a time zone")
+    .refine(isIanaTimeZone, "Not a time zone this server recognises"),
 });
 
 export const createStoreSchema = z.object({
@@ -22,6 +57,11 @@ export const createStoreSchema = z.object({
     .trim()
     .toLowerCase()
     .pipe(z.email("Enter a valid email")),
+  ...storePrivacySchema.shape,
+  // The operator confirming the joint-controller terms are part of this merchant's agreement.
+  // A checkbox that is not ticked must fail: the recorded timestamp has to mean something.
+  jointControllerAccepted: z
+    .literal("on", { message: "Confirm the joint-controller terms before creating the store" }),
 });
 
 export const updateStoreSchema = z.object({

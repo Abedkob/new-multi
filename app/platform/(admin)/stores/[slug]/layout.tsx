@@ -61,6 +61,11 @@ export default async function ManageStoreLayout({
                 label: "Analytics & ads",
                 todo: !status.ga && !status.metaPixel,
               },
+              {
+                href: `${base}/privacy`,
+                label: "Privacy",
+                todo: !status.privacy,
+              },
               { href: `${base}/branding`, label: "Favicon" },
               { href: `${base}/theme`, label: "Theme", external: true },
               { href: `${base}/danger`, label: "Danger zone" },
