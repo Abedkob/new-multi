@@ -98,6 +98,12 @@ export const RATE_LIMITS = {
   // choice to a rate limit would be the worst possible failure here); only the receipt insert
   // is skipped, so the limit protects the table, never the visitor.
   consent: { limit: 30, windowMs: 10 * 60_000 },
+  // Analytics ingestion, per IP. A browsing visitor flushes a batch every ten seconds at most
+  // (lib/analytics tracker), so this is generous for a real person and bounded against a flood.
+  // Being blocked costs page views, never anything the shopper can see.
+  analyticsIngest: { limit: 120, windowMs: 60_000 },
+  // And per store, so one busy or abused storefront cannot fill the table on everyone's behalf.
+  analyticsTenant: { limit: 3_000, windowMs: 60_000 },
   // Importing an image from a pasted link makes the server fetch an outside URL: keyed per
   // tenant, so an owner account can't be used as a download proxy.
   imageImport: { limit: 40, windowMs: 10 * 60_000 },
