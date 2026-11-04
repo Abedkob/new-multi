@@ -32,6 +32,7 @@ the Phase 5 reports have not yet been written to read.
 7. **Retention** — the §4.7 windows, deleted in bounded chunks.
 8. **Privacy requests** — export and delete a visitor's data, detaching but preserving orders.
 9. **Contract rejections (400s) as their own health signal**, with their own threshold.
+10. **A platform-admin privacy-request console** (**D36**) and a **retention dry run** (**D35**).
 
 ### Explicitly NOT in this phase
 
@@ -57,6 +58,13 @@ the Phase 5 reports have not yet been written to read.
 | **D28** | What does a privacy deletion delete? | Visitor, sessions and raw events for that visitor; orders are **kept** and only detached, via the existing `forgetOrderAttributionLinks()` (P3-25). Aggregates are not touched: they are genuinely anonymous totals and §4.7 says to preserve them. Deletion runs in bounded chunks and reports what it removed. |
 | **D29** | How are contract rejections (400s) surfaced? | As a **third category**, next to policy and operational drops, with its own much lower threshold. A 400 is not load and not consent: it means our own code sent something the contract refuses, so a single-digit count in a window is already a bug. `lib/analytics/health.ts` already counts `invalidEnvelopes` and the endpoint already logs the failing field; Phase 4 flushes the counter into `AnalyticsOperationalMetric` and evaluates it separately. Folding it into the operational percentage would hide exactly the Phase 3 defect where every batch from a custom domain was refused and the operational rate stayed at zero. |
 | **D30** | Where does the link builder live? | `/admin/analytics/links`, client-side only: it composes a UTM-tagged URL from the store's own domain or shared-host base and copies it. It writes nothing and reads no analytics, so it cannot be the reason a report is wrong. |
+| **D31** | How is Arabic search text normalized? | In `search-text.ts`, before anything else: unify the alef forms (أ إ آ ٱ → ا), ة → ه, ى → ي, strip tashkeel (U+064B–U+0652, U+0670) and tatweel (U+0640), and fold Arabic-Indic digits (U+0660–U+0669) and extended Arabic-Indic digits (U+06F0–U+06F9) to ASCII. Without it, one Arabic word spelled two ordinary ways is two phrases, and a store whose shoppers type Arabic gets its search report split across spellings — which is most of this platform's stores. Normalization groups; the normalized form is also the stored form, since the raw text is never kept (**D22**). |
+| **D32** | Does the PII scrub understand Arabic digits and Lebanese numbers? | Yes, and it has to, or the scrub is theatre here: a phone number typed in Arabic-Indic digits sails straight through an ASCII-only pattern. Digits are folded first (**D31**), so one set of patterns covers both scripts. Lebanese formats explicitly: `+961` and `00961` prefixes, the `03` / `70` / `71` / `76` / `78` / `79` / `81` mobile prefixes, 7–8 local digits, with spaces, dashes and slashes ignored while matching. Covered by **P4-11**. |
+| **D33** | How does a cancellation a week later correct its day? | Two mechanisms, because one is not enough. Each run recomputes any local day touched by an order whose **`updatedAt`** falls in the window (not its `createdAt`), so a status change pulls its own older day back into the queue; and a nightly pass recomputes the **last 30 days** outright. Cash on delivery means a cancellation routinely lands days after the order, and D25's current-and-previous-day window would otherwise leave a permanently wrong number in a chart nobody can explain. Tested with a cancellation a week after the order (**P4-20a**). |
+| **D34** | How do per-process counters reach `AnalyticsOperationalMetric`? | **The process that owns them writes them; the scheduler only reads.** The counters in `lib/analytics/health.ts` live in one Next process's memory, and the scheduled command is a different process in a different container — it cannot see them, and an internal endpoint would reach one arbitrary instance behind the proxy. So the ingestion endpoint flushes opportunistically: when a batch arrives and the window is older than `ANALYTICS_HEALTH_FLUSH_MINUTES` (default 5), it snapshots with `reset`, writes one row keyed by instance (`hostname:pid`) and window, and does so after the response, best-effort, never awaited — a drop that costs an INSERT is not a drop. The scheduler then evaluates persisted rows across instances. An instance with no traffic writes no row, so "no rows" means silence, not failure, and the alert must not confuse the two (**P4-31a**). |
+| **D35** | Can retention run without deleting anything? | Yes, and the first production run must. `analytics:scheduled --dry-run`, and `ANALYTICS_RETENTION_DRY_RUN` for the scheduled container, counts exactly what each window would delete per tenant and per table, records it on the run, and deletes nothing. The first thing this project does that destroys data should say what it is about to destroy first; a deletion count that surprises us is a bug caught for free. The acceptance record carries the dry-run numbers, and the live run is enabled only after they are read. |
+| **D36** | Who can act on a privacy request? | The platform admin, from `/platform/stores/[slug]`: paste the visitor's privacy identifier (the one the cookie settings expose, §4.7), see what would be exported or erased, then do it. Store owners do not get this. A privacy request is a controller obligation that arrives by email to the platform, and an owner must not be able to erase a visitor's trail on a whim. Every use is written to `AnalyticsAuditLog`. |
+| **D37** | How is the link builder built so Phase 5 can move it? | As a self-contained client component, `components/analytics/link-builder.tsx`, taking the store's base URL and its labels as props and holding no routing, layout or data loading of its own. Phase 4 mounts it at `/admin/analytics/links`; Phase 5's Marketing section mounts the same component in a tab and the Phase 4 route becomes a redirect. Nothing in it may reach for `usePathname`, a page layout or a server action, or moving it will mean rewriting it (**P4-35** proves the property by mounting it twice). |
 
 ## 3. Data model
 
@@ -97,7 +105,9 @@ Every tenant-scoped table gets `ENABLE` + `FORCE ROW LEVEL SECURITY` and the sam
 | `lib/analytics/retention.ts` | The §4.7 windows, chunked (**D28**). |
 | `lib/analytics/privacy-request.ts` | Export and delete one visitor's data, detaching orders (**D28**). |
 | `scripts/analytics-scheduled.ts` | The single command, the advisory lock, the stage dispatch (**D27**). |
-| `app/admin/(panel)/analytics/links/*` | The tracked-link builder (**D30**). |
+| `components/analytics/link-builder.tsx` | The builder itself, self-contained so Phase 5's Marketing section can mount it unchanged (**D37**). |
+| `app/admin/(panel)/analytics/links/*` | The Phase 4 route that mounts it (**D30**). |
+| `app/platform/(admin)/stores/[slug]/privacy-request-control.tsx` | The platform admin's entry point for an export or an erasure (**D36**). |
 
 ## 5. Commit sequence
 
@@ -113,9 +123,9 @@ check, so each of these is proven by a forced failure before the thing it protec
 4. **Acquisition classification**, including the **D24** behaviour fix for a live session.
 5. **The aggregate tables and the recompute**, including a late event and a cancelled order
    correcting a day that was already aggregated.
-6. **Retention and privacy requests**, including the order-detaching path.
+6. **Retention and privacy requests** — dry run first (**D35**) — including the order-detaching path and the platform-admin console (**D36**).
 7. **Contract rejections as their own signal** (**D29**), flushed and evaluated separately.
-8. **The tracked-link builder.**
+8. **The tracked-link builder**, as a movable component (**D37**).
 9. **Verification scripts and the acceptance record.**
 
 ## 6. Acceptance checklist
@@ -152,7 +162,8 @@ with a reason.
 |---|---|
 | P4-09 | Typing "nike" character by character emits one `SEARCH_SUBMITTED`, not four. |
 | P4-10 | A query that returns nothing emits exactly one stabilized no-result event. |
-| P4-11 | An email address, a phone number and a card-like string are each stored as `[redacted]`, and the raw text appears nowhere in the database. |
+| P4-11 | An email address, a phone number and a card-like string are each stored as `[redacted]`, and the raw text appears nowhere in the database — **including a Lebanese mobile number in Arabic-Indic digits, with and without the +961 prefix, spaced and dashed** (**D32**). |
+| P4-11a | Arabic spellings of one word normalize to one phrase: alef forms, ة/ه, ى/ي, tashkeel, tatweel, Arabic-Indic digits (**D31**). |
 | P4-12 | A redacted phrase still counts as a search and never reaches a stocking suggestion. |
 | P4-13 | A result click records the product that was clicked. |
 
@@ -172,6 +183,7 @@ with a reason.
 | P4-18 | Running the aggregation twice produces identical rows (idempotent upserts). |
 | P4-19 | An event arriving late for yesterday corrects yesterday's row on the next run. |
 | P4-20 | Cancelling an order corrects the day's order count and value, and leaves the conversion in the funnel (P3-05's rule, now in an aggregate). |
+| P4-20a | A cancellation **a week after** the order corrects that older day, by both routes: the `updatedAt` sweep and the nightly 30-day recompute (**D33**). |
 | P4-21 | Daily totals reconcile exactly against the raw events for the same local day. |
 | P4-22 | Website order value and potential WhatsApp value are never summed into one figure by any aggregate or helper. |
 | P4-23 | An aggregate read from the wrong tenant returns nothing, as `app_user`, with RLS doing the refusing. |
@@ -181,8 +193,10 @@ with a reason.
 | # | Item |
 |---|---|
 | P4-24 | Each §4.7 window deletes what it should and nothing else, in bounded chunks. |
+| P4-24a | `--dry-run` reports counts per tenant and per table and deletes **nothing**, proven by row counts either side of it (**D35**). |
 | P4-25 | Retention deleting a visitor's sessions leaves orders intact, with attribution dimensions kept and the session key cleared (P3-18 + P3-25, now exercised by the real job). |
 | P4-26 | A privacy export contains that visitor's data and no other visitor's. |
+| P4-26a | The platform admin can export and erase from `/platform/stores/[slug]`, a store owner cannot reach it at all, and every use is audit-logged (**D36**). |
 | P4-27 | A privacy deletion preserves aggregate totals, because they are anonymous (§4.7). |
 
 ### Health signals
@@ -193,6 +207,7 @@ with a reason.
 | P4-29 | A forced pool exhaustion raises the operational rate and leaves the 400 count at zero. |
 | P4-30 | A refused-consent batch raises neither. |
 | P4-31 | A flushed snapshot resets its window so two windows cannot overlap. |
+| P4-31a | A snapshot written by the ingesting process is readable by a second process, is keyed by instance, and an instance that received no traffic writes no row (**D34**). |
 
 ### Regression
 
@@ -201,6 +216,7 @@ with a reason.
 | P4-32 | `verify:commerce`, `verify:coupons`, `e2e:checkout` still pass. |
 | P4-33 | `verify:ingestion`, `verify:consent`, `verify:commerce-analytics`, `e2e:consent`, `e2e:analytics` still pass. |
 | P4-34 | `verify:e2e-policy`, `lint` and `typecheck` are clean, with the lint baseline still at zero. |
+| P4-35 | The link builder renders and copies a correct URL mounted at a second, unrelated path — the property Phase 5 depends on (**D37**). |
 
 ## 7. Risks
 
