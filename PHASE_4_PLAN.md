@@ -28,7 +28,7 @@ Last worked on **2026-11-04**. Branch `analytics/phase-1`, which is also what
 | `5f6ced7d` | 3. Search events, Arabic normalization, the PII scrub | done, `verify:search` 9/9, 4 browser legs |
 | `5b3e305` | 4. The acquisition ladder and the D24 session-touch fix | done, `verify:acquisition` 8/8 |
 | `c82a3f2` + `196995d` | 5. Aggregates, the three stages, D33's two routes | done, `verify:aggregates` 18/18 |
-| `6d5a298` | 6. Retention, privacy requests, the platform console | done, `verify:retention` 10/10, 3 browser legs |
+| "Delete what we should not keep…" | 6. Retention, privacy requests, the platform console | done, `verify:retention` 10/10, 3 browser legs |
 | — | 7. Health counters reaching the metric table (D34) | not started |
 | — | 8. The movable link builder (D37) | not started |
 | — | 9. Verification scripts and the acceptance record | not started |
