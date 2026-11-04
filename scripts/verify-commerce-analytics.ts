@@ -356,20 +356,40 @@ async function main() {
     ok("P3-15", "an order placed with no attribution records nulls and completes normally");
 
     // ------------------------------------------------------------------ written once, in the tx
+    // The claim is about WRITES. Phase 3 could state it as "only two modules mention these
+    // columns at all", because only two did; Phase 4's aggregate legitimately READS them to
+    // group orders by channel, and Phase 5's reports will too. So the check now distinguishes
+    // the two: anyone may read an order's own snapshot, and nothing outside placeOrder's
+    // tx.order.create may write one.
     const referencing = gitGrepFiles("attributionSource")
       .filter((file) => !file.startsWith("scripts/"))
       .sort();
-    assert.deepEqual(
-      referencing,
-      ["lib/analytics/order-attribution.ts", "lib/data/orders.ts"],
-      `attribution is referenced outside the resolver and the order module: ${referencing.join(", ")}`,
+    assert.ok(
+      referencing.includes("lib/data/orders.ts") &&
+        referencing.includes("lib/analytics/order-attribution.ts"),
+      `the resolver and the order module must both be there: ${referencing.join(", ")}`,
     );
+    const writers: string[] = [];
+    for (const file of referencing) {
+      const source = readFileSync(file, "utf8");
+      // A write is an update/upsert/createMany touching one of these columns. tx.order.create
+      // inside placeOrder is the one legitimate writer, and it is in lib/data/orders.ts.
+      const writes =
+        /order\.(update|updateMany|upsert)\(/.test(source) &&
+        /attribution(Source|Medium|Campaign)\s*:/.test(source);
+      if (writes && file !== "lib/data/orders.ts") writers.push(file);
+    }
+    assert.deepEqual(writers, [], `these modules write an order's attribution: ${writers.join(", ")}`);
     const ordersSource = readFileSync("lib/data/orders.ts", "utf8");
     assert.ok(
       !/order\.update[\s\S]{0,400}attribution(Source|Medium|Campaign)/.test(ordersSource),
       "no order update may write attribution dimensions; they belong to tx.order.create only",
     );
-    ok("P3-16", "attribution is written only inside placeOrder's own tx.order.create, never after");
+    ok(
+      "P3-16",
+      `attribution is written only inside placeOrder's own tx.order.create; ` +
+        `${referencing.length} module(s) read it, none write it`,
+    );
 
     // An order is reconciled against SESSIONS, never against individual events. A join from an
     // order into the event stream would turn that order into a key for one person's browsing,

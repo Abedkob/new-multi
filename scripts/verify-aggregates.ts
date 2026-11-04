@@ -410,6 +410,28 @@ async function aggregateChecks() {
     assert.equal(afterBackfill.orderValueCents, 0);
     ok("P4-20a", "the nightly 30-day backfill repaired a day that had been corrupted on purpose");
 
+    // ------------------------------------------- P4-08: a zone change is visible, not silent
+    // A recompute after a zone change WILL produce different rows — that is correct, because the
+    // store's day genuinely moved. What must not happen is that it moves invisibly: every row
+    // records the zone it was computed in, so a merchant looking at a step in their own chart
+    // can be told why, and a reader can tell two zones apart without guessing from the numbers.
+    const beforeZone = await dailyRow(today);
+    assert.equal(beforeZone.timeZone, zone);
+    await prisma.tenant.update({ where: { id: T }, data: { analyticsTimezone: "Asia/Dubai" } });
+    await recomputeDays({ id: T, analyticsTimezone: "Asia/Dubai" }, [today]);
+    const afterZone = await prisma.analyticsDailyMetric.findFirst({
+      where: { tenantId: T, timeZone: "Asia/Dubai" },
+    });
+    assert.ok(afterZone, "the recomputed row must record the new zone");
+    assert.notEqual(
+      afterZone.timeZone,
+      beforeZone.timeZone,
+      "a row computed in a different zone must say so, or the change is silent",
+    );
+    await prisma.tenant.update({ where: { id: T }, data: { analyticsTimezone: zone } });
+    await recomputeDays(agg, [today]);
+    ok("P4-08", "an aggregate row names the zone that computed it, so a zone change is visible");
+
     // --------------------------------------------- P4-22: the two money figures never merge
     const moneyReaders = gitGrepFiles("whatsappPotentialValueCents");
     const orderValueReaders = gitGrepFiles("orderValueCents");

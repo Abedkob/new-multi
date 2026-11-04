@@ -31,7 +31,7 @@ Last worked on **2026-11-04**. Branch `analytics/phase-1`, which is also what
 | "Delete what we should not keep…" | 6. Retention, privacy requests, the platform console | done, `verify:retention` 10/10, 3 browser legs |
 | "Let the health numbers leave the process…" | 7. Health counters reaching the metric table (D34) | done, `verify:health` 11/11 |
 | "Give an owner a link that answers…" | 8. The movable link builder (D37) | done, 3 checks + 1 browser leg |
-| — | 9. Verification scripts and the acceptance record | not started |
+| "Record Phase 4's acceptance results" | 9. Verification scripts and the acceptance record | done, see PHASE_4_ACCEPTANCE.md |
 
 **What commit 6 settled.** The open design question is resolved: §4.7's privacy identifier is
 the visitor's **measurement id**, shown on `/privacy` in both languages beside the consent
@@ -46,7 +46,13 @@ would not even catch the coupling — a component calling `usePathname` renders 
 and misbehaves at both. A browser leg then builds a real link and uses it, and the session it
 creates records `instagram / social / eid-sale-2026`.
 
-**Where commit 9 starts.** The acceptance record for all of Phase 4, and the runs behind it.
+**Phase 4 is complete.** 41 items pass; see
+[PHASE_4_ACCEPTANCE.md](PHASE_4_ACCEPTANCE.md), which also lists the seven things found and
+fixed while verifying and the two environment traps that each cost a run. `ANALYTICS_ROLLOUT_MODE`
+is still `off`, and **retention's first production run must be a dry run** (D35).
+
+Next: Phase 5 (the merchant and platform UX), which reads what this phase computes. The nine
+e2e suites still owing a custom-domain leg are due before the Phase 7 pilot.
 
 `pnpm verify:health` needs a server started with `ANALYTICS_HEALTH_FLUSH_MINUTES=0`, so every
 batch flushes its window instead of waiting five minutes.
