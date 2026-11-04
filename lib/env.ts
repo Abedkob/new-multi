@@ -153,6 +153,13 @@ export const envSchema = z
     // in front of the pool so a burst becomes an immediate refusal rather than hundreds of
     // handlers each waiting out connectionTimeoutMillis. Defaults to twice the pool.
     ANALYTICS_MAX_IN_FLIGHT: z.coerce.number().int().min(1).max(500).optional(),
+    // --- Phase 4: retention windows (§4.7, §14) -------------------------------------------
+    // Deliberately env-driven rather than constants: §4.7's numbers are a policy decision that
+    // a deployment in another jurisdiction may have to change without a code release.
+    ANALYTICS_RAW_RETENTION_DAYS: z.coerce.number().int().min(1).max(3650).default(90),
+    ANALYTICS_VISITOR_RETENTION_MONTHS: z.coerce.number().int().min(1).max(120).default(13),
+    ANALYTICS_AGGREGATE_RETENTION_MONTHS: z.coerce.number().int().min(1).max(240).default(24),
+    ANALYTICS_RECEIPT_RETENTION_MONTHS: z.coerce.number().int().min(1).max(240).default(24),
     // The scheduled command's own pool (lib/prisma-job.ts). Small because the job walks
     // tenants in bounded batches, and because every pool counts against one max_connections.
     ANALYTICS_JOB_DATABASE_POOL_MAX: z.coerce.number().int().min(1).max(20).default(2),
@@ -251,6 +258,10 @@ function load() {
       ANALYTICS_DATABASE_POOL_MAX: Number(raw.ANALYTICS_DATABASE_POOL_MAX) || 5,
       ANALYTICS_MAX_BATCH_SIZE: Number(raw.ANALYTICS_MAX_BATCH_SIZE) || 20,
       ANALYTICS_MAX_IN_FLIGHT: Number(raw.ANALYTICS_MAX_IN_FLIGHT) || undefined,
+      ANALYTICS_RAW_RETENTION_DAYS: Number(raw.ANALYTICS_RAW_RETENTION_DAYS) || 90,
+      ANALYTICS_VISITOR_RETENTION_MONTHS: Number(raw.ANALYTICS_VISITOR_RETENTION_MONTHS) || 13,
+      ANALYTICS_AGGREGATE_RETENTION_MONTHS: Number(raw.ANALYTICS_AGGREGATE_RETENTION_MONTHS) || 24,
+      ANALYTICS_RECEIPT_RETENTION_MONTHS: Number(raw.ANALYTICS_RECEIPT_RETENTION_MONTHS) || 24,
       ANALYTICS_JOB_DATABASE_POOL_MAX: Number(raw.ANALYTICS_JOB_DATABASE_POOL_MAX) || 2,
       ANALYTICS_SESSION_TIMEOUT_MINUTES: Number(raw.ANALYTICS_SESSION_TIMEOUT_MINUTES) || 30,
       ANALYTICS_ACTIVE_WINDOW_MINUTES: Number(raw.ANALYTICS_ACTIVE_WINDOW_MINUTES) || 5,
@@ -293,6 +304,10 @@ function load() {
         "ANALYTICS_DATABASE_POOL_MAX",
         "ANALYTICS_MAX_BATCH_SIZE",
         "ANALYTICS_MAX_IN_FLIGHT",
+        "ANALYTICS_RAW_RETENTION_DAYS",
+        "ANALYTICS_VISITOR_RETENTION_MONTHS",
+        "ANALYTICS_AGGREGATE_RETENTION_MONTHS",
+        "ANALYTICS_RECEIPT_RETENTION_MONTHS",
         "ANALYTICS_JOB_DATABASE_POOL_MAX",
         "ANALYTICS_SESSION_TIMEOUT_MINUTES",
         "ANALYTICS_ACTIVE_WINDOW_MINUTES",

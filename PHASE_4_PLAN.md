@@ -15,6 +15,53 @@ touches an order's attribution on a privacy request. So the independence rule ge
 looser: nothing in this phase may run inside a storefront request, and nothing may delete a row
 the Phase 5 reports have not yet been written to read.
 
+## 0. Progress (resume here)
+
+Last worked on **2026-11-04**. Branch `analytics/phase-1`, which is also what
+`codex/new-brand-migration` points at up to Phase 3. **Nothing is pushed.**
+
+| Commit | What | State |
+|---|---|---|
+| `7debce4` | The seven approved additions, as D31-D37 | done |
+| `b45790f` | 1. The scheduled command, its lock, its isolation proofs | done, `verify:scheduled` 6/6 |
+| `b414eaa` | 2. Local-day arithmetic | done, in `verify:aggregates` |
+| `5f6ced7d` | 3. Search events, Arabic normalization, the PII scrub | done, `verify:search` 9/9, 4 browser legs |
+| `5b3e305` | 4. The acquisition ladder and the D24 session-touch fix | done, `verify:acquisition` 8/8 |
+| `c82a3f2` + `196995d` | 5. Aggregates, the three stages, D33's two routes | done, `verify:aggregates` 18/18 |
+| — | **6. Retention, privacy requests, the platform console** | **in progress** |
+| — | 7. Health counters reaching the metric table (D34) | not started |
+| — | 8. The movable link builder (D37) | not started |
+| — | 9. Verification scripts and the acceptance record | not started |
+
+**Where commit 6 stopped.** `lib/analytics/retention.ts` is written — every §4.7 window,
+chunked deletes by primary key, a dry run that counts and deletes nothing — and its four env
+vars are wired into `lib/env.ts` and `.env.example`. It is **not yet registered as a stage** in
+`scripts/analytics-scheduled.ts`, and nothing calls it, so it has never run.
+
+Still owed by commit 6:
+
+1. Register a `retention` stage (and make `--dry-run` reach it).
+2. `lib/analytics/privacy-request.ts`: export and erase one visitor's data, reusing
+   `forgetOrderAttributionLinks()` so orders are detached and kept (P3-25).
+3. **An unresolved design question**: §4.7 says cookie settings expose "a privacy identifier",
+   and the only identifier a shopper can currently see is `AnalyticsConsentReceipt.publicRef` —
+   which identifies a consent DECISION and has no link to `AnalyticsVisitor`. So a privacy
+   request quoting it cannot resolve the visitor's data. The intended fix is to expose the
+   analytics **visitor id** (already in a signed cookie, already that visitor's own) on
+   `/privacy` beside the reference, and have the console accept it. Decide this before building
+   the console, because it changes what the console takes as input.
+4. The platform-admin console (D36) at `/platform/stores/[slug]`, plus an `AnalyticsAuditLog`
+   table (§9.3) — which does not exist yet — for the "every use is audit-logged" half of P4-26a.
+5. Checks P4-24, P4-24a, P4-25, P4-26, P4-26a, P4-27 in a new `scripts/verify-retention.ts`.
+
+**Known environment gotchas hit so far**, both worth remembering:
+
+- Killing `prisma migrate dev` leaves a connection holding Prisma's own migration advisory lock;
+  every later migration then times out at 10s until that backend is terminated
+  (`SELECT pg_terminate_backend(<pid>)`).
+- A verification script must not call `process.exit()` on Windows: exiting while a pooled socket
+  is still closing trips a libuv assertion and the run reports failure after every check passed.
+
 ## 1. Scope
 
 ### In scope
