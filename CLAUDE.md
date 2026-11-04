@@ -45,6 +45,7 @@ pnpm dev                              # http://localhost:3000
 | `pnpm verify:templates` | Test all templates × all sections (needs server running) |
 | `pnpm verify:permissions` | Test role-based access (needs server + login session) |
 | `pnpm verify:social-links` | Test tenant social-link fields (validation, storefront rendering) |
+| `pnpm verify:e2e-policy` | Static check that every E2E suite has a custom-domain leg and no skip path (no server needed) |
 | `pnpm uploads:migrate --rewrite-from=<old URL>` | Rewrite stored R2 URLs after moving buckets/domains |
 | `pnpm e2e:categories` / `e2e:variants` / `e2e:discounts` / `e2e:social-links` / `e2e:pages` / `e2e:checkout` / `e2e:kinetic` / `e2e:mirage` / `e2e:prism` | Chrome automation tests, one per feature area (needs server + Chrome installed; each creates/removes throwaway stores) |
 
@@ -227,6 +228,27 @@ No automated test suite yet. Manual verification scripts + browser E2E tests:
 - `pnpm verify:permissions`: role-based access via real login sessions + static check that every server action verifies role.
 - `pnpm verify:social-links`: tenant social-link field validation and rendering.
 - `pnpm e2e:*`: Chrome automation, one script per feature (categories, variants, discounts, social-links, storefront pages, checkout, kinetic/mirage/prism template-specific flows).
+
+### Custom-domain legs are mandatory, and a skip is a failure
+
+Every E2E suite must exercise its feature on a store's **own domain** as well as the shared
+host, and **a leg that cannot run must fail** — never a skip, never a skip reported as a pass.
+
+A custom domain changes the origin, the cookie path, the secure context and the proxy's host
+routing at once, so it is the other half of the product rather than a variation of the shared
+host. Two consecutive phases shipped total data loss that every shared-host check called
+healthy: a consent cookie scoped to `/store/<slug>` that never reached a domain root, and event
+ids that are not UUIDs off localhost (`crypto.randomUUID` is secure-context-only), which made
+the contract refuse every batch with a 400. The second was found only because a custom-domain
+leg was added — and that leg's first run skipped itself with a plausible excuse.
+
+- Use `scripts/e2e/custom-domain.ts` (`onCustomDomain`, `assertDevOriginAllowed`,
+  `PRODUCTION_BUILD_HINT`). Chrome resolves the hostname via `--host-resolver-rules`, so no
+  hosts file and no elevation.
+- Add each `*.test` hostname to `allowedDevOrigins` in `next.config.ts`, or `next dev` serves
+  the page and withholds its JavaScript.
+- `pnpm verify:e2e-policy` enforces all of this statically. Nine suites predate the policy and
+  are listed in its `PENDING_LEG` set, due before the Phase 7 pilot; that list may only shrink.
 
 ## Development Tips
 

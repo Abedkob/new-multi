@@ -37,6 +37,7 @@ import {
   type AnalyticsEventType,
 } from "../../lib/analytics/contract";
 import { mintBootstrapToken } from "../../lib/analytics/token";
+import { PRODUCTION_BUILD_HINT, assertDevOriginAllowed } from "./custom-domain";
 import { ANALYTICS_APPLICATION_NAME } from "../../lib/prisma-analytics";
 import {
   buildStoredConsent,
@@ -341,6 +342,10 @@ async function phase3() {
     // attribution is proved again there, on a hostname Chrome resolves itself.
     const domain = "analytics-e2e.test";
     const port = new URL(BASE).port || "80";
+    // Fail here, loudly, rather than twenty assertions later for a reason that has nothing to
+    // do with the feature: without this hostname in allowedDevOrigins, next dev serves the page
+    // and withholds its JavaScript.
+    assertDevOriginAllowed(domain);
     await prisma.tenant.update({ where: { id: T }, data: { domain } });
     const domainBrowser = await chromium.launch({
       channel: "chrome",
@@ -360,19 +365,11 @@ async function phase3() {
       const decided = (await dContext.cookies(origin)).some((c: Cookie) =>
         c.name.startsWith("store_consent_"),
       );
-      if (!decided) {
-        // Two innocent reasons, and this message names both, because the first run of this leg
-        // was diagnosed as the second one and was not:
-        //   1. a production build forces Secure, which a plaintext host cannot carry (real
-        //      custom domains are HTTPS, so that is correct behaviour rather than a defect);
-        //   2. the hostname is missing from allowedDevOrigins in next.config.ts, so `next dev`
-        //      never serves the page its JavaScript and the button does nothing.
-        console.log(
-          `  --  P3-14   skipped on ${domain}: no consent cookie was set. Either this is a ` +
-            "production build (which refuses a Secure cookie over http) or the hostname is " +
-            "missing from allowedDevOrigins in next.config.ts",
-        );
-      } else {
+      // A leg that cannot run is a FAILURE — never a pass, never a quiet line of output. Not
+      // running is how two phases of custom-domain data loss stayed invisible behind a green
+      // suite. scripts/e2e/custom-domain.ts carries the policy and the two innocent causes.
+      assert.ok(decided, `P3-14 on ${domain}: ${PRODUCTION_BUILD_HINT}`);
+      {
         await dPage.goto(`${origin}/products/${product.slug}`, { waitUntil: "load" });
         await dPage.locator('[data-testid="add-to-cart-button"]').click();
         await dPage.waitForTimeout(12_000);

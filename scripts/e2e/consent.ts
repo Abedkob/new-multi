@@ -23,6 +23,7 @@ import { createCategory } from "../../lib/data/categories";
 import { createProduct } from "../../lib/data/products";
 import { setTenantTemplate } from "../../lib/data/theme";
 import { BASE, makeStore } from "./browser";
+import { PRODUCTION_BUILD_HINT, assertDevOriginAllowed } from "./custom-domain";
 
 const SHOTS = process.env.CONSENT_SCREENSHOT_DIR ?? "consent-screenshots";
 
@@ -367,6 +368,7 @@ async function main() {
     // A real hostname, resolved by Chrome itself rather than by editing the machine's hosts
     // file: --host-resolver-rules needs no elevation and leaves nothing behind.
     const domain = "consent-e2e.test";
+    assertDevOriginAllowed(domain);
     await prisma.tenant.update({ where: { id: T }, data: { domain, defaultLocale: "en" } });
     const port = new URL(BASE).port || "80";
     const domainBrowser = await chromium.launch({
@@ -407,19 +409,12 @@ async function main() {
       await dPage.locator('[data-testid="consent-banner"]').waitFor({ state: "detached" });
 
       const dCookie = (await consentCookies(dContext))[0];
-      if (!dCookie && origin.startsWith("http://")) {
-        // A production build forces Secure on the consent cookie, and Chrome will not store a
-        // Secure cookie on a plaintext origin. Real custom domains are HTTPS, so this is the
-        // correct behaviour — it just cannot be exercised against a production server over
-        // http. Run this leg against `next dev`, where Secure follows the scheme.
-        ok(
-          "P1-34",
-          "skipped on this server: a production build forces Secure, which http cannot carry " +
-            "(run against next dev to exercise the custom-domain cookie)",
-        );
-        return;
-      }
-      assert.ok(dCookie, "the custom-domain visitor must get a consent cookie");
+      // This used to excuse itself here when the cookie was absent, on the grounds that a
+      // production build forces Secure and http cannot carry it. That is true, and it is still
+      // a failure: a leg that does not run must not report a pass. See
+      // scripts/e2e/custom-domain.ts — not running is how two phases of custom-domain data loss
+      // stayed invisible behind a green suite.
+      assert.ok(dCookie, `P1-34 on ${domain}: ${PRODUCTION_BUILD_HINT}`);
       assert.equal(dCookie.domain, domain, "the cookie belongs to the store's own domain");
       assert.equal(dCookie.path, "/", "a custom domain's root IS the store");
       assert.equal(dCookie.secure, false, "a plaintext host cannot receive a Secure cookie");
