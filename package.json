@@ -27,6 +27,7 @@
     "verify:scheduled": "tsx scripts/verify-scheduled.ts",
     "verify:aggregates": "tsx scripts/verify-aggregates.ts",
     "verify:search": "tsx scripts/verify-search.ts",
+    "verify:acquisition": "tsx scripts/verify-acquisition.ts",
     "analytics:scheduled": "tsx scripts/analytics-scheduled.ts",
     "uploads:migrate": "tsx scripts/migrate-uploads-to-r2.ts",
     "e2e:categories": "tsx scripts/e2e/categories.ts",

@@ -10,7 +10,7 @@
  * one definition rather than two that drift.
  */
 
-import type { AttributionContext, PageKind } from "@/lib/analytics/contract";
+import type { PageKind } from "@/lib/analytics/contract";
 import { PAGE_KINDS } from "@/lib/analytics/contract";
 
 export type DeviceClass = "mobile" | "tablet" | "desktop";
@@ -78,53 +78,10 @@ export function pageKindFromPath(pathname: string, basePath: string): PageKind {
   }
 }
 
-export type ResolvedAttribution = {
-  source: string | null;
-  medium: string | null;
-  campaign: string | null;
-  content: string | null;
-  hasAdClick: boolean;
-};
-
-const EMPTY_ATTRIBUTION: ResolvedAttribution = {
-  source: null,
-  medium: null,
-  campaign: null,
-  content: null,
-  hasAdClick: false,
-};
-
-/** Keeps a trimmed, length-capped value, or null. Never an empty string. */
-const clean = (value: string | undefined, max: number): string | null => {
-  const trimmed = value?.trim().slice(0, max);
-  return trimmed ? trimmed : null;
-};
-
 /**
- * Resolves what the client reported about how the visitor arrived, in the priority order of
- * §3.5: explicit UTM, then a recognised ad-click marker, then a referring host, then direct.
- *
- * The client reports these because only the page can see its own URL and referrer, but nothing
- * it sends is stored verbatim: values are trimmed and capped, the referring host becomes the
- * source rather than a full URL, and an ad-click marker is a boolean — never the click id.
+ * Attribution moved to lib/analytics/attribution.ts in Phase 4, which classifies the arrival
+ * (campaign / paid / social / search / referral / direct) instead of only resolving it. Kept as
+ * a re-export so there is one implementation rather than two that drift.
  */
-export function resolveAttribution(input: AttributionContext | undefined): ResolvedAttribution {
-  if (!input) return EMPTY_ATTRIBUTION;
+export { resolveAttribution, type ResolvedAttribution } from "@/lib/analytics/attribution";
 
-  const source = clean(input.source, 80);
-  const medium = clean(input.medium, 80);
-  const campaign = clean(input.campaign, 120);
-  const content = clean(input.content, 120);
-  const hasAdClick = input.hasAdClick === true;
-  const referrerHost = clean(input.referrerHost, 255);
-
-  if (source) return { source, medium, campaign, content, hasAdClick };
-  if (hasAdClick) {
-    return { source: "ad-click", medium: medium ?? "cpc", campaign, content, hasAdClick };
-  }
-  if (referrerHost) {
-    return { source: referrerHost, medium: medium ?? "referral", campaign, content, hasAdClick };
-  }
-  // Direct: no source at all, rather than a made-up one.
-  return { ...EMPTY_ATTRIBUTION, hasAdClick };
-}

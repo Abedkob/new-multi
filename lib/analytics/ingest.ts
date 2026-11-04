@@ -24,7 +24,8 @@ import {
   type AnalyticsEventInput,
   type AnalyticsEventType,
 } from "@/lib/analytics/contract";
-import { resolveAttribution, type DeviceClass } from "@/lib/analytics/request";
+import { isDirect, resolveAttribution } from "@/lib/analytics/attribution";
+import { type DeviceClass } from "@/lib/analytics/request";
 import { sessionExpired } from "@/lib/analytics/identity";
 import { normalizeSearchText } from "@/lib/analytics/search-text";
 import { resolveWhatsappValues } from "@/lib/analytics/whatsapp-value";
@@ -128,7 +129,7 @@ export async function ingestBatch(
     const existingVisitor = facts.visitorId
       ? await db.analyticsVisitor.findFirst({
           where: { id: facts.visitorId, tenantId: tenant.id },
-          select: { id: true },
+          select: { id: true, firstSource: true, firstMedium: true, firstCampaign: true },
         })
       : null;
 
@@ -152,7 +153,20 @@ export async function ingestBatch(
     if (existingVisitor) {
       await db.analyticsVisitor.update({
         where: { id: visitor.id },
-        data: { lastSeenAt: now },
+        data: {
+          lastSeenAt: now,
+          // First touch is written once and never overwritten — but a visitor whose first visit
+          // was direct has nothing recorded, and "first touch" in a report means the first
+          // arrival we could actually attribute. So fill it the first time there is something
+          // to fill it with, and never again.
+          ...(isDirect(attribution)
+            ? {}
+            : {
+                firstSource: existingVisitor.firstSource ?? attribution.source,
+                firstMedium: existingVisitor.firstMedium ?? attribution.medium,
+                firstCampaign: existingVisitor.firstCampaign ?? attribution.campaign,
+              }),
+        },
       });
     }
 
@@ -165,6 +179,29 @@ export async function ingestBatch(
       : null;
 
     const reuse = existingSession && !sessionExpired(existingSession.lastActivityAt, now);
+
+    // D24. The comment on session creation claimed the touch was "only overwritten with
+    // something real" — and nothing ever overwrote it, because this was the only write. A
+    // visitor who arrived direct and came back through a campaign link kept source = null for
+    // the whole half-hour, so the campaign that actually brought them was credited to nothing.
+    //
+    // Now a later batch carrying a non-direct arrival replaces the session's touch, and a
+    // direct arrival never erases one: that is what "last NON-DIRECT touch" means in §3.5.
+    if (reuse && !isDirect(attribution)) {
+      await db.analyticsSession.update({
+        where: { id: existingSession.id },
+        data: {
+          sourceKind: attribution.sourceKind,
+          referrerHost: attribution.referrerHost,
+          source: attribution.source,
+          medium: attribution.medium,
+          campaign: attribution.campaign,
+          content: attribution.content,
+          // Sticky: a session that ever had a paid click keeps that fact.
+          ...(attribution.hasAdClick ? { hasAdClick: true } : {}),
+        },
+      });
+    }
     const session = reuse
       ? existingSession
       : await db.analyticsSession.create({
@@ -176,8 +213,8 @@ export async function ingestBatch(
             country: facts.country,
             deviceClass: facts.deviceClass,
             landingPageKind: envelope.events[0]?.pageKind ?? null,
-            // Last non-direct touch: only overwrite with something real, so navigating from a
-            // campaign link to a direct page view does not erase how the visit started.
+            sourceKind: attribution.sourceKind,
+            referrerHost: attribution.referrerHost,
             source: attribution.source,
             medium: attribution.medium,
             campaign: attribution.campaign,

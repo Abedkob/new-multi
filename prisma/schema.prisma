@@ -496,7 +496,14 @@ model AnalyticsSession {
   deviceClass     String?
   landingPageKind String?
 
-  // Last non-direct touch for this session.
+  /// Which rung of §3.5's ladder this arrival came from: campaign, paid, social, search,
+  /// referral or direct. Classified once, server-side (lib/analytics/attribution.ts), so no two
+  /// reports can disagree about what a channel is.
+  sourceKind  String?
+  /// Hostname only. Never a full referring URL: a path can carry a search query or a username.
+  referrerHost String?
+
+  // Last non-direct touch for this session (D24: updated when a later batch brings one).
   source     String?
   medium     String?
   campaign   String?
@@ -509,6 +516,7 @@ model AnalyticsSession {
   @@unique([id, tenantId])
   @@index([tenantId, startedAt])
   @@index([tenantId, lastActivityAt])
+  @@index([tenantId, sourceKind, startedAt])
 }
 
 /// Typed columns rather than arbitrary JSON, so what can be stored is visible in the schema.
