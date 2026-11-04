@@ -45,10 +45,19 @@ function signingSecret(): string {
 
 const b64url = (buf: Buffer) => buf.toString("base64url");
 
-export function consentCookieName(tenantId: string): string {
+/**
+ * The per-store suffix every analytics cookie name carries. Exported because the visitor and
+ * session cookies (lib/analytics/identity.ts) must scope to a store exactly the way consent
+ * does — one derivation, so the three can never disagree about which store they belong to.
+ */
+export function tenantCookieKey(tenantId: string): string {
   const digest = createHmac("sha256", signingSecret()).update(`consent:${tenantId}`).digest();
   // base32-ish from base64url, minus the two characters that are not cookie-name safe.
-  return CONSENT_COOKIE_PREFIX + b64url(digest).replace(/[-_]/g, "").slice(0, 12);
+  return b64url(digest).replace(/[-_]/g, "").slice(0, 12);
+}
+
+export function consentCookieName(tenantId: string): string {
+  return CONSENT_COOKIE_PREFIX + tenantCookieKey(tenantId);
 }
 
 function sign(payload: string): string {

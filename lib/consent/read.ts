@@ -15,6 +15,7 @@ import {
   consentState,
   isConsentLocale,
 } from "@/lib/consent/types";
+import { countryFrom, deviceClassFrom } from "@/lib/analytics/request";
 import { getStoreBasePath } from "@/lib/store-url";
 
 /** The tenant fields consent needs; a structural type so a `select`ed row fits. */
@@ -57,37 +58,17 @@ export async function requestIsHttps(): Promise<boolean> {
   return proto === "https";
 }
 
-const COUNTRY_HEADERS = ["cf-ipcountry", "x-vercel-ip-country", "x-geo-country"] as const;
-/** Cloudflare's placeholders for "unknown" and "Tor exit node" are not countries. */
-const NON_COUNTRIES = new Set(["XX", "T1"]);
-
 /**
- * Country from trusted proxy metadata only (§4.5). Never derived here from an IP address: the IP
- * is for rate limiting, is used while the request is in flight, and is not carried any further.
+ * Country and device class come from lib/analytics/request.ts, which holds the single
+ * definition of what may be derived from a request. These wrappers exist only to read the
+ * current request's headers for a Server Component or Server Action.
  */
 export async function requestCountry(): Promise<string | null> {
-  const h = await headers();
-  for (const name of COUNTRY_HEADERS) {
-    const value = h.get(name)?.trim().toUpperCase();
-    if (value && /^[A-Z]{2}$/.test(value) && !NON_COUNTRIES.has(value)) return value;
-  }
-  return null;
+  return countryFrom(await headers());
 }
 
-export type DeviceClass = "mobile" | "tablet" | "desktop";
+export type { DeviceClass } from "@/lib/analytics/request";
 
-/**
- * Three buckets, derived and then thrown away: the user-agent string itself is never stored, and
- * nothing finer than this is kept. "Is the shop's mobile layout where the problem is?" is a
- * question a merchant should be able to answer; "which device is this person on?" is not.
- */
-export async function requestDeviceClass(): Promise<DeviceClass | null> {
-  const h = await headers();
-  const ua = h.get("user-agent");
-  if (!ua) return null;
-  if (/\b(iPad|Tablet)\b/i.test(ua) || (/\bAndroid\b/i.test(ua) && !/\bMobile\b/i.test(ua))) {
-    return "tablet";
-  }
-  if (/\b(Mobi|iPhone|iPod|Android.*Mobile|Windows Phone)\b/i.test(ua)) return "mobile";
-  return "desktop";
+export async function requestDeviceClass() {
+  return deviceClassFrom(await headers());
 }
