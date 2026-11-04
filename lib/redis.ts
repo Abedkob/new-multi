@@ -191,3 +191,55 @@ export async function redisDel(...keys: string[]): Promise<boolean> {
     return false;
   }
 }
+
+/**
+ * Active-visitor presence (§8.2). A sorted set per store: member is an opaque session id, score
+ * is the moment of last visible activity. No IP, no page, no history — the set answers "how
+ * many" and can answer nothing else.
+ *
+ * Every result distinguishes a real answer from "Redis could not say", because reporting zero
+ * when we simply do not know tells a merchant nobody is in their shop. That is a different and
+ * far more damaging claim than admitting the number is unavailable.
+ */
+export type PresenceResult = { available: true; count: number } | { available: false };
+
+const presenceKey = (tenantId: string) => `analytics:presence:${tenantId}`;
+
+/** Records activity and prunes anything already outside the window. Best effort. */
+export async function touchPresence(
+  tenantId: string,
+  sessionId: string,
+  windowMs: number,
+): Promise<boolean> {
+  const client = await getRedisClient();
+  if (!client) return false;
+  try {
+    const now = Date.now();
+    const key = presenceKey(tenantId);
+    await client.zAdd(key, [{ score: now, value: sessionId }]);
+    await client.zRemRangeByScore(key, 0, now - windowMs);
+    // Nothing should outlive the window by much; this is only a backstop against a key leaking
+    // if a store goes quiet forever.
+    await client.expire(key, Math.ceil((windowMs * 4) / 1000));
+    return true;
+  } catch (error) {
+    console.error("[redis] presence touch failed:", error);
+    return false;
+  }
+}
+
+/** How many sessions were active inside the window. */
+export async function countPresence(tenantId: string, windowMs: number): Promise<PresenceResult> {
+  const client = await getRedisClient();
+  if (!client) return { available: false };
+  try {
+    const now = Date.now();
+    const key = presenceKey(tenantId);
+    await client.zRemRangeByScore(key, 0, now - windowMs);
+    const count = await client.zCount(key, now - windowMs, "+inf");
+    return { available: true, count };
+  } catch (error) {
+    console.error("[redis] presence count failed:", error);
+    return { available: false };
+  }
+}

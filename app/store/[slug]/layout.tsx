@@ -1,9 +1,13 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
+import { PageViewTracker } from "@/components/analytics/page-view";
+import { AnalyticsTracker } from "@/components/analytics/tracker";
 import { ConsentProvider } from "@/components/consent/consent-provider";
 import { ThemeScope } from "@/components/theme-scope";
 import { StoreAnalytics } from "@/lib/analytics";
 import { CartProvider } from "@/lib/cart/cart";
+import { rolloutIncludes } from "@/lib/analytics/rollout";
+import { mintBootstrapToken } from "@/lib/analytics/token";
 import { readStoreConsent } from "@/lib/consent/read";
 import { getStoreBasePath } from "@/lib/store-url";
 import { letterFavicon } from "@/lib/favicon";
@@ -100,13 +104,29 @@ export default async function StoreLayout({
   // categories this decision actually granted.
   const consent = await readStoreConsent(tenant);
 
-  const shell = (
+  // First-party collection needs BOTH: the visitor granted analytics, and this store is inside
+  // the rollout. Consent alone is not enough (a store may not be switched on yet) and rollout
+  // alone is never enough (that would be collecting without permission).
+  const collecting = consent.grants.analytics && rolloutIncludes(tenant);
+
+  const inner = (
     // The cart lives in React state here; this layout stays mounted across page navigations.
     <CartProvider>
       <StorefrontShell template={getTemplate(templateId)} data={data}>
         {children}
       </StorefrontShell>
     </CartProvider>
+  );
+
+  // Mounted only while collecting, so withdrawing consent unmounts the tracker and its queued
+  // events die with it rather than being flushed after the visitor said no.
+  const shell = collecting ? (
+    <AnalyticsTracker slug={tenant.slug} token={mintBootstrapToken(tenant.id)}>
+      <PageViewTracker basePath={getStoreBasePath(tenant)} />
+      {inner}
+    </AnalyticsTracker>
+  ) : (
+    inner
   );
   const { analytics, hasAnalytics } = storeIntegrations(tenant);
 

@@ -16,6 +16,7 @@ import {
   visitorCookieName,
   VISITOR_COOKIE_MAX_AGE_SECONDS,
 } from "@/lib/analytics/identity";
+import { markActive } from "@/lib/analytics/presence";
 import { countryFrom, deviceClassFrom } from "@/lib/analytics/request";
 import { rolloutIncludes } from "@/lib/analytics/rollout";
 import { verifyBootstrapToken } from "@/lib/analytics/token";
@@ -171,6 +172,11 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ slu
     return accepted();
   }
   recordAccepted(outcome.inserted, outcome.rejectedOwnership);
+
+  // ---- step 12: presence, best effort ---------------------------------------------------------
+  // Not awaited for correctness, only to keep the handler tidy: a Redis failure here is already
+  // bounded (lib/redis.ts) and must never delay the response.
+  void markActive(tenant.id, outcome.sessionId).catch(() => {});
 
   // ---- step 13: answer, carrying the identity forward -----------------------------------------
   const response = accepted();
