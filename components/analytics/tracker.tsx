@@ -91,11 +91,12 @@ function readAttribution(): AttributionContext | undefined {
 }
 
 export function AnalyticsTracker({
-  slug,
+  basePath,
   token,
   children,
 }: {
-  slug: string;
+  /** "" on a custom domain, "/store/<slug>" on the shared host. */
+  basePath: string;
   /** Minted per render by the storefront layout; tenant-bound and short-lived. */
   token: string;
   children: React.ReactNode;
@@ -104,8 +105,8 @@ export function AnalyticsTracker({
   const attribution = useRef<AttributionContext | undefined>(undefined);
   /** Sent with the first batch only; after that the session already carries its source. */
   const attributionSent = useRef(false);
-  const endpoint = analyticsEventsPath(slug);
-  const presenceEndpoint = analyticsPresencePath(slug);
+  const endpoint = analyticsEventsPath(basePath);
+  const presenceEndpoint = analyticsPresencePath(basePath);
 
   const flush = useCallback(
     (useBeacon: boolean) => {

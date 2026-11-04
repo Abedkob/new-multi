@@ -27,7 +27,7 @@ import { parse as parseEnvFile } from "dotenv";
 import { prisma } from "../lib/prisma";
 import {
   ANALYTICS_SCHEMA_VERSION,
-  analyticsEventsPath,
+  analyticsEventsPathForSlug,
   type AnalyticsEventInput,
   type PageKind,
 } from "../lib/analytics/contract";
@@ -90,7 +90,7 @@ async function main() {
     },
   });
 
-  const endpoint = `${BASE}${analyticsEventsPath(tenant.slug)}`;
+  const endpoint = `${BASE}${analyticsEventsPathForSlug(tenant.slug)}`;
   const consentCookie = `${consentCookieName(tenant.id)}=${encodeConsent(
     buildStoredConsent({ noticeVersion: 1, grants: GRANT_ALL, locale: "en" }),
   )}`;

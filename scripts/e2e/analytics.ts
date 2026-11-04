@@ -32,7 +32,7 @@ import { createCategory } from "../../lib/data/categories";
 import { createProduct } from "../../lib/data/products";
 import {
   ANALYTICS_SCHEMA_VERSION,
-  analyticsEventsPath,
+  analyticsEventsPathForSlug,
   type AnalyticsEnvelope,
 } from "../../lib/analytics/contract";
 import { mintBootstrapToken } from "../../lib/analytics/token";
@@ -54,11 +54,6 @@ let checks = 0;
 const ok = (id: string, message: string) => {
   checks++;
   console.log(`  ok  ${id.padEnd(7)} ${message}`);
-};
-
-const percentile = (values: number[], p: number) => {
-  const sorted = [...values].sort((a, b) => a - b);
-  return sorted[Math.min(sorted.length - 1, Math.floor((p / 100) * sorted.length))];
 };
 
 /** A synthetic batch, signed the way a real browser's would be. */
@@ -108,7 +103,7 @@ async function main() {
   const consentCookie = `${consentCookieName(T)}=${encodeConsent(
     buildStoredConsent({ noticeVersion: 1, grants: GRANT_ALL, locale: "en" }),
   )}`;
-  const endpoint = `${BASE}${analyticsEventsPath(slug)}`;
+  const endpoint = `${BASE}${analyticsEventsPathForSlug(slug)}`;
 
   const postBatch = async () => {
     const response = await fetch(endpoint, {
@@ -165,6 +160,69 @@ async function main() {
   };
 
   try {
+    // ---------------------------------------------------------------- the tracker obeys consent
+    // Everything below the consent line is browser-side: what the page actually sends.
+    const eventCalls: string[] = [];
+    context.on("request", (request) => {
+      if (request.url().includes("/analytics/events")) eventCalls.push(request.url());
+    });
+
+    await page.goto(home, { waitUntil: "load" });
+    await page.locator('[data-testid="consent-banner"]').waitFor();
+    await page.waitForTimeout(12_000); // past one flush interval
+    assert.deepEqual(eventCalls, [], `events were sent before consent: ${eventCalls.length}`);
+    ok("P2-01", "no event request is made before the visitor has chosen (one flush interval)");
+
+    await page.locator('[data-testid="consent-accept-all"]').click();
+    await page.locator('[data-testid="consent-banner"]').waitFor({ state: "detached" });
+    await page.waitForTimeout(12_000);
+    assert.ok(eventCalls.length > 0, "accepting analytics must start collection");
+    const storedAfterConsent = await prisma.analyticsEvent.count({ where: { tenantId: T } });
+    assert.ok(storedAfterConsent > 0, "a PAGE_VIEW should have been stored");
+    ok("P2-01", `after accepting, the tracker sent ${eventCalls.length} batch(es) and PAGE_VIEW rows exist`);
+
+    const beforeWithdraw = eventCalls.length;
+    await page.locator('[data-testid="cookie-settings-link"]').first().click();
+    await page.locator('[data-testid="consent-manage-dialog"]').waitFor();
+    await page.locator('[data-testid="consent-withdraw"]').click();
+    await page.locator('[data-testid="consent-manage-dialog"]').waitFor({ state: "hidden" });
+    await page.goto(home, { waitUntil: "load" });
+    await page.waitForTimeout(12_000);
+    assert.equal(
+      eventCalls.length,
+      beforeWithdraw,
+      `${eventCalls.length - beforeWithdraw} batches were sent after withdrawal`,
+    );
+    ok("P2-02", "withdrawing consent stops collection immediately and nothing further is sent");
+
+    // The platform's analytics kill switch is the same gate the rollout uses, so pausing a
+    // store exercises the out-of-rollout path without restarting the server.
+    await prisma.tenant.update({
+      where: { id: T },
+      data: { analyticsPausedAt: new Date(), analyticsPauseReason: "e2e" },
+    });
+    // The withdrawal above is still in this context's cookies, so start this leg undecided.
+    await context.clearCookies();
+    const pausedPage = await context.newPage();
+    const pausedCalls: string[] = [];
+    pausedPage.on("request", (r) => {
+      if (r.url().includes("/analytics/events")) pausedCalls.push(r.url());
+    });
+    await pausedPage.goto(home, { waitUntil: "load" });
+    await pausedPage.locator('[data-testid="consent-accept-all"]').click();
+    await pausedPage.waitForTimeout(12_000);
+    assert.deepEqual(pausedCalls, [], "a paused store must mount no tracker at all");
+    await pausedPage.close();
+    await prisma.tenant.update({
+      where: { id: T },
+      data: { analyticsPausedAt: null, analyticsPauseReason: null },
+    });
+    ok("P2-04", "a store outside collection mounts no tracker, even for a consenting visitor");
+
+    // Clear the decision so the load section below starts from a clean synthetic identity.
+    await context.clearCookies();
+    await prisma.analyticsEvent.deleteMany({ where: { tenantId: T } });
+
     // ---------------------------------------------------------------- the endpoint is live
     const first = await postBatch();
     assert.equal(first, 202, `the endpoint should accept a valid batch, got ${first}`);

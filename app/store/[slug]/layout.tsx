@@ -121,7 +121,7 @@ export default async function StoreLayout({
   // Mounted only while collecting, so withdrawing consent unmounts the tracker and its queued
   // events die with it rather than being flushed after the visitor said no.
   const shell = collecting ? (
-    <AnalyticsTracker slug={tenant.slug} token={mintBootstrapToken(tenant.id)}>
+    <AnalyticsTracker basePath={getStoreBasePath(tenant)} token={mintBootstrapToken(tenant.id)}>
       <PageViewTracker basePath={getStoreBasePath(tenant)} />
       {inner}
     </AnalyticsTracker>

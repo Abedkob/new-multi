@@ -21,6 +21,7 @@
     "verify:coupons": "tsx scripts/verify-coupons.ts",
     "verify:social-links": "tsx scripts/verify-social-links.ts",
     "verify:consent": "tsx scripts/verify-consent.ts",
+    "verify:ingestion": "tsx scripts/verify-ingestion.ts",
     "uploads:migrate": "tsx scripts/migrate-uploads-to-r2.ts",
     "e2e:categories": "tsx scripts/e2e/categories.ts",
     "e2e:variants": "tsx scripts/e2e/variants.ts",

@@ -123,8 +123,25 @@ export const analyticsEnvelopeSchema = z
 
 export type AnalyticsEnvelope = z.infer<typeof analyticsEnvelopeSchema>;
 
-/** Paths of the two public endpoints, built in one place so the tracker cannot drift. */
-export const analyticsEventsPath = (slug: string) =>
-  `/api/store/${encodeURIComponent(slug)}/analytics/events`;
-export const analyticsPresencePath = (slug: string) =>
-  `/api/store/${encodeURIComponent(slug)}/analytics/presence`;
+/**
+ * Paths of the two public endpoints, built in one place so the tracker cannot drift.
+ *
+ * They live UNDER the storefront path, not under /api, and that is load-bearing: the consent
+ * cookie is scoped to `/store/<slug>` (§4.4, so one store's decision is never sent to another),
+ * and a browser simply would not attach it to a request for `/api/...`. An endpoint outside the
+ * cookie's path sees every visitor as undecided and silently discards everything they send.
+ *
+ * It also makes custom domains work without a special case: proxy.ts rewrites
+ * `<domain>/analytics/events` to this same route, same origin, cookie path `/`.
+ *
+ * `basePath` is "" for a store on its own domain and "/store/<slug>" otherwise — the value the
+ * storefront already computes for every internal link.
+ */
+export const analyticsEventsPath = (basePath: string) => `${basePath}/analytics/events`;
+export const analyticsPresencePath = (basePath: string) => `${basePath}/analytics/presence`;
+
+/** The absolute, path-based form, for scripts and server-side callers that only have a slug. */
+export const analyticsEventsPathForSlug = (slug: string) =>
+  analyticsEventsPath(`/store/${encodeURIComponent(slug)}`);
+export const analyticsPresencePathForSlug = (slug: string) =>
+  analyticsPresencePath(`/store/${encodeURIComponent(slug)}`);
