@@ -24,8 +24,21 @@ model User {
   sessionVersion     Int      @default(0)
   createdAt          DateTime @default(now())
 
+  /// The admin dashboard language this user chose, persisted (D58).
+  ///
+  /// The language switch writes a cookie AND this column. The cookie is what every request
+  /// reads; this is what a scheduled job reads at 09:00 on Monday, when there is no request and
+  /// therefore no cookie. Null means "never chose", which falls back to the store's default
+  /// locale and then to English.
+  adminLocale        String?
+
   // One owner owns exactly one tenant.
   tenant Tenant?
+
+  pushSubscriptions      PushSubscription[]
+  ownerNotificationPrefs OwnerNotificationPreference?
+  platformNotificationPrefs PlatformNotificationPreference?
+  notifications          AdminNotification[]
 }
 
 model Tenant {
@@ -119,6 +132,9 @@ model Tenant {
   analyticsCursors          AnalyticsAggregationCursor[]
   analyticsAuditLogs        AnalyticsAuditLog[]
   marketingCampaigns        MarketingCampaign[]
+  pushSubscriptions         PushSubscription[]
+  adminNotifications        AdminNotification[]
+  notificationAlertStates   NotificationAlertState[] @relation("TenantAlertStates")
 }
 
 // A campaign the owner saved while building a tracked link (D39).
@@ -464,6 +480,8 @@ model Order {
 
   @@index([tenantId, createdAt])
   @@index([tenantId, updatedAt])
+  /// Which notification batches announced this order (Phase 6, §9.8).
+  notificationLinks AdminNotificationOrder[]
 }
 
 // Name, attributes and price are copied at order time, so later edits to (or deletion of) the
@@ -926,4 +944,242 @@ model AnalyticsOperationalMetric {
 
   @@index([at])
   @@index([instance, at])
+}
+
+
+// =============================================================================================
+// Phase 6: admin push notifications (§9.6-§9.8, §11)
+//
+// Three rules shape every table below:
+//
+//   1. A notification is a LOGICAL fact first and a delivery second. One order produces one
+//      AdminNotification per recipient and one AdminNotificationDelivery per device, so "did we
+//      already tell them?" and "did this phone get it?" are different questions with different
+//      answers (D52).
+//   2. The body is snapshotted as sent. A template change next month must not rewrite what a
+//      merchant was told last night, and the ledger is the only record of what reached a device.
+//   3. Tenant-scoped rows carry tenantId and live under forced RLS, like everything else a store
+//      owns. A PLATFORM row has a null tenantId and is therefore reachable only under
+//      withBypass — which is correct: a platform admin's own subscription is not a store's data.
+// =============================================================================================
+
+enum NotificationAudience {
+  OWNER
+  PLATFORM
+}
+
+/// Every kind of notification this platform can send. Owner types and platform types in one
+/// enum, with the audience on the row: a type belonging to the wrong audience is a bug the
+/// writer refuses (lib/notifications/types.ts), not a shape the database allows by accident.
+enum NotificationType {
+  // Owner (§11.4, §11.7, §11.8)
+  NEW_ORDER
+  WEEKLY_SUMMARY
+  PRODUCT_ALERT
+  FUNNEL_ALERT
+  SEARCH_ALERT
+  TRAFFIC_ALERT
+  // Platform (§11.10, §11.11)
+  INACTIVE_STORE
+  STORE_DECLINE
+  INGESTION_HEALTH
+  /// Our own code sending what the endpoint refuses. Its own type because it has its own, much
+  /// lower threshold and must never be averaged into the operational drop rate (P6-25).
+  CONTRACT_REJECTION
+  AGGREGATION_HEALTH
+  REDIS_FALLBACK
+  PUSH_DELIVERY
+  PLATFORM_WEEKLY_SUMMARY
+}
+
+enum NotificationDeliveryState {
+  PENDING
+  SENDING
+  SENT
+  FAILED
+  /// The push service said this endpoint is gone for good (404/410). Never retried.
+  EXPIRED
+}
+
+/// One browser on one device, subscribed to push (§9.6, D56).
+model PushSubscription {
+  id       String               @id @default(cuid())
+  userId   String
+  user     User                 @relation(fields: [userId], references: [id], onDelete: Cascade)
+  /// Set for an OWNER subscription, null for a PLATFORM one — which is what keeps a platform
+  /// admin's device out of every tenant-scoped query.
+  tenantId String?
+  tenant   Tenant?              @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  audience NotificationAudience
+
+  /// Encrypted at rest: the endpoint URL is a capability. Anyone holding it can push to this
+  /// device until it is revoked, so a dump of this table alone must not be enough.
+  endpointCiphertext String
+  /// A keyed hash of the endpoint, for looking a subscription up and for the uniqueness this
+  /// table needs, without decrypting every row to find one.
+  endpointHash       String @unique
+  p256dhCiphertext   String
+  authCiphertext     String
+
+  /// What the owner sees in the device list: "Chrome on Android", and a coarse class only.
+  deviceLabel String
+  deviceClass String @default("unknown")
+
+  createdAt     DateTime  @default(now())
+  lastSuccessAt DateTime?
+  lastFailureAt DateTime?
+  /// Set when the user removes the device; kept so a delivery row still has something to name.
+  revokedAt     DateTime?
+  /// Set when the push service says the endpoint is permanently gone.
+  expiredAt     DateTime?
+
+  deliveries AdminNotificationDelivery[]
+
+  @@index([userId, audience])
+  @@index([tenantId])
+  @@index([audience, expiredAt, revokedAt])
+}
+
+/// What an owner wants to be told about (§9.7). One row per user, not per tenant.
+model OwnerNotificationPreference {
+  id     String @id @default(cuid())
+  userId String @unique
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  newOrders     Boolean @default(true)
+  weeklySummary Boolean @default(true)
+  productAlerts Boolean @default(true)
+  funnelAlerts  Boolean @default(true)
+  searchAlerts  Boolean @default(true)
+  trafficAlerts Boolean @default(true)
+
+  /// The only preference that starts OFF (D50). A lock screen reading "new order — $340" tells
+  /// whoever is holding the phone what the shop takes in, so the amount is opt-in. Customer
+  /// identity is not a preference at all: it is never sent.
+  showOrderAmount Boolean @default(false)
+
+  updatedAt DateTime @updatedAt
+}
+
+/// What a platform admin wants to be told about (§9.7).
+model PlatformNotificationPreference {
+  id     String @id @default(cuid())
+  userId String @unique
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  inactiveStoreAlerts    Boolean @default(true)
+  storeDeclineAlerts     Boolean @default(true)
+  ingestionHealthAlerts  Boolean @default(true)
+  aggregationHealthAlerts Boolean @default(true)
+  redisFallbackAlerts    Boolean @default(true)
+  pushDeliveryAlerts     Boolean @default(true)
+  weeklyPlatformSummary  Boolean @default(true)
+
+  updatedAt DateTime @updatedAt
+}
+
+/// The logical notification: that this person was told this thing (§9.8).
+model AdminNotification {
+  id               String               @id @default(cuid())
+  recipientUserId  String
+  recipient        User                 @relation(fields: [recipientUserId], references: [id], onDelete: Cascade)
+  audience         NotificationAudience
+  type             NotificationType
+  /// The store it is about, where there is one. Null for a platform-wide notification.
+  tenantId         String?
+  tenant           Tenant?              @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  /// Snapshotted as sent, in the language it was sent in (D58). Never re-rendered.
+  title       String
+  body        String
+  /// Where tapping it goes, e.g. "/admin/orders".
+  destination String
+  locale      String @default("en")
+
+  /// What makes this notification the same notification: "owner-order:<userId>:<orderId>".
+  /// Unique, so the instant path and the catch-up stage cannot both create it (D52).
+  dedupeKey   String  @unique
+  /// What a cooldown is counted against: a type plus an entity (a product, a step, a phrase),
+  /// so one struggling product cannot produce a daily alert (D54).
+  cooldownKey String?
+
+  createdAt DateTime @default(now())
+
+  orders     AdminNotificationOrder[]
+  deliveries AdminNotificationDelivery[]
+
+  @@index([recipientUserId, createdAt])
+  @@index([tenantId, type, createdAt])
+  @@index([cooldownKey, createdAt])
+}
+
+/// Which orders a notification covered (§9.8, D52, D53).
+///
+/// The unique constraint on (recipientUserId, orderId) is the load-bearing part of the whole
+/// deduplication story: two senders may both reach this table, and only one insert can win. The
+/// loser's transaction rolls back and it sends nothing.
+model AdminNotificationOrder {
+  notificationId  String
+  notification    AdminNotification @relation(fields: [notificationId], references: [id], onDelete: Cascade)
+  orderId         String
+  order           Order             @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  recipientUserId String
+  tenantId        String
+  createdAt       DateTime          @default(now())
+
+  @@id([notificationId, orderId])
+  @@unique([recipientUserId, orderId])
+  @@index([tenantId, createdAt])
+}
+
+/// One attempt to reach one device (§9.8).
+model AdminNotificationDelivery {
+  id             String                    @id @default(cuid())
+  notificationId String
+  notification   AdminNotification         @relation(fields: [notificationId], references: [id], onDelete: Cascade)
+  subscriptionId String
+  subscription   PushSubscription          @relation(fields: [subscriptionId], references: [id], onDelete: Cascade)
+  /// Denormalised from the notification so this table can live under the same tenant policy
+  /// (§9.9). Null for a platform delivery, exactly as on the notification.
+  tenantId       String?
+
+  state    NotificationDeliveryState @default(PENDING)
+  attempts Int                       @default(0)
+  /// While this is in the future, another sender must not claim this delivery (D52). A crashed
+  /// sender's lease expires and the scheduled recovery stage picks the delivery up.
+  leaseExpiresAt DateTime?
+  /// A coarse class ("timeout", "gone", "rejected", "unknown") — never the provider's body.
+  errorCategory  String?
+  sentAt         DateTime?
+  updatedAt      DateTime                  @updatedAt
+
+  @@unique([notificationId, subscriptionId])
+  @@index([state, leaseExpiresAt])
+  @@index([tenantId, state])
+}
+
+/// Whether an alert condition is currently true, and when it last fired (D55).
+///
+/// This is what makes "once on entry" possible. Without it, an inactive store would alert every
+/// five minutes for as long as it stayed inactive, which is how a platform team learns to ignore
+/// its own alerts.
+model NotificationAlertState {
+  id        String               @id @default(cuid())
+  audience  NotificationAudience
+  type      NotificationType
+  /// What the alert is about: a store slug, a stage name, "global". Part of the identity.
+  entityKey String
+  tenantId  String?
+  tenant    Tenant?              @relation("TenantAlertStates", fields: [tenantId], references: [id], onDelete: Cascade)
+
+  /// "clear" or "firing". A transition is what sends; staying firing does not.
+  state      String    @default("clear")
+  enteredAt  DateTime?
+  lastSentAt DateTime?
+  /// The evidence sentence behind the last transition, for the platform health view.
+  detail     String?
+  updatedAt  DateTime  @updatedAt
+
+  @@unique([audience, type, entityKey])
+  @@index([state, lastSentAt])
 }

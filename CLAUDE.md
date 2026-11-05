@@ -48,6 +48,7 @@ pnpm dev                              # http://localhost:3000
 | `pnpm verify:campaigns` | Test saved marketing campaigns (D39: names saved by the owner, numbers only ever from the data) |
 | `pnpm verify:report-ui` | Test the report screens through a real owner session (exact small numbers, the two money figures never summed, empty funnel steps, deleted products, redacted searches) |
 | `pnpm verify:platform-console` | Test `/platform/analytics` (aggregate-only, no person-level data reachable, one audit row per view, owner refused) |
+| `pnpm verify:notifications` | Test the notification ledger (concurrent senders, delivery leases, the role gate that keeps analytics alerts off non-owner accounts) |
 | `pnpm verify:report-states` | Test the report screens' states (nothing measured yet, traffic without orders, Redis down, Arabic/RTL, phone cards, admin paths refused on a custom domain) |
 | `pnpm verify:e2e-policy` | Static check that every E2E suite has a custom-domain leg and no skip path (no server needed) |
 | `pnpm verify:reports` | Test the report read layer (aggregate-only rule, store-local date ranges across DST, null-not-zero rates, trend thresholds) |
@@ -74,7 +75,7 @@ Three layers:
 
 2. **App-level WHERE clauses** (`lib/data/*.ts`): every function takes a `tenantId` and includes it in WHERE conditions. `ProductVariant` has no `tenantId` field, so variant queries go *through* products (`where: { id, product: { tenantId } }`).
 
-3. **Database Row-Level Security** (RLS, `prisma/migrations/*_row_level_security`): when `APP_DATABASE_URL` points to a restricted role, RLS policies on 20 tenant-scoped tables — the original 9 (`Category`, `Product`, `ProductVariant`, `ProductImage`, `TenantContent`, `Order`, `OrderItem`, `DiscountCampaign`, `DiscountProduct`), the coupon tables, `TenantLicense`, the consent receipt, the analytics collection tables, the analytics aggregates and `MarketingCampaign` — automatically filter results. Enforced via `lib/prisma.ts`'s `withTenant()` (sets session context per transaction) and `withBypass()` (for cross-tenant platform-admin queries). **Dependencies:** the restricted role must be created with `scripts/sql/rls-role.sql`, and `APP_DATABASE_URL` must be set in every environment, or RLS silently doesn't run. `pnpm verify:aggregates`' P4-23a reads `pg_class`/`pg_policies` and fails when a table with a `tenantId` has no forced policy, so a migration cannot add one quietly.
+3. **Database Row-Level Security** (RLS, `prisma/migrations/*_row_level_security`): when `APP_DATABASE_URL` points to a restricted role, RLS policies on 25 tenant-scoped tables — the original 9 (`Category`, `Product`, `ProductVariant`, `ProductImage`, `TenantContent`, `Order`, `OrderItem`, `DiscountCampaign`, `DiscountProduct`), the coupon tables, `TenantLicense`, the consent receipt, the analytics collection tables, the analytics aggregates, `MarketingCampaign` and the five notification tables — automatically filter results. Enforced via `lib/prisma.ts`'s `withTenant()` (sets session context per transaction) and `withBypass()` (for cross-tenant platform-admin queries). **Dependencies:** the restricted role must be created with `scripts/sql/rls-role.sql`, and `APP_DATABASE_URL` must be set in every environment, or RLS silently doesn't run. `pnpm verify:aggregates`' P4-23a reads `pg_class`/`pg_policies` and fails when a table with a `tenantId` has no forced policy, so a migration cannot add one quietly.
 
 **User and Tenant tables are intentionally NOT under RLS** (v1 scope): login looks up users by email before any tenant context exists, and the storefront resolves a Tenant by slug the same way — still guarded only by application code.
 
@@ -162,6 +163,14 @@ const allProducts = await withBypass(async (tx) => {
   channel and destination the link used — and **no numbers**: every campaign figure comes from the
   acquisition aggregates, so a report never depends on whether the owner saved the campaign, and
   a campaign that was never saved still shows up with its real traffic.
+- **Admin notifications** (Phase 6, in progress) are a ledger, not a queue: `AdminNotification`
+  is one logical "this person was told this" with a unique `dedupeKey`, `AdminNotificationOrder`
+  is unique on (recipient, order) so one order is announced once, and
+  `AdminNotificationDelivery` is one row per device with a lease so two senders cannot both send.
+  `PushSubscription` holds an encrypted endpoint (it is a capability — whoever holds it can push
+  to that device) plus a keyed hash to look it up by. `lib/notifications/types.ts` maps a role to
+  the notification types it may receive, and `lib/data/notifications.ts` refuses anything outside
+  that set before writing a row.
 - **DiscountCampaigns** apply an automatic percentage or fixed per-unit discount to assigned products. Eligible campaigns never stack; the lowest final price wins. Campaign names are admin-only.
 - **ProductVariants** live under products (no direct `tenantId`); stock, optional price/image override, free-form attributes. One variant per product minimum.
 - **Orders** go Pending → Confirmed → Delivered (or can be Cancelled at any point); cancelling restores stock exactly once. Cancelled and Delivered are final. Orders snapshot `deliveryFeeCentsSnapshot`/`deliveryNoteSnapshot` from the tenant's settings at purchase time.

@@ -289,6 +289,81 @@ async function main() {
       );
     });
 
+    await check("cannot read or write another store's notifications or devices", async () => {
+      // Phase 6's tables, under the same policy as everything else a store owns. A push
+      // subscription is the sharpest of them: its endpoint is a capability, and anyone holding
+      // one can push to that device until it is revoked.
+      const notification = await withBypass((db) =>
+        db.adminNotification.create({
+          data: {
+            recipientUserId: a.user.id,
+            audience: "OWNER",
+            type: "NEW_ORDER",
+            tenantId: A,
+            title: "New order",
+            body: "You have a new order.",
+            destination: "/admin/orders",
+            dedupeKey: `isolation:${A}:${Date.now()}`,
+          },
+          select: { id: true },
+        }),
+      );
+      await withBypass((db) =>
+        db.pushSubscription.create({
+          data: {
+            userId: a.user.id,
+            tenantId: A,
+            audience: "OWNER",
+            endpointCiphertext: "cipher",
+            endpointHash: `iso-${A}`,
+            p256dhCiphertext: "k",
+            authCiphertext: "k",
+            deviceLabel: "A's phone",
+          },
+        }),
+      );
+
+      assert.deepEqual(
+        await withTenant(B, (db) => db.adminNotification.findMany()),
+        [],
+        "B must see none of A's notifications",
+      );
+      assert.deepEqual(
+        await withTenant(B, (db) => db.pushSubscription.findMany()),
+        [],
+        "nor any of A's devices",
+      );
+      const touched = await withTenant(B, (db) =>
+        db.adminNotification.updateMany({ where: { tenantId: A }, data: { body: "changed" } }),
+      );
+      assert.equal(touched.count, 0);
+      // The WITH CHECK half: B cannot plant a device on A's store either.
+      await assert.rejects(
+        withTenant(B, (db) =>
+          db.pushSubscription.create({
+            data: {
+              userId: b.user.id,
+              tenantId: A,
+              audience: "OWNER",
+              endpointCiphertext: "cipher",
+              endpointHash: `planted-${A}`,
+              p256dhCiphertext: "k",
+              authCiphertext: "k",
+              deviceLabel: "planted",
+            },
+          }),
+        ),
+        /row-level security|violates/i,
+      );
+      const after = await withBypass((db) =>
+        db.adminNotification.findUniqueOrThrow({
+          where: { id: notification.id },
+          select: { body: true },
+        }),
+      );
+      assert.equal(after.body, "You have a new order.");
+    });
+
     console.log("Sanity: owners can manage their own data:");
     await check("A can update and delete its own product", async () => {
       assert.equal(await updateProduct(A, pa.id, { name: "A renamed", ...input }), true);
