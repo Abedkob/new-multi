@@ -66,6 +66,14 @@ import {
 } from "../lib/data/push-subscriptions";
 import { ALLOWED_PUSH_HOSTS, checkPushEndpoint } from "../lib/push/endpoint";
 import { announceNewOrder, BATCH_WINDOW_MS } from "../lib/notifications/new-order";
+import {
+  NOTIFICATION_RETENTION,
+  NOTIFICATION_STAGES,
+  deliveryLeaseRecovery,
+  newOrderCatchUp,
+  pushCleanup,
+} from "../lib/notifications/stages";
+import { ANALYTICS_STAGES } from "../lib/analytics/stages";
 import { newOrderText } from "../lib/notifications/templates";
 import { saveOwnerPreferences as setPreferences } from "../lib/data/notification-preferences";
 import { createServer, type Socket } from "node:net";
@@ -783,6 +791,143 @@ async function instantPathChecks(tenantId: string, ownerId: string, place: () =>
   ok("P6-14", "with new orders switched off, nothing is claimed and nothing is written");
 }
 
+/**
+ * The scheduled stages (§10): registered, idempotent, and honest about a dry run.
+ *
+ * P6-06 from the other side — the catch-up and the instant path must not both announce one
+ * order — and P6-27, which is the reason the catch-up exists at all.
+ */
+async function stageChecks(tenantId: string, ownerId: string, place: () => Promise<string>) {
+  // Registered in the one command the deployment runs, or none of this ever happens in
+  // production however well it works here.
+  for (const stage of NOTIFICATION_STAGES) {
+    assert.ok(
+      ANALYTICS_STAGES.some((registered) => registered.name === stage.name),
+      `${stage.name} is not registered in ANALYTICS_STAGES`,
+    );
+  }
+  const quiet = () => {};
+  const ctx = { now: new Date(), dryRun: false, log: quiet };
+
+  // An order nobody was told about, because the instant path never ran for it.
+  const missed = await place();
+  const dry = await newOrderCatchUp.run({ ...ctx, dryRun: true });
+  assert.ok(
+    (dry?.detail ?? "").includes("would announce"),
+    `a dry run must report rather than act, got ${JSON.stringify(dry)}`,
+  );
+  assert.equal(
+    (await announcedOrderIds(ownerId, [missed])).size,
+    0,
+    "and must leave the order unannounced (D35)",
+  );
+
+  const caught = await newOrderCatchUp.run(ctx);
+  assert.ok((caught?.items ?? 0) >= 1, `the catch-up must announce the missed order`);
+  assert.equal(
+    (await announcedOrderIds(ownerId, [missed])).size,
+    1,
+    "the missed order must now be announced",
+  );
+  ok("P6-27", "an order the instant path missed is announced by the catch-up, and a dry run is not");
+
+  // P6-06, the pair that matters: run it again, and then the instant path for the same order.
+  const second = await newOrderCatchUp.run(ctx);
+  assert.equal(second?.items ?? 0, 0, "a second catch-up must announce nothing");
+  const instant = await announceNewOrder(tenantId, missed, { waitMs: 0 });
+  assert.equal(instant.kind, "nothing", "and the instant path must find it already announced");
+  const links = await prisma.adminNotificationOrder.count({ where: { orderId: missed } });
+  assert.equal(links, 1, `one order, one claim, however many senders ran: found ${links}`);
+  ok("P6-06", "instant and catch-up, both run against one order, produce exactly one claim");
+
+  // P6-08 from the stage's side: a stranded delivery is recovered, and one that has been tried
+  // too often is given up on rather than retried forever.
+  const stranded = await prisma.adminNotificationDelivery.findFirst({
+    where: { notification: { recipientUserId: ownerId } },
+    select: { id: true },
+  });
+  assert.ok(stranded, "there is at least one delivery to strand");
+  await prisma.adminNotificationDelivery.update({
+    where: { id: stranded.id },
+    // A sender that died holding the lease, an hour ago.
+    data: { state: "SENDING", leaseExpiresAt: new Date(Date.now() - 3_600_000), attempts: 1 },
+  });
+  const recoveryDry = await deliveryLeaseRecovery.run({ ...ctx, dryRun: true });
+  assert.ok((recoveryDry?.detail ?? "").includes("would retry"), "a dry run reports");
+  assert.equal(
+    (await prisma.adminNotificationDelivery.findUniqueOrThrow({ where: { id: stranded.id } })).state,
+    "SENDING",
+    "and changes nothing",
+  );
+  await deliveryLeaseRecovery.run(ctx);
+  const recovered = await prisma.adminNotificationDelivery.findUniqueOrThrow({
+    where: { id: stranded.id },
+    select: { state: true, attempts: true },
+  });
+  assert.notEqual(recovered.state, "SENDING", "a stranded delivery must not stay claimed forever");
+  assert.ok(recovered.attempts >= 2, "and the attempt must be counted");
+
+  await prisma.adminNotificationDelivery.update({
+    where: { id: stranded.id },
+    data: {
+      state: "SENDING",
+      leaseExpiresAt: new Date(Date.now() - 3_600_000),
+      attempts: NOTIFICATION_RETENTION.maxDeliveryAttempts,
+    },
+  });
+  await deliveryLeaseRecovery.run(ctx);
+  const givenUp = await prisma.adminNotificationDelivery.findUniqueOrThrow({
+    where: { id: stranded.id },
+    select: { state: true, errorCategory: true },
+  });
+  assert.equal(givenUp.state, "FAILED");
+  assert.equal(givenUp.errorCategory, "gave-up", "a device that never works is left alone");
+  ok("P6-08", `a stranded delivery is recovered, and abandoned after ${NOTIFICATION_RETENTION.maxDeliveryAttempts} attempts`);
+
+  // Cleanup: a device revoked long ago goes, a device revoked today stays.
+  const old = await registerDevice({
+    userId: ownerId,
+    tenantId,
+    audience: "OWNER",
+    endpoint: fixtureEndpoint(`stale-${Date.now()}`),
+    ...fixtureKeys,
+    deviceLabel: "Old device",
+    deviceClass: "x",
+  });
+  const longAgo = new Date(
+    Date.now() - (NOTIFICATION_RETENTION.deadDeviceDays + 1) * 86_400_000,
+  );
+  await prisma.pushSubscription.update({ where: { id: old.id }, data: { revokedAt: longAgo } });
+  const fresh = await registerDevice({
+    userId: ownerId,
+    tenantId,
+    audience: "OWNER",
+    endpoint: fixtureEndpoint(`fresh-${Date.now()}`),
+    ...fixtureKeys,
+    deviceLabel: "Just removed",
+    deviceClass: "x",
+  });
+  await prisma.pushSubscription.update({ where: { id: fresh.id }, data: { revokedAt: new Date() } });
+
+  const cleanupDry = await pushCleanup.run({ ...ctx, dryRun: true });
+  assert.ok((cleanupDry?.detail ?? "").includes("would remove"), "a dry run reports");
+  assert.ok(
+    await prisma.pushSubscription.findUnique({ where: { id: old.id } }),
+    "and removes nothing",
+  );
+  await pushCleanup.run(ctx);
+  assert.equal(
+    await prisma.pushSubscription.findUnique({ where: { id: old.id } }),
+    null,
+    `a device revoked over ${NOTIFICATION_RETENTION.deadDeviceDays} days ago must be removed`,
+  );
+  assert.ok(
+    await prisma.pushSubscription.findUnique({ where: { id: fresh.id } }),
+    "a device removed today must be kept: it may still have deliveries to account for",
+  );
+  ok("D52", `cleanup removes a device dead over ${NOTIFICATION_RETENTION.deadDeviceDays}d and keeps one removed today`);
+}
+
 async function main() {
   matrixChecks();
   serviceWorkerChecks();
@@ -845,6 +990,7 @@ async function main() {
     await endpointEnforcementChecks(ownerId, T);
 
     await instantPathChecks(T, ownerId, place);
+    await stageChecks(T, ownerId, place);
 
     // ---------------------------------------------------------------------------------------
     // D52: one order, one notification, however many senders try.

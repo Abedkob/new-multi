@@ -36,7 +36,8 @@ more care than everything else in this phase combined:
 | 3 | **The service worker and the two manifests** (D57). Brought forward ahead of the subscription screen, because `PushManager.subscribe` needs a registered worker — an Enable button built first would have had nothing to register. `public/sw.js` handles `push` and `notificationclick` and declares no fetch handler and no cache; two manifest routes give two installable identities, each linked only from its own subtree so a shop’s customers are never offered the admin app. `verify:notifications` is 16. | done |
 | 4 | **Subscriptions, preferences and device management.** `lib/data/push-subscriptions.ts` (upsert on the endpoint hash, revoke rather than delete), `lib/data/notification-preferences.ts` (defaults from the schema, so there is no second list to disagree), and `/admin/notifications` with its three sections, the amount toggle under its own warning, and the iPhone steps. Permission is asked once, from a click. `verify:notifications` 23, `verify:permissions` 21. | done |
 | 5 | **Instant new-order push** (D51, D52, D53). `lib/notifications/new-order.ts` is one function for both paths: an owner-scoped `pg_try_advisory_xact_lock`, a ~4s window inside `after()`, claim, then the body. Checkout schedules it with `after()` after the commit and never reaches the sender itself. `verify:notifications` is 31. | done |
-| 6 | Catch-up, lease recovery and expired-subscription cleanup as scheduled stages. | next |
+| 6 | **Catch-up, lease recovery and cleanup** as stages of `pnpm analytics:scheduled`. Driven from the orders rather than a queue, so there is no second list to fall out of step; the lease is what makes recovery safe to run beside a live sender; all three honour `dryRun` (D35). `verify:notifications` is 35. | done |
+| 7 | Persisted admin language and the EN/AR templates everywhere. | next |
 | 2–10 | §5's sequence below. | not started |
 
 ## 1. Scope

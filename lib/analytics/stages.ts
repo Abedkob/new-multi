@@ -31,6 +31,7 @@ import {
 } from "@/lib/analytics/aggregate";
 import { localDayOf, previousLocalDay, recentLocalDays, type LocalDay } from "@/lib/analytics/local-day";
 import { describeRetention, runRetention } from "@/lib/analytics/retention";
+import { NOTIFICATION_STAGES } from "@/lib/notifications/stages";
 import type { Stage, StageContext } from "@/lib/analytics/scheduled";
 import { env } from "@/lib/env";
 import { jobPrisma, withJobBypass, withJobTenant } from "@/lib/prisma-job";
@@ -295,12 +296,20 @@ export const healthEvaluate: Stage = {
   },
 };
 
-/** Everything the command runs, in order. */
+/**
+ * Everything the command runs, in order.
+ *
+ * The notification stages come after the aggregates and before retention, and the order is not
+ * arbitrary: the catch-up announces orders, which needs nothing from the aggregates but should
+ * not be delayed behind a retention sweep; and cleanup runs last so a device removed this minute
+ * is not deleted in the same run that might still have retried it.
+ */
 export const ANALYTICS_STAGES: Stage[] = [
   aggregateRecompute,
   orderStatusSweep,
   nightlyBackfill,
   healthEvaluate,
+  ...NOTIFICATION_STAGES,
   retention,
 ];
 
