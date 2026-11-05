@@ -1,5 +1,6 @@
 /**
- * Phase 5 verification: saved campaigns (pnpm verify:campaigns — P5-13, P5-14, P5-15, D39).
+ * Phase 5 verification: the Marketing section — saved campaigns and Results
+ * (pnpm verify:campaigns — P5-12, P5-13, P5-14, P5-15, P5-19, D38, D39).
  *
  * D39's whole design is a separation: a campaign's NUMBERS come from the data, and its NAME
  * comes from a row an owner may or may not have saved. Everything that can go wrong here is one
@@ -24,7 +25,7 @@
 import "dotenv/config";
 import "./_owner";
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import { readFileSync, statSync } from "node:fs";
 import { prisma } from "../lib/prisma";
 import { createStoreWithOwner } from "../lib/data/tenants";
 import {
@@ -294,8 +295,86 @@ async function storedChecks() {
   }
 }
 
+/**
+ * The Marketing section itself (D38, P5-12) and what Results is allowed to say (P5-19).
+ *
+ * D38's boundary is not decoration: it is the reason there is one `report.ts`. What would break
+ * it is a second place that adds up its own sessions, or a marketing-shaped screen left behind
+ * in settings or analytics where an owner would never find it.
+ */
+function sectionChecks() {
+  const layout = readFileSync("app/admin/(panel)/marketing/layout.tsx", "utf8");
+  for (const tab of ["results", "campaigns", "links", "integrations"]) {
+    assert.ok(
+      layout.includes(`/admin/marketing/${tab}`),
+      `Marketing must hold the ${tab} tab (D38)`,
+    );
+    assert.ok(
+      statSync(`app/admin/(panel)/marketing/${tab}/page.tsx`).isFile(),
+      `the ${tab} tab must lead to a page that exists, not to "coming soon"`,
+    );
+  }
+  const index = readFileSync("app/admin/(panel)/marketing/page.tsx", "utf8");
+  assert.ok(index.includes("/admin/marketing/results"), "the section opens on Results");
+  // Nothing marketing-shaped left where it used to live: the Phase 4 analytics route is a
+  // redirect, and the owner's nav points at the section rather than at one of its tabs.
+  const nav = readFileSync("components/admin/admin-nav.tsx", "utf8");
+  assert.ok(nav.includes('"/admin/marketing"'), "the owner's nav must lead to the section");
+  assert.ok(
+    !nav.includes("/admin/analytics/links") && !nav.includes("trackedLinks"),
+    "the old tracked-links entry must be gone from the nav",
+  );
+  ok("P5-12", "one section holds all 4 marketing tabs and nothing points at the old paths");
+
+  // P5-19: Results reads report.ts and holds no arithmetic of its own, and the two money
+  // figures are never added. (P4-22 checks the summing rule across modules; this checks that
+  // the screen built on top of it did not quietly become the exception.)
+  const page = readFileSync("app/admin/(panel)/marketing/results/page.tsx", "utf8");
+  const table = readFileSync("app/admin/(panel)/marketing/results/results-table.tsx", "utf8");
+  assert.ok(page.includes("campaignResults"), "Results must read the shared report function");
+  assert.ok(
+    !/orderValueCents\s*\+|\+\s*.*whatsappPotentialValueCents/.test(page + table),
+    "order value and WhatsApp potential value must never be added together (§3.4)",
+  );
+  for (const column of [
+    "results.table.visits",
+    "results.table.orders",
+    "results.table.whatsappClicks",
+    "results.table.whatsappInterest",
+  ]) {
+    assert.ok(table.includes(column), `Results must keep ${column} in its own column`);
+  }
+  // A null is unknown, not zero — the opposite rule from Campaigns, and for the opposite
+  // reason: here the figure was never measured for part of the range (D48).
+  assert.ok(
+    /visitorDays \?\? <span/.test(table) && table.includes("results.unmeasured"),
+    "an unmeasured visitor count must read as unknown with an explanation, never as 0",
+  );
+  assert.ok(
+    /whatsappPotentialValueCents === null/.test(table),
+    "and so must an unmeasured WhatsApp value",
+  );
+  ok("P5-19", "Results keeps visits, orders and WhatsApp apart, and unknown apart from zero");
+
+  // One set of periods for every screen, from one module.
+  const range = readFileSync("lib/analytics/range.ts", "utf8");
+  assert.ok(range.includes("lastNLocalDays"), "a period must become a store-local day range");
+  for (const screen of [
+    "app/admin/(panel)/marketing/results/page.tsx",
+    "app/admin/(panel)/marketing/campaigns/page.tsx",
+  ]) {
+    const source = readFileSync(screen, "utf8");
+    assert.ok(
+      source.includes("rangeFromPeriod"),
+      `${screen} must take its range from lib/analytics/range.ts, not build its own`,
+    );
+  }
+  ok("D38", "both Marketing screens read one shared set of store-local periods");
+}
+
 async function main() {
   structureChecks();
+  sectionChecks();
   normalizationChecks();
   await storedChecks();
 }

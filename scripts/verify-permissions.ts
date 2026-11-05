@@ -218,6 +218,20 @@ async function main() {
       "a saved campaign must be on the page before any traffic arrives",
     );
     ok("can open Marketing > Campaigns, which lists a campaign saved before any traffic");
+    // Marketing -> Results (D38, P5-19). Empty here, which is the state that has to read as
+    // "nothing yet" rather than as a broken page, and the section index must land on it.
+    const results = await owner.get("/admin/marketing/results?period=7");
+    assert.equal(results.status, 200);
+    assert.ok(
+      results.body.includes("No campaign traffic in this period yet"),
+      "a store with no campaign traffic must be told so, not shown an empty table",
+    );
+    const section = await owner.get("/admin/marketing");
+    assert.ok(
+      section.status >= 300 && section.status < 400 && section.location.endsWith("/results"),
+      `Marketing must open on Results, got ${section.status} ${section.location}`,
+    );
+    ok("can open Marketing > Results, which is where the section opens");
     const ownerPreview = await owner.get("/admin/preview");
     assert.equal(ownerPreview.status, 200);
     assert.ok(ownerPreview.body.includes("Perm Test"), "owner preview should show the owner's own store");

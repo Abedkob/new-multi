@@ -644,6 +644,30 @@ export const en = {
   "marketing.tab.links": "Tracked links",
   "marketing.tab.integrations": "Integrations",
 
+  // Report periods (shared by every report screen)
+  "period.7": "Last 7 days",
+  "period.28": "Last 28 days",
+  "period.90": "Last 90 days",
+
+  // Marketing -> Results (D38, P5-19)
+  "results.page.description":
+    "What each of your campaigns brought in. Visits, orders and WhatsApp messages are counted separately — a message is interest, an order is money.",
+  "results.period.label": "Period",
+  "results.empty":
+    "No campaign traffic in this period yet. Build a tracked link, share it, and what it brings in appears here.",
+  "results.table.campaign": "Campaign",
+  "results.table.visits": "Visits",
+  "results.table.visitorDays": "Visitors",
+  "results.table.orders": "Orders",
+  "results.table.orderValue": "Order value",
+  "results.table.whatsappClicks": "WhatsApp messages",
+  "results.table.whatsappInterest": "Basket at the message",
+  "results.table.conversion": "of visits ordered",
+  "results.table.whatsappNote":
+    "“Basket at the message” is what the cart was worth when someone opened WhatsApp. It is not revenue and is never added to order value.",
+  "results.unmeasured":
+    "“—” means this period reaches back to before your store started counting that figure, so there is no honest total to show. It is not a zero.",
+
   // Marketing -> Campaigns (D39)
   "campaigns.page.description":
     "Campaigns you saved while building a link, and any campaign your visitors arrived with. A campaign counts because the link carried its name — not because it is listed here.",
@@ -653,7 +677,7 @@ export const en = {
   "campaigns.table.sessions": "Visits",
   "campaigns.table.orders": "Orders",
   "campaigns.table.revenue": "Order value",
-  "campaigns.table.note": "Last 28 days, in your store's time zone.",
+  "campaigns.table.note": "Counted over the period above, in your store's time zone.",
   "campaigns.badge.saved": "Saved by you",
   "campaigns.badge.archived": "Archived — its visits still count",
   "campaigns.badge.observed": "Seen in your traffic, never saved",

@@ -1,6 +1,7 @@
 import { notFound } from "next/navigation";
+import { PeriodPicker } from "@/components/admin/period-picker";
 import { listCampaignLines } from "@/lib/data/campaigns";
-import { lastNLocalDays } from "@/lib/analytics/compare";
+import { rangeFromPeriod } from "@/lib/analytics/range";
 import { getTenantById } from "@/lib/data/tenants";
 import { getT } from "@/lib/i18n/locale";
 import { requireOwner } from "@/lib/session";
@@ -19,21 +20,32 @@ import { CampaignTable } from "./campaign-table";
  * figure, computed once: two places that each add up their own sessions are two places that
  * come to disagree.
  */
-export default async function CampaignsPage() {
+export default async function CampaignsPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ period?: string }>;
+}) {
   const { tenantId } = await requireOwner();
   const t = await getT();
   const tenant = await getTenantById(tenantId);
   if (!tenant) notFound();
 
-  // The store's own zone, like every other report: 28 local days ending today. A fixed window
-  // for now — the range picker arrives with the reports in a later commit, and both will read
-  // it from the same place rather than each holding their own default.
-  const range = lastNLocalDays(28, new Date(), tenant.analyticsTimezone);
+  // The store's own zone and the one shared set of periods (lib/analytics/range.ts), so this
+  // tab and Results cannot offer two different "last month"s.
+  const { period } = await searchParams;
+  const { range, period: current } = rangeFromPeriod(period, tenant.analyticsTimezone);
   const lines = await listCampaignLines(tenantId, range);
 
   return (
     <div className="grid gap-4">
-      <p className="max-w-2xl text-sm text-muted-foreground">{t("campaigns.page.description")}</p>
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <p className="max-w-2xl text-sm text-muted-foreground">{t("campaigns.page.description")}</p>
+        <PeriodPicker
+          basePath="/admin/marketing/campaigns"
+          current={current}
+          ariaLabel={t("results.period.label")}
+        />
+      </div>
       <CampaignTable
         lines={lines.map((line) => ({
           utmCampaign: line.utmCampaign,

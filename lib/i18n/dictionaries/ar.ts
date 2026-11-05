@@ -645,6 +645,30 @@ export const ar: Record<DictionaryKey, string> = {
   "marketing.tab.links": "روابط متتبَّعة",
   "marketing.tab.integrations": "الربط",
 
+  // فترات التقارير
+  "period.7": "آخر ٧ أيام",
+  "period.28": "آخر ٢٨ يومًا",
+  "period.90": "آخر ٩٠ يومًا",
+
+  // التسويق ← النتائج
+  "results.page.description":
+    "ماذا جلبت كل حملة من حملاتك. الزيارات والطلبات ورسائل واتساب تُحسب كل واحدة على حدة — الرسالة اهتمام، والطلب مال.",
+  "results.period.label": "الفترة",
+  "results.empty":
+    "لا توجد زيارات حملات في هذه الفترة بعد. ابنِ رابطًا متتبعًا وشاركه، وسيظهر هنا ما يجلبه.",
+  "results.table.campaign": "الحملة",
+  "results.table.visits": "الزيارات",
+  "results.table.visitorDays": "الزوار",
+  "results.table.orders": "الطلبات",
+  "results.table.orderValue": "قيمة الطلبات",
+  "results.table.whatsappClicks": "رسائل واتساب",
+  "results.table.whatsappInterest": "السلة عند الرسالة",
+  "results.table.conversion": "من الزيارات أتمّت طلبًا",
+  "results.table.whatsappNote":
+    "«السلة عند الرسالة» هي قيمة السلة لحظة فتح واتساب. ليست إيرادًا ولا تُجمع مع قيمة الطلبات أبدًا.",
+  "results.unmeasured":
+    "«—» تعني أن هذه الفترة تمتد إلى ما قبل أن يبدأ متجرك بحساب هذا الرقم، فلا يوجد مجموع صادق لعرضه. وهي ليست صفرًا.",
+
   // التسويق ← الحملات
   "campaigns.page.description":
     "الحملات التي حفظتها عند بناء رابط، وأي حملة وصل زوارك عبرها. الحملة تُحسب لأن الرابط حمل اسمها — لا لأنها مدرجة هنا.",
@@ -654,7 +678,7 @@ export const ar: Record<DictionaryKey, string> = {
   "campaigns.table.sessions": "الزيارات",
   "campaigns.table.orders": "الطلبات",
   "campaigns.table.revenue": "قيمة الطلبات",
-  "campaigns.table.note": "آخر ٢٨ يومًا، بتوقيت متجرك.",
+  "campaigns.table.note": "محسوبة على الفترة أعلاه، بتوقيت متجرك.",
   "campaigns.badge.saved": "حفظتها أنت",
   "campaigns.badge.archived": "مؤرشفة — وزياراتها ما زالت تُحسب",
   "campaigns.badge.observed": "ظهرت في زياراتك دون أن تُحفظ",
