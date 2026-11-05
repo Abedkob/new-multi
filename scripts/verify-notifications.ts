@@ -52,6 +52,7 @@ import {
   pushSecretsAvailable,
 } from "../lib/push/crypto";
 import { pushConfigured, vapidPublicKey } from "../lib/push/keys";
+import { adminManifest, platformManifest } from "../lib/push/manifest";
 import { createServer, type Socket } from "node:net";
 import { createECDH, randomBytes } from "node:crypto";
 
@@ -298,8 +299,60 @@ async function senderChecks() {
   }
 }
 
+/**
+ * D57: the service worker caches nothing, and the two identities are separate.
+ *
+ * Checked on the source, because this is a rule about what the file may CONTAIN. A behavioural
+ * check would need a browser, and by the time a stale order list is being served to a merchant
+ * the damage is a wrong decision rather than a failing test.
+ */
+function serviceWorkerChecks() {
+  const sw = readFileSync("public/sw.js", "utf8");
+  const code = sw.replace(/\/\*[\s\S]*?\*\//g, "").replace(/^\s*\/\/.*$/gm, "");
+  for (const forbidden of ["caches", "CacheStorage", "cache.put", "cache.match"]) {
+    assert.ok(
+      !code.includes(forbidden),
+      `the service worker uses ${forbidden}: authenticated data must not be cached on a device`,
+    );
+  }
+  assert.ok(
+    !/addEventListener\(\s*["']fetch["']/.test(code),
+    "the service worker must have no fetch handler, or it will serve a stale order list",
+  );
+  for (const required of ["push", "notificationclick"]) {
+    assert.ok(
+      new RegExp(`addEventListener\\(\\s*["']${required}["']`).test(code),
+      `the service worker must handle ${required}`,
+    );
+  }
+  // The device's half of deduplication (D52): the tag replaces, and a seen tag is discarded.
+  assert.ok(code.includes("seen"), "it must keep a small seen-tag store");
+  assert.ok(/tag/.test(code), "and set a tag on every notification it shows");
+  ok("P6-08", "the service worker handles push and clicks, caches nothing, and discards a repeat");
+
+  // Two identities, each linked only from its own subtree (§11.1).
+  const admin = adminManifest();
+  const platform = platformManifest();
+  assert.equal(admin.start_url, "/admin");
+  assert.equal(platform.start_url, "/platform");
+  assert.notEqual(admin.id, platform.id, "two apps, two ids, two Home Screen icons");
+  assert.equal(admin.scope, "/admin", "scoped so a notification tap opens the installed app");
+  const adminLayout = readFileSync("app/admin/layout.tsx", "utf8");
+  const rootLayout = readFileSync("app/layout.tsx", "utf8");
+  assert.ok(
+    adminLayout.includes("/admin/manifest.webmanifest"),
+    "the admin manifest must be linked from the admin subtree",
+  );
+  assert.ok(
+    !rootLayout.includes("manifest"),
+    "and NOT from the root layout, which would offer a shop's customers the admin app",
+  );
+  ok("P6-18", "two installable identities, each linked only from its own subtree");
+}
+
 async function main() {
   matrixChecks();
+  serviceWorkerChecks();
   payloadChecks();
   cryptoChecks();
   await senderChecks();

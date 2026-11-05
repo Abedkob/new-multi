@@ -1,6 +1,14 @@
+import type { Metadata } from "next";
 import { PlatformAnalytics } from "@/components/platform-analytics";
 import { getLocale } from "@/lib/i18n/locale";
 import { LocaleProvider } from "@/lib/i18n/context";
+
+/**
+ * The merchant admin's installable identity, linked HERE rather than from the root layout: a
+ * root manifest is injected into every page, including the storefront, which would offer a
+ * shop's customers an install prompt for its owner's admin panel (§11.1).
+ */
+export const metadata: Metadata = { manifest: "/admin/manifest.webmanifest" };
 
 /**
  * The actual RTL/locale mount point for the whole /admin subtree — not just the (panel) route

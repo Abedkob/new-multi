@@ -1,6 +1,10 @@
+import type { Metadata } from "next";
 import { DashboardNav } from "@/components/dashboard-nav";
 import { PlatformAnalytics } from "@/components/platform-analytics";
 import { requirePlatformAdmin } from "@/lib/session";
+
+/** The platform console's own installable identity (§11.1). */
+export const metadata: Metadata = { manifest: "/platform/manifest.webmanifest" };
 
 export default async function PlatformLayout({
   children,
