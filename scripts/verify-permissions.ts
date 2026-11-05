@@ -262,6 +262,32 @@ async function main() {
       `Marketing must open on Results, got ${section.status} ${section.location}`,
     );
     ok("can open Marketing > Results, which is where the section opens");
+    // Notifications (§11.2): the owner's own screen, with its three sections and the iPhone
+    // steps. Checked through a real session because what would break it is a route guard.
+    const notifications = await owner.get("/admin/notifications");
+    assert.equal(notifications.status, 200);
+    for (const section of ["notification-types", "device-list", "iphone-guide"]) {
+      assert.ok(
+        notifications.body.includes(`data-testid="${section}"`),
+        `the notifications page is missing its ${section} section`,
+      );
+    }
+    assert.ok(
+      notifications.body.includes("Add to Home Screen"),
+      "and the iPhone steps, which are the difference between working and silently not (P6-18)",
+    );
+    // The amount toggle is present and off: it is the one setting that changes what lands on a
+    // lock screen, so its default is worth asserting from the rendered page (D50).
+    assert.ok(
+      /name="showOrderAmount"[^>]*type="checkbox"/.test(notifications.body) ||
+        notifications.body.includes('name="showOrderAmount"'),
+      "the order-amount toggle must be on the page",
+    );
+    assert.ok(
+      !/name="showOrderAmount"[^>]*checked/.test(notifications.body),
+      "and it must start unchecked",
+    );
+    ok("can open Notifications, with its three sections, the iPhone steps and the amount off");
     const ownerPreview = await owner.get("/admin/preview");
     assert.equal(ownerPreview.status, 200);
     assert.ok(ownerPreview.body.includes("Perm Test"), "owner preview should show the owner's own store");

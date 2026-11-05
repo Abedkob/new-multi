@@ -53,6 +53,12 @@ import {
 } from "../lib/push/crypto";
 import { pushConfigured, vapidPublicKey } from "../lib/push/keys";
 import { adminManifest, platformManifest } from "../lib/push/manifest";
+import {
+  ensureOwnerPreferences,
+  saveOwnerPreferences,
+  wantsNotification,
+} from "../lib/data/notification-preferences";
+import { listDevices, registerDevice, revokeDevice } from "../lib/data/push-subscriptions";
 import { createServer, type Socket } from "node:net";
 import { createECDH, randomBytes } from "node:crypto";
 
@@ -350,9 +356,150 @@ function serviceWorkerChecks() {
   ok("P6-18", "two installable identities, each linked only from its own subtree");
 }
 
+/**
+ * P6-17: permission is asked for in a click handler and nowhere else.
+ *
+ * Static, and it has to be. A browser asked without a user gesture either refuses or — worse —
+ * burns the one chance the site gets, after which the owner must dig through browser settings to
+ * undo it. There is no way to observe that from the server, and by the time anyone notices, the
+ * permission is already denied for every future visit.
+ */
+function permissionChecks() {
+  const status = readFileSync("app/admin/(panel)/notifications/push-status.tsx", "utf8");
+  const code = status.replace(/\/\*[\s\S]*?\*\//g, "").replace(/^\s*\/\/.*$/gm, "");
+  assert.ok(code.includes("requestPermission"), "the screen must be able to ask");
+  // The one call must sit inside the click handler, not in an effect or at module scope.
+  const asks = [...code.matchAll(/requestPermission/g)].length;
+  assert.equal(asks, 1, `permission must be requested exactly once in the source, found ${asks}`);
+  const enableBody = /const enable = async \(\) => \{[\s\S]*?\n  \};/.exec(code)?.[0] ?? "";
+  assert.ok(
+    enableBody.includes("requestPermission"),
+    "the request must be inside the enable click handler",
+  );
+  assert.ok(
+    !/useEffect\([\s\S]*?requestPermission/.test(code),
+    "no effect may ask for permission",
+  );
+  // And the state it displays is READ from the browser rather than copied into React state,
+  // so a permission revoked in browser settings does not leave this screen lying.
+  assert.ok(
+    code.includes("useSyncExternalStore"),
+    "install and permission state must be read from the browser, not cached in state",
+  );
+  ok("P6-17", "permission is requested once, from a click handler, and never from an effect");
+
+  // P6-18: the iPhone steps exist in both languages and name the three things that matter.
+  const en = readFileSync("lib/i18n/dictionaries/en.ts", "utf8");
+  const ar = readFileSync("lib/i18n/dictionaries/ar.ts", "utf8");
+  for (const key of [
+    "notifications.iphone.heading",
+    "notifications.iphone.step1",
+    "notifications.iphone.step2",
+    "notifications.iphone.step3",
+    "notifications.iphone.step4",
+    "notifications.iphone.step5",
+  ]) {
+    assert.ok(en.includes(`"${key}"`), `${key} missing from en.ts`);
+    assert.ok(ar.includes(`"${key}"`), `${key} missing from ar.ts`);
+  }
+  assert.ok(/Safari/.test(en) && /Share/.test(en) && /Add to Home Screen/.test(en));
+  ok("P6-18", "the iPhone steps name Safari, Share and Add to Home Screen, in both languages");
+}
+
+/** P6-14 to P6-16: preferences belong to the person, devices do not carry them. */
+async function preferenceChecks(userId: string, tenantId: string) {
+  const defaults = await ensureOwnerPreferences(userId);
+  for (const [field, value] of Object.entries(defaults)) {
+    if (field === "showOrderAmount") {
+      assert.equal(value, false, "the order amount is the one preference that starts off (D50)");
+    } else {
+      assert.equal(value, true, `${field} must default on`);
+    }
+  }
+  ok("P6-14", "six notification types default on; the order amount defaults off");
+
+  // A disabled type is never sent, and the role gate still applies on top of the preference.
+  await saveOwnerPreferences(userId, { ...defaults, trafficAlerts: false });
+  assert.equal(await wantsNotification(userId, "STORE_OWNER", "NEW_ORDER"), true);
+  assert.equal(await wantsNotification(userId, "STORE_OWNER", "TRAFFIC_ALERT"), false);
+  assert.equal(
+    await wantsNotification(userId, "STAFF", "WEEKLY_SUMMARY"),
+    false,
+    "a role that may not receive a type is refused even with the preference on (D60)",
+  );
+  assert.equal(
+    await wantsNotification(userId, "STORE_OWNER", "INACTIVE_STORE"),
+    false,
+    "and an owner is not a platform admin",
+  );
+  ok("P6-14", "a switched-off type is refused, and the role gate applies on top of it");
+
+  // A new device inherits the preferences; removing one changes nothing else.
+  const device = async (n: number) =>
+    registerDevice({
+      userId,
+      tenantId,
+      audience: "OWNER",
+      endpoint: `https://push.example.test/dev-${n}-${Date.now()}`,
+      p256dh: "p",
+      auth: "a",
+      deviceLabel: `Device ${n}`,
+      deviceClass: "Chrome/Android",
+    });
+  const first = await device(1);
+  const second = await device(2);
+  const afterAdding = await ensureOwnerPreferences(userId);
+  assert.equal(afterAdding.trafficAlerts, false, "a new device must not reset a preference");
+  assert.equal((await listDevices(userId, "OWNER")).length, 2);
+  ok("P6-15", "a new device inherits the preferences, including the ones switched off");
+
+  assert.equal(await revokeDevice(userId, first.id), true);
+  const remaining = await listDevices(userId, "OWNER");
+  assert.equal(remaining.length, 1, "removing one device removes one device");
+  assert.equal(remaining[0].id, second.id);
+  const afterRemoving = await ensureOwnerPreferences(userId);
+  assert.deepEqual(afterRemoving, afterAdding, "and changes no preference");
+  assert.equal(await revokeDevice(userId, first.id), false, "removing it twice is not an error");
+  // And not somebody else's device, however the id was obtained.
+  assert.equal(
+    await revokeDevice("someone-else", second.id),
+    false,
+    "a device can only be removed by the person it belongs to",
+  );
+  assert.equal((await listDevices(userId, "OWNER")).length, 1);
+  ok("P6-16", "removing a device leaves the others and every preference untouched");
+
+  // Re-registering the same endpoint updates the row rather than listing the phone twice, and
+  // brings a device the push service had given up on back to life.
+  const endpoint = `https://push.example.test/stable-${userId}`;
+  const again = await registerDevice({
+    userId,
+    tenantId,
+    audience: "OWNER",
+    endpoint,
+    p256dh: "p",
+    auth: "a",
+    deviceLabel: "Chrome on Android",
+    deviceClass: "Chrome/Android",
+  });
+  const repeat = await registerDevice({
+    userId,
+    tenantId,
+    audience: "OWNER",
+    endpoint,
+    p256dh: "p2",
+    auth: "a2",
+    deviceLabel: "Chrome on Android",
+    deviceClass: "Chrome/Android",
+  });
+  assert.equal(repeat.id, again.id, "one endpoint is one device, however many times it subscribes");
+  ok("D56", "re-subscribing refreshes the device's keys instead of listing the phone twice");
+}
+
 async function main() {
   matrixChecks();
   serviceWorkerChecks();
+  permissionChecks();
   payloadChecks();
   cryptoChecks();
   await senderChecks();
@@ -404,6 +551,8 @@ async function main() {
       });
       return order.id;
     };
+
+    await preferenceChecks(ownerId, T);
 
     // ---------------------------------------------------------------------------------------
     // D52: one order, one notification, however many senders try.
