@@ -40,7 +40,7 @@ more care than everything else in this phase combined:
 | 7 | **Persisted admin language and the templates** (D58). The language switch now writes `User.adminLocale` as well as the cookie, because the reader with no cookie is the 09:00 Monday job. Templates are plain functions of a locale, Arabic in Arabic sentences with Arabic-Indic digits, and the payload carries `lang`/`dir`. `verify:notifications` is 38. | done |
 | 8 | **Owner weekly summary and important alerts** (D54). `lib/notifications/owner-alerts.ts` reads §6’s insights and decides nothing itself; cooldowns are per type AND entity; the summary is due at 09:00 in the store’s own zone, checked across both of Beirut’s clock changes. `lib/notifications/deliver.ts` is now the one sending loop. `verify:notifications` is 43. | done |
 | 9 | **Platform notifications** (D55, §11.9–§11.11). `/platform/notifications` mounts the same three sections as the merchant screen — extracted to `components/admin/notifications/*`, with every string passed in so an internal console stays English. `lib/notifications/platform-alerts.ts` turns Phase 4’s counters and Phase 5’s console into findings, and `NotificationAlertState` makes an alert fire on the transition rather than on the condition. `verify:notifications` 47, `verify:permissions` 22. | done |
-| 10 | Verification scripts and the acceptance record. | next |
+| 10 | **Verification scripts and the acceptance record.** Every Phase 1–5 suite re-run against this branch; [PHASE_6_ACCEPTANCE.md](PHASE_6_ACCEPTANCE.md) records all 32 script-provable items with their evidence, the two human checks as NOT DONE, and the eight bugs the work found — three of them in the checks. | done |
 | 2–10 | §5's sequence below. | not started |
 
 ## 1. Scope

@@ -972,6 +972,8 @@ Build:
 - Cooldowns, delivery leases, and expired-endpoint cleanup
 - iPhone Home Screen guidance
 
+**Built and verified** — all 32 script-provable items in [PHASE_6_ACCEPTANCE.md](PHASE_6_ACCEPTANCE.md) pass. Two items (real iPhone and Android delivery) are checked by a person at the pilot and are not done. `ANALYTICS_ROLLOUT_MODE` stays `off`; new-order push works regardless, because an order is not an analytics event.
+
 Verify:
 
 - Order notification arrives within seconds.

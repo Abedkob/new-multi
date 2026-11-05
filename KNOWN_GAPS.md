@@ -405,3 +405,21 @@ comments. Delete this section once it's no longer useful.
 - **`MarketingCampaign` holds no numbers on purpose** (D39). If a future screen wants a
   campaign's figures, they come from the acquisition aggregates — never from this table, or a
   report starts depending on whether the owner remembered to save the campaign.
+
+## Phase 6 (admin push) — what is not covered
+
+- **No real phone has received a notification.** P6-32 and P6-33 in
+  [PHASE_6_ACCEPTANCE.md](PHASE_6_ACCEPTANCE.md) are the device-side proof, and they are the
+  operator's to do at the pilot: iOS Web Push needs a Home Screen install and a human tap, and no
+  headless check can prove a notification was drawn on a lock screen.
+- **A Redis fallback that starts and ends between two scheduled runs is never alerted.** The
+  platform alert reads the client's current fallback state; recording a start and end would mean
+  writing to the database on a path whose premise is that Redis is unavailable.
+- **The PWA manifests point at the platform favicon.** A real icon set is a design task, and a
+  manifest naming icons that do not exist fails to install on Android.
+- **No in-app notification inbox.** The ledger is written and readable, but a merchant-facing
+  list of past notifications is post-launch.
+- **There is no staff role.** D60's gate is built and enforced — a role maps to the types it may
+  receive, and the writer refuses the rest — but `Role` is still `PLATFORM_ADMIN | STORE_OWNER`.
+  Adding a staff role is one entry in `NOTIFIABLE_TYPES` plus the role itself (invitations,
+  per-screen permissions, session claims), which is its own piece of work.

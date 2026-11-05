@@ -48,7 +48,7 @@ pnpm dev                              # http://localhost:3000
 | `pnpm verify:campaigns` | Test saved marketing campaigns (D39: names saved by the owner, numbers only ever from the data) |
 | `pnpm verify:report-ui` | Test the report screens through a real owner session (exact small numbers, the two money figures never summed, empty funnel steps, deleted products, redacted searches) |
 | `pnpm verify:platform-console` | Test `/platform/analytics` (aggregate-only, no person-level data reachable, one audit row per view, owner refused) |
-| `pnpm verify:notifications` | Test the notification ledger (concurrent senders, delivery leases, the role gate that keeps analytics alerts off non-owner accounts) |
+| `pnpm verify:notifications` | Test admin push end to end: the ledger under concurrent senders, delivery leases, the payload rules (no customer data, money opt-in), the endpoint allowlist, owner alerts at §6’s thresholds, platform alerts on transition, and both languages |
 | `pnpm verify:report-states` | Test the report screens' states (nothing measured yet, traffic without orders, Redis down, Arabic/RTL, phone cards, admin paths refused on a custom domain) |
 | `pnpm verify:e2e-policy` | Static check that every E2E suite has a custom-domain leg and no skip path (no server needed) |
 | `pnpm verify:reports` | Test the report read layer (aggregate-only rule, store-local date ranges across DST, null-not-zero rates, trend thresholds) |
@@ -205,6 +205,32 @@ const allProducts = await withBypass(async (tx) => {
 - The two verification tokens render for **every** visitor, consent or not: they prove domain ownership rather than watching anyone. The measurement ids are narrowed by `grantedConfig` **on the server**, so a visitor who declines advertising never receives them at all.
 - `lib/analytics.tsx` mounts tracking tags (only in storefront, never in admin previews).
 - Purchase event deduped by `eventID = orderId` and fires once per browser within 30 min of order.
+
+## Admin Push Notifications (Phase 6)
+
+- Two installable identities: the merchant admin (`/admin`) and the platform console
+  (`/platform`), each with its own manifest route linked from its own layout — never from the
+  root, which would offer a shop's customers the admin app. `public/sw.js` handles `push` and
+  `notificationclick` and **caches nothing**: no fetch handler, no Cache API (D57).
+- **A push never costs an order.** `app/store/[slug]/checkout/actions.ts` schedules
+  `announceNewOrderSafely` with `after()` after the transaction commits; the sender has a ~2.5s
+  timeout and never throws. Anything missed is picked up by the `new-order-catch-up` stage.
+- **What a payload may say** (`lib/push/payload.ts`, D50): the fact, the count and a destination.
+  No customer name, phone, address, note or product list, ever. The order amount is opt-in and
+  **off by default** (`OwnerNotificationPreference.showOrderAmount`).
+- **One order, one notification**: a unique `dedupeKey` on `AdminNotification`, a unique
+  `(recipientUserId, orderId)` on `AdminNotificationOrder`, and a lease on each
+  `AdminNotificationDelivery` — three layers because they fail differently (D52).
+- **A device's endpoint must be a real push service** (`lib/push/endpoint.ts`, D61): https, no
+  credentials in the URL, and one of the known push hosts. Enforced at registration and again in
+  the sender. `PUSH_TEST_ENDPOINT_HOST` relaxes it by `host:port`, outside production only.
+- **Who may receive what** (`lib/notifications/types.ts`, D60): a role maps to the types it may
+  receive, and the writer refuses the rest before a row exists. A future non-owner staff role
+  gets new orders and nothing else.
+- Owner alerts read `lib/analytics/insights.ts` and invent no thresholds (D54); platform alerts
+  fire on the **transition** recorded in `NotificationAlertState`, not on the condition (D55).
+- `User.adminLocale` persists the dashboard language, because a scheduled job has no cookie
+  (D58). Notification wording lives in `lib/notifications/templates.ts`, not the dictionaries.
 
 ## Authentication & Sessions
 

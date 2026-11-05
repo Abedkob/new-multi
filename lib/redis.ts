@@ -96,6 +96,28 @@ async function connect(): Promise<RedisClient | null> {
 }
 
 /**
+ * Whether rate limiting is currently falling back to in-memory (§11.10).
+ *
+ * Reports what is already known and connects to nothing. The first version of the platform
+ * alert called `getRedisClient()` to find out, which costs a 2-second connect attempt per call,
+ * logs a connection error every time, and leaves a client retrying in the background — load
+ * created by the thing whose job is to notice load. This reads the state the module already
+ * keeps: a client that is ready, or a failed attempt whose cooldown has not expired.
+ *
+ * The cost of not probing is that a fallback which starts and ends between two evaluations is
+ * never reported. That is recorded in the acceptance record rather than papered over.
+ */
+// `async` is not optional here: this module is "use server", so EVERY export must be an async
+// function. A synchronous one makes the whole module fail to compile — and since the storefront
+// reaches lib/redis.ts through lib/rate-limit.ts, that meant a 500 on every shop page. Neither
+// typecheck nor lint catches it; verify:integrations did, by asking for a storefront.
+export async function redisFallbackActive(): Promise<boolean> {
+  if (!env.REDIS_URL) return false;
+  if (redisClient?.isReady) return false;
+  return Date.now() < unavailableUntil;
+}
+
+/**
  * Closes the connection. Bounded, because quit() waits for a reply the server may never send:
  * against a Redis that has gone away it would hang, which is how a scheduled script or a
  * shutdown hook ends up never finishing.

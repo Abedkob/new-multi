@@ -1344,6 +1344,65 @@ async function audienceChecks(tenantId: string, ownerId: string) {
     assert.equal(alert.destination, "/platform/analytics");
     ok("P6-10", "a platform alert names a store, belongs to none, and carries no customer data");
 
+    // P6-25: every signal §11.10 names can actually produce a finding. Driven by arranging
+    // each condition rather than by reading the source, except where noted.
+    const signals = new Map<string, string>();
+    // Ingestion and the contract signal: one flushed window over both thresholds.
+    await prisma.analyticsOperationalMetric.create({
+      data: {
+        instance: `verify-${Date.now()}`,
+        windowStart: new Date(now.getTime() - 10 * 60_000),
+        windowEnd: now,
+        attemptedBatches: 100,
+        acceptedBatches: 50,
+        operationalDrops: 50,
+        contractRejections: 25,
+      },
+    });
+    // A failed run, and one stranded with an expired lease.
+    await prisma.analyticsScheduledRun.create({
+      data: {
+        stage: "verify-broken-stage",
+        status: "FAILED",
+        leaseUntil: new Date(now.getTime() + 60_000),
+        error: "arranged by verify:notifications",
+      },
+    });
+    await prisma.analyticsScheduledRun.create({
+      data: {
+        stage: "verify-stranded-stage",
+        status: "RUNNING",
+        leaseUntil: new Date(now.getTime() - 60_000),
+      },
+    });
+    for (const finding of await findPlatformIssues(now)) {
+      signals.set(finding.type, finding.detail);
+    }
+    for (const required of [
+      "INGESTION_HEALTH",
+      "CONTRACT_REJECTION",
+      "AGGREGATION_HEALTH",
+      "PUSH_DELIVERY",
+      "INACTIVE_STORE",
+    ]) {
+      assert.ok(signals.has(required), `${required} must be able to fire; got ${[...signals.keys()]}`);
+    }
+    // Redis is reported only when it is actually unreachable, which on this machine it is.
+    // Where a run has Redis up, the absence of the finding is the correct answer and the
+    // acceptance record says so rather than this check pretending otherwise.
+    if (!process.env.REDIS_URL) {
+      assert.ok(!signals.has("REDIS_FALLBACK"), "with no REDIS_URL there is nothing to fall back from");
+    }
+    assert.ok(
+      (signals.get("CONTRACT_REJECTION") ?? "").includes("25"),
+      "the 400 signal must carry its own count, not a percentage of batches",
+    );
+    assert.ok(
+      !(signals.get("INGESTION_HEALTH") ?? "").includes("25"),
+      "and must not be folded into the operational drop line",
+    );
+    ok("P6-25", `${signals.size} platform signals fire, with the 400 count kept out of the drop rate`);
+
     // P6-28's platform half: Monday 09:00 in the platform's configured zone.
     const monday9 = new Date("2026-03-30T06:30:00.000Z"); // 09:30 in Asia/Beirut
     assert.equal(platformWeeklyDue(monday9, "Asia/Beirut"), true);

@@ -23,6 +23,7 @@ import { claimNotification } from "@/lib/data/notifications";
 import { wantsNotification } from "@/lib/data/notification-preferences";
 import { sendableDevices } from "@/lib/data/push-subscriptions";
 import { withBypass } from "@/lib/prisma";
+import { redisFallbackActive } from "@/lib/redis";
 import { env } from "@/lib/env";
 import { deliverNotification } from "@/lib/notifications/deliver";
 import { platformAlertText, platformWeeklyText } from "@/lib/notifications/templates";
@@ -175,6 +176,62 @@ export async function findPlatformIssues(now: Date): Promise<AlertFinding[]> {
       subject: cursor.tenant.slug,
       detail: `${cursor.failures} consecutive ${cursor.stage} failures`,
     });
+  }
+
+  // A run that FAILED, or one whose lease expired while it held it (§11.10). The lag check
+  // above catches a scheduler that stopped; this catches one that is running and breaking.
+  const recentFailures = await withBypass((db) =>
+    db.analyticsScheduledRun.findMany({
+      where: { startedAt: { gte: new Date(now.getTime() - 60 * 60_000) }, status: "FAILED" },
+      select: { stage: true, error: true },
+      take: 5,
+    }),
+  );
+  for (const run of recentFailures) {
+    findings.push({
+      type: "AGGREGATION_HEALTH",
+      entityKey: `run:${run.stage}`,
+      tenantId: null,
+      kind: "aggregation",
+      subject: run.stage,
+      // The stage's own error line, which is written to be short and store-data-free (§10).
+      detail: `stage failed: ${(run.error ?? "no detail").slice(0, 120)}`,
+    });
+  }
+  const strandedRuns = await withBypass((db) =>
+    db.analyticsScheduledRun.count({
+      where: { status: "RUNNING", leaseUntil: { lt: now } },
+    }),
+  );
+  if (strandedRuns > 0) {
+    findings.push({
+      type: "AGGREGATION_HEALTH",
+      entityKey: "run:lease",
+      tenantId: null,
+      kind: "aggregation",
+      subject: "scheduler",
+      detail: `${strandedRuns} run(s) still marked running with an expired lease`,
+    });
+  }
+
+  // Redis: rate limiting has fallen back to in-memory, so limits are per instance (§11.10).
+  //
+  // Read from the state lib/redis.ts already keeps, NOT probed. The first version called
+  // getRedisClient() here, which costs a 2-second connect attempt and a logged error on every
+  // evaluation — load created by the stage whose job is to notice load, and it turned this
+  // suite from seconds into minutes. The cost of not probing is that a fallback which starts
+  // and ends between two runs is never reported; that is in the acceptance record.
+  if (env.REDIS_URL) {
+    if (await redisFallbackActive()) {
+      findings.push({
+        type: "REDIS_FALLBACK",
+        entityKey: "redis",
+        tenantId: null,
+        kind: "redis",
+        subject: "redis",
+        detail: "unreachable: rate limits are per instance until it returns",
+      });
+    }
   }
 
   // Push delivery: a meaningful share of attempts failing. Endpoints already classified as
