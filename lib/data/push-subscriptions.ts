@@ -15,6 +15,7 @@
 import type { NotificationAudience } from "@/generated/prisma/client";
 import { withBypass } from "@/lib/prisma";
 import { encryptPushSecret, endpointHash, pushSecretsAvailable } from "@/lib/push/crypto";
+import { checkPushEndpoint } from "@/lib/push/endpoint";
 
 export type DeviceSummary = {
   id: string;
@@ -39,6 +40,9 @@ export type RegisterInput = {
 
 export class PushUnavailable extends Error {}
 
+/** The endpoint is not a push service this server will talk to. See lib/push/endpoint.ts. */
+export class PushEndpointRefused extends Error {}
+
 /**
  * Register a device, or refresh the one that already exists.
  *
@@ -50,6 +54,14 @@ export class PushUnavailable extends Error {}
 export async function registerDevice(input: RegisterInput): Promise<{ id: string }> {
   if (!pushSecretsAvailable()) {
     throw new PushUnavailable("PUSH_ENCRYPTION_KEY is not set: a device cannot be stored");
+  }
+  // Checked HERE, in the data layer, not in the action: the endpoint arrives from a browser and
+  // the server later POSTs to it, so an unchecked value is a request this platform can be made
+  // to send anywhere (lib/push/endpoint.ts explains the shape of that). A rule in one action
+  // would be a rule the next caller — the platform screen, a migration script — does not have.
+  const verdict = checkPushEndpoint(input.endpoint);
+  if (!verdict.ok) {
+    throw new PushEndpointRefused(`refusing to register a push endpoint: ${verdict.reason}`);
   }
   const hash = endpointHash(input.endpoint);
   return withBypass(async (db) => {

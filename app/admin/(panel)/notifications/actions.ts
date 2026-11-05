@@ -8,6 +8,7 @@ import {
   type OwnerPreferences,
 } from "@/lib/data/notification-preferences";
 import {
+  PushEndpointRefused,
   PushUnavailable,
   listDevices,
   recordDeviceFailure,
@@ -63,6 +64,9 @@ export async function registerDeviceAction(input: DeviceInput) {
     });
   } catch (error) {
     if (error instanceof PushUnavailable) return { error: "notifications.error.unavailable" };
+    // A browser never produces one of these; a crafted call does. Refused with a plain message
+    // rather than an echo of what was sent.
+    if (error instanceof PushEndpointRefused) return { error: "notifications.error.endpoint" };
     throw error;
   }
   revalidatePath("/admin/notifications");

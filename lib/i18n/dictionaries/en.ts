@@ -968,6 +968,7 @@ export const en = {
   "notifications.iphone.step5": "On this page, choose “Enable notifications”.",
   "notifications.iphone.note": "Do this once per device. Android phones and computers need none of it.",
 
+  "notifications.error.endpoint": "That device could not be registered. Its notification address is not one this platform recognises.",
 } satisfies Record<string, string>;
 
 export type DictionaryKey = keyof typeof en;

@@ -58,7 +58,13 @@ import {
   saveOwnerPreferences,
   wantsNotification,
 } from "../lib/data/notification-preferences";
-import { listDevices, registerDevice, revokeDevice } from "../lib/data/push-subscriptions";
+import {
+  PushEndpointRefused,
+  listDevices,
+  registerDevice,
+  revokeDevice,
+} from "../lib/data/push-subscriptions";
+import { ALLOWED_PUSH_HOSTS, checkPushEndpoint } from "../lib/push/endpoint";
 import { createServer, type Socket } from "node:net";
 import { createECDH, randomBytes } from "node:crypto";
 
@@ -258,8 +264,12 @@ async function senderChecks() {
     // check that cannot reach the thing it is about is worse than no check.
     const subscriber = createECDH("prime256v1");
     subscriber.generateKeys();
+    // https, because web-push speaks TLS to an endpoint whatever the URL says, and the host is
+    // allowed only because PUSH_TEST_ENDPOINT_HOST is set and this is not production (see
+    // lib/push/endpoint.ts). The allowlist refusing this by default is the point of it.
+    process.env.PUSH_TEST_ENDPOINT_HOST = "127.0.0.1";
     const target = {
-      endpoint: `http://127.0.0.1:${port}/push`,
+      endpoint: `https://127.0.0.1:${port}/push`,
       p256dh: subscriber.getPublicKey().toString("base64url"),
       auth: randomBytes(16).toString("base64url"),
     };
@@ -440,7 +450,7 @@ async function preferenceChecks(userId: string, tenantId: string) {
       userId,
       tenantId,
       audience: "OWNER",
-      endpoint: `https://push.example.test/dev-${n}-${Date.now()}`,
+      endpoint: `https://fcm.googleapis.com/fcm/send/dev-${n}-${Date.now()}`,
       p256dh: "p",
       auth: "a",
       deviceLabel: `Device ${n}`,
@@ -471,7 +481,7 @@ async function preferenceChecks(userId: string, tenantId: string) {
 
   // Re-registering the same endpoint updates the row rather than listing the phone twice, and
   // brings a device the push service had given up on back to life.
-  const endpoint = `https://push.example.test/stable-${userId}`;
+  const endpoint = `https://fcm.googleapis.com/fcm/send/stable-${userId}`;
   const again = await registerDevice({
     userId,
     tenantId,
@@ -496,10 +506,112 @@ async function preferenceChecks(userId: string, tenantId: string) {
   ok("D56", "re-subscribing refreshes the device's keys instead of listing the phone twice");
 }
 
+/**
+ * The endpoint allowlist, at both layers (found by the security review of commit 4).
+ *
+ * The endpoint arrives from a browser and the server later POSTs to it, so an unchecked value is
+ * a request this platform can be made to send anywhere inside its own network. Blind — the body
+ * is encrypted and the response never reaches the caller — which makes it quiet, not harmless.
+ */
+function endpointChecks() {
+  // The shapes a crafted registration would actually use.
+  const refused = [
+    "http://169.254.169.254/latest/meta-data/",
+    "http://127.0.0.1:6379/",
+    "https://127.0.0.1:6379/",
+    "http://[::1]:8080/push",
+    "https://fcm.googleapis.com.attacker.test/send/x",
+    "https://attacker.test/fcm.googleapis.com",
+    "https://user:pass@fcm.googleapis.com/send/x",
+    "https://localhost/push",
+    "https://10.0.0.5/push",
+    "not-a-url",
+    "",
+  ];
+  for (const endpoint of refused) {
+    const verdict = checkPushEndpoint(endpoint);
+    assert.equal(verdict.ok, false, `${endpoint || "(empty)"} must be refused`);
+  }
+
+  // And the real services, including Apple's per-region hosts and a trailing-dot FQDN.
+  // The concession for this suite's own fake push service is non-production only: with
+  // NODE_ENV=production the same host is refused, which is what keeps it from being a hole.
+  const previousNodeEnv = process.env.NODE_ENV;
+  process.env.PUSH_TEST_ENDPOINT_HOST = "127.0.0.1";
+  assert.equal(checkPushEndpoint("https://127.0.0.1:9/push").ok, true, "allowed outside production");
+  // Cast because NODE_ENV is typed read-only; it is a plain writable env var at runtime, and
+  // defineProperty is what process.env refuses.
+  const mutableEnv = process.env as Record<string, string | undefined>;
+  mutableEnv.NODE_ENV = "production";
+  assert.equal(
+    checkPushEndpoint("https://127.0.0.1:9/push").ok,
+    false,
+    "and refused in production, however the environment is set",
+  );
+  mutableEnv.NODE_ENV = previousNodeEnv;
+  delete process.env.PUSH_TEST_ENDPOINT_HOST;
+
+  const accepted = [
+    "https://fcm.googleapis.com/fcm/send/abc123",
+    "https://updates.push.services.mozilla.com/wpush/v2/abc",
+    "https://web.push.apple.com/Q2F0cw",
+    "https://api.push.apple.com/3/device/abc",
+    "https://db5p.notify.windows.com/w/?token=abc",
+    "https://fcm.googleapis.com./fcm/send/abc123",
+  ];
+  for (const endpoint of accepted) {
+    assert.equal(checkPushEndpoint(endpoint).ok, true, `${endpoint} must be accepted`);
+  }
+  ok(
+    "SSRF",
+    `${refused.length} crafted endpoints refused, ${accepted.length} real ones accepted from ${ALLOWED_PUSH_HOSTS.length} allowed hosts`,
+  );
+}
+
+/** The same rule, where it bites: registration refuses, and the sender refuses again. */
+async function endpointEnforcementChecks(userId: string, tenantId: string) {
+  await assert.rejects(
+    registerDevice({
+      userId,
+      tenantId,
+      audience: "OWNER",
+      endpoint: "http://169.254.169.254/latest/meta-data/",
+      p256dh: "p",
+      auth: "a",
+      deviceLabel: "crafted",
+      deviceClass: "x",
+    }),
+    PushEndpointRefused,
+    "registering an internal address as a device must be refused",
+  );
+  assert.equal(
+    (await listDevices(userId, "OWNER")).some((d) => d.deviceLabel === "crafted"),
+    false,
+    "and must leave no row behind",
+  );
+
+  // Defence in depth: a row written before the rule existed still cannot make the sender open a
+  // socket to it. EXPIRED rather than FAILED, because nothing will ever make it acceptable.
+  const verdict = await sendPush(
+    { endpoint: "http://127.0.0.1:6379/", p256dh: "p", auth: "a" },
+    buildNewOrderPayload({
+      facts: { count: 1, totalCents: null },
+      text: { title: "t", body: "b" },
+      recipientUserId: userId,
+      triggerOrderId: "o",
+      locale: "en",
+    }),
+    300,
+  );
+  assert.equal(verdict.state, "EXPIRED", "the sender must refuse the endpoint, not retry it");
+  ok("SSRF", "registration and the sender each refuse an endpoint that is not a push service");
+}
+
 async function main() {
   matrixChecks();
   serviceWorkerChecks();
   permissionChecks();
+  endpointChecks();
   payloadChecks();
   cryptoChecks();
   await senderChecks();
@@ -553,6 +665,7 @@ async function main() {
     };
 
     await preferenceChecks(ownerId, T);
+    await endpointEnforcementChecks(ownerId, T);
 
     // ---------------------------------------------------------------------------------------
     // D52: one order, one notification, however many senders try.

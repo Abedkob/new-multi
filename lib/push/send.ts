@@ -18,6 +18,7 @@
  */
 
 import webpush, { WebPushError } from "web-push";
+import { checkPushEndpoint } from "@/lib/push/endpoint";
 import { pushConfigured, pushTimeoutMs, vapidCredentials } from "@/lib/push/keys";
 import type { PushPayload } from "@/lib/push/payload";
 
@@ -94,6 +95,17 @@ export async function sendPush(
 ): Promise<SendVerdict> {
   if (!pushConfigured() || !configure()) {
     return { state: "SKIPPED", errorCategory: "not-configured" };
+  }
+
+  // Re-checked at the point of sending, even though registration already refused anything that
+  // is not a push service. This is the line that actually opens the socket, and a row written
+  // before that rule existed — or by a future path that forgets — must not be able to turn this
+  // sender into a way of making requests from inside the network. EXPIRED, not FAILED: nothing
+  // will ever make this endpoint acceptable, so it must not be retried forever.
+  const verdict = checkPushEndpoint(target.endpoint);
+  if (!verdict.ok) {
+    console.error(`[push] refusing endpoint: ${verdict.reason}`);
+    return { state: "EXPIRED", errorCategory: "gone" };
   }
 
   const timer = new Promise<never>((_, reject) =>

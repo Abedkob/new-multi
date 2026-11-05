@@ -969,4 +969,5 @@ export const ar: Record<DictionaryKey, string> = {
   "notifications.iphone.step5": "في هذه الصفحة، اختر «تفعيل الإشعارات».",
   "notifications.iphone.note": "مرة واحدة لكل جهاز. هواتف أندرويد والحواسيب لا تحتاج شيئًا من هذا.",
 
+  "notifications.error.endpoint": "لم يتم تسجيل هذا الجهاز. عنوان الإشعار الخاص به ليس مما تعرفه المنصة.",
 };
