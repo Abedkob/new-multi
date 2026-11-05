@@ -333,6 +333,28 @@ async function main() {
       assert.ok(isLoginRedirect(await admin.get(p)), `platform admin should not reach ${p}`);
     }
     ok("platform admin is not treated as a store owner (/admin redirects)");
+
+    // Platform notifications (§11.9, P6-21): the admin's own screen, and an owner turned away.
+    const platformNotifications = await admin.get("/platform/notifications");
+    assert.equal(platformNotifications.status, 200);
+    for (const section of ["notification-types", "device-list", "iphone-guide"]) {
+      assert.ok(
+        platformNotifications.body.includes(`data-testid="${section}"`),
+        `the platform notifications page is missing its ${section} section`,
+      );
+    }
+    assert.ok(
+      !platformNotifications.body.includes('name="showOrderAmount"'),
+      "there is no order-amount switch on the platform screen: its alerts carry no money",
+    );
+    const ownerAtPlatform = await owner.get("/platform/notifications");
+    assert.ok(
+      ownerAtPlatform.status >= 300 &&
+        ownerAtPlatform.status < 400 &&
+        !ownerAtPlatform.location.includes("/platform"),
+      `an owner must be sent away from the platform console, got ${ownerAtPlatform.status}`,
+    );
+    ok("platform admin has their own notifications screen, and an owner cannot reach it");
   } finally {
     await prisma.tenant.deleteMany({ where: { id: created.tenant.id } });
     await prisma.user.deleteMany({ where: { id: created.user.id } });

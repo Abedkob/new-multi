@@ -22,6 +22,7 @@ export default async function PlatformLayout({
           { href: "/platform", label: "Home" },
           { href: "/platform/stores", label: "Stores" },
           { href: "/platform/analytics", label: "Analytics" },
+          { href: "/platform/notifications", label: "Notifications" },
           { href: "/platform/stores/new", label: "New store" },
         ]}
       />

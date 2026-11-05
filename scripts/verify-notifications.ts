@@ -30,6 +30,7 @@ import {
   NotificationRefused,
   announcedOrderIds,
   claimDelivery,
+  claimNotification,
   claimOrdersForNotification,
   finalizeBody,
   notificationWithDeliveries,
@@ -82,6 +83,14 @@ import {
   weeklySummaryDue,
 } from "../lib/notifications/owner-alerts";
 import { INSIGHT_THRESHOLDS } from "../lib/analytics/insights";
+import {
+  PLATFORM_THRESHOLDS,
+  evaluatePlatformAlerts,
+  findPlatformIssues,
+  platformWeeklyDue,
+  sendPlatformWeeklySummary,
+} from "../lib/notifications/platform-alerts";
+import { ensurePlatformPreferences } from "../lib/data/notification-preferences";
 import { localDayOf, localDayToDate, shiftLocalDay } from "../lib/analytics/local-day";
 import {
   newOrderText,
@@ -434,7 +443,9 @@ function serviceWorkerChecks() {
  * permission is already denied for every future visit.
  */
 function permissionChecks() {
-  const status = readFileSync("app/admin/(panel)/notifications/push-status.tsx", "utf8");
+  // The shared component, which is where the rule now lives: both the merchant screen and the
+  // platform console mount it, so checking it once covers both (§11.9).
+  const status = readFileSync("components/admin/notifications/push-status.tsx", "utf8");
   const code = status.replace(/\/\*[\s\S]*?\*\//g, "").replace(/^\s*\/\/.*$/gm, "");
   assert.ok(code.includes("requestPermission"), "the screen must be able to ask");
   // The one call must sit inside the click handler, not in an effect or at module scope.
@@ -1215,6 +1226,144 @@ async function weeklySummaryChecks(tenantId: string, ownerId: string) {
   ok("P6-10", "the weekly summary sends once and opens the screen behind it");
 }
 
+/**
+ * P6-19: the two inboxes cannot cross.
+ *
+ * Both audiences registered at once, on the same machine, with the same person's devices listed
+ * separately — because the way this fails in practice is a lookup that forgets the audience and
+ * sends a store's orders to an operator's phone, or a platform alert to a merchant.
+ */
+async function audienceChecks(tenantId: string, ownerId: string) {
+  const admin = await withBypass((db) =>
+    db.user.create({
+      data: {
+        email: `platform-notify-${Date.now()}@example.test`,
+        passwordHash: "x",
+        name: "Platform",
+        role: "PLATFORM_ADMIN",
+        mustChangePassword: false,
+      },
+      select: { id: true },
+    }),
+  );
+  try {
+    await registerDevice({
+      userId: admin.id,
+      tenantId: null,
+      audience: "PLATFORM",
+      endpoint: fixtureEndpoint(`platform-${Date.now()}`),
+      ...fixtureKeys,
+      deviceLabel: "Operator laptop",
+      deviceClass: "Chrome/Mac",
+    });
+
+    // Each person sees their own devices and only in their own audience.
+    const ownerDevices = await listDevices(ownerId, "OWNER");
+    const adminDevices = await listDevices(admin.id, "PLATFORM");
+    assert.ok(adminDevices.length >= 1, "the admin's device must be listed");
+    assert.ok(
+      !ownerDevices.some((device) => adminDevices.some((other) => other.id === device.id)),
+      "an owner must never see a platform device",
+    );
+    assert.deepEqual(
+      await listDevices(admin.id, "OWNER"),
+      [],
+      "and the same person has no devices in the other audience",
+    );
+    assert.deepEqual(await listDevices(ownerId, "PLATFORM"), []);
+
+    // The writer refuses the crossing outright, whatever a caller believes (D60).
+    await assert.rejects(
+      claimNotification({
+        recipientUserId: admin.id,
+        recipientRole: "PLATFORM_ADMIN",
+        audience: "PLATFORM",
+        type: "NEW_ORDER",
+        tenantId,
+        title: "t",
+        body: "b",
+        destination: "/platform",
+        locale: "en",
+        dedupeKey: `cross-${Date.now()}`,
+      }),
+      /may not receive/,
+      "a platform admin must not be sendable a store's order notification",
+    );
+    await assert.rejects(
+      claimNotification({
+        recipientUserId: ownerId,
+        recipientRole: "STORE_OWNER",
+        audience: "OWNER",
+        type: "INACTIVE_STORE",
+        tenantId,
+        title: "t",
+        body: "b",
+        destination: "/admin",
+        locale: "en",
+        dedupeKey: `cross2-${Date.now()}`,
+      }),
+      /may not receive/,
+      "and an owner must not be sendable a platform alert",
+    );
+    ok("P6-19", "a platform device and an owner device never appear in each other's audience");
+
+    // P6-26 and P6-25: a finding alerts once on entry, is suppressed while it stays true, and
+    // re-arms once it clears.
+    await ensurePlatformPreferences(admin.id);
+    const now = new Date();
+    const findings = await findPlatformIssues(now);
+    // The fixture store has no activity, so "went quiet" is among them. Not asserted as the
+    // only finding: this database has whatever other suites left behind, and an alert stage
+    // that only works on a clean database is not one that works.
+    assert.ok(
+      findings.some((finding) => finding.type === "INACTIVE_STORE"),
+      `expected an inactive-store finding, got ${findings.map((f) => f.type).join(", ")}`,
+    );
+
+    const first = await evaluatePlatformAlerts(now);
+    assert.ok(first.sent >= 1, `the first evaluation must send, got ${JSON.stringify(first)}`);
+    const second = await evaluatePlatformAlerts(new Date(now.getTime() + 5 * 60_000));
+    assert.equal(second.sent, 0, "a condition that is still true must not alert again");
+    assert.ok(second.suppressed >= 1, "and must be reported as already firing");
+    ok(
+      "P6-26",
+      `a platform finding alerts once on entry and is suppressed for ${PLATFORM_THRESHOLDS.cooldownHours}h`,
+    );
+
+    // The alert body names a store and carries no customer or order data (§11.9).
+    const alert = await prisma.adminNotification.findFirst({
+      where: { recipientUserId: admin.id, audience: "PLATFORM" },
+      orderBy: { createdAt: "desc" },
+      select: { body: true, tenantId: true, destination: true },
+    });
+    assert.ok(alert, "the alert must be in the ledger");
+    assert.equal(alert.tenantId, null, "a platform notification belongs to no single store");
+    for (const forbidden of [customer.customerName, customer.customerPhone, customer.customerAddress]) {
+      assert.ok(!alert.body.includes(forbidden), "a platform alert must carry no customer data");
+    }
+    assert.equal(alert.destination, "/platform/analytics");
+    ok("P6-10", "a platform alert names a store, belongs to none, and carries no customer data");
+
+    // P6-28's platform half: Monday 09:00 in the platform's configured zone.
+    const monday9 = new Date("2026-03-30T06:30:00.000Z"); // 09:30 in Asia/Beirut
+    assert.equal(platformWeeklyDue(monday9, "Asia/Beirut"), true);
+    assert.equal(platformWeeklyDue(monday9, "UTC"), false, "06:30 UTC is not 09:00 UTC");
+    const sunday = new Date(monday9.getTime() - 86_400_000);
+    assert.equal(platformWeeklyDue(sunday, "Asia/Beirut"), false);
+    const summary = await sendPlatformWeeklySummary(monday9);
+    assert.ok(summary.sent >= 1, "the platform summary must send to an opted-in admin");
+    const again = await sendPlatformWeeklySummary(monday9);
+    assert.equal(again.sent, 0, "and only once per day");
+    ok("P6-28", "the platform summary is due at 09:00 in its own zone and sends once");
+  } finally {
+    await prisma.adminNotification.deleteMany({ where: { recipientUserId: admin.id } });
+    await prisma.notificationAlertState.deleteMany({ where: { audience: "PLATFORM" } });
+    await prisma.pushSubscription.deleteMany({ where: { userId: admin.id } });
+    await prisma.platformNotificationPreference.deleteMany({ where: { userId: admin.id } });
+    await prisma.user.delete({ where: { id: admin.id } }).catch(() => {});
+  }
+}
+
 async function main() {
   matrixChecks();
   serviceWorkerChecks();
@@ -1282,6 +1431,7 @@ async function main() {
     await localeChecks(T, ownerId, place);
     await ownerAlertChecks(T, ownerId);
     await weeklySummaryChecks(T, ownerId);
+    await audienceChecks(T, ownerId);
 
     // ---------------------------------------------------------------------------------------
     // D52: one order, one notification, however many senders try.

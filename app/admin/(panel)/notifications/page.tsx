@@ -4,10 +4,8 @@ import { listDevices } from "@/lib/data/push-subscriptions";
 import { pushConfigured, vapidPublicKey } from "@/lib/push/keys";
 import { getT } from "@/lib/i18n/locale";
 import { requireOwner } from "@/lib/session";
-import { DeviceList } from "./device-list";
-import { IphoneGuide } from "./iphone-guide";
-import { PreferenceForm } from "./preference-form";
-import { PushStatus } from "./push-status";
+import { IphoneGuide } from "@/components/admin/notifications/iphone-guide";
+import { OwnerNotificationSections } from "./owner-sections";
 
 /**
  * Notifications (§11.2): the owner's own phone, in three sections.
@@ -42,13 +40,11 @@ export default async function NotificationsPage() {
         >
           {t("notifications.unavailable")}
         </p>
-      ) : (
-        <PushStatus vapidPublicKey={vapidPublicKey()} />
-      )}
+      ) : null}
 
-      <PreferenceForm initial={preferences} />
-
-      <DeviceList
+      <OwnerNotificationSections
+        vapidPublicKey={pushConfigured() ? vapidPublicKey() : null}
+        preferences={preferences}
         devices={devices.map((device) => ({
           id: device.id,
           deviceLabel: device.deviceLabel,

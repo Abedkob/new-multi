@@ -30,6 +30,12 @@ import {
   sendWeeklySummary,
   weeklySummaryDue,
 } from "@/lib/notifications/owner-alerts";
+import {
+  evaluatePlatformAlerts,
+  findPlatformIssues,
+  platformWeeklyDue,
+  sendPlatformWeeklySummary,
+} from "@/lib/notifications/platform-alerts";
 
 /** How many stores, deliveries or devices one run will touch. */
 const BATCH = 50;
@@ -321,10 +327,58 @@ function ownerTenants() {
   );
 }
 
+/**
+ * Platform alerts (§11.10, D55).
+ *
+ * Evaluates the conditions and sends only the transitions. A run that finds three problems that
+ * were already firing sends nothing and says so, which is the behaviour that keeps an operator
+ * reading the ones that do arrive.
+ */
+export const platformAlerts: Stage = {
+  name: "platform-alerts",
+  leaseMinutes: 10,
+  async run(ctx: StageContext) {
+    if (!pushConfigured()) return { items: 0, detail: "push is not configured" };
+    if (ctx.dryRun) {
+      const findings = await findPlatformIssues(ctx.now);
+      return {
+        items: findings.length,
+        detail:
+          findings.length === 0
+            ? "nothing is wrong"
+            : `would consider ${findings.length}: ${findings.map((f) => f.type).join(", ")}`,
+      };
+    }
+    const result = await evaluatePlatformAlerts(ctx.now);
+    return {
+      items: result.sent,
+      detail:
+        `${result.findings} finding(s): ${result.sent} sent, ${result.suppressed} already firing, ` +
+        `${result.resolved} cleared`,
+    };
+  },
+};
+
+/** The platform's Monday summary (§11.11). */
+export const platformWeeklySummary: Stage = {
+  name: "platform-weekly-summary",
+  async run(ctx: StageContext) {
+    if (!pushConfigured()) return { items: 0, detail: "push is not configured" };
+    if (!platformWeeklyDue(ctx.now)) {
+      return { items: 0, detail: "not Monday 09:00 in the platform's zone" };
+    }
+    if (ctx.dryRun) return { items: 1, detail: "would send the platform weekly summary" };
+    const result = await sendPlatformWeeklySummary(ctx.now);
+    return { items: result.sent, detail: `${result.sent} summary(s) sent` };
+  },
+};
+
 export const NOTIFICATION_STAGES: Stage[] = [
   newOrderCatchUp,
   ownerAlerts,
   ownerWeeklySummary,
+  platformAlerts,
+  platformWeeklySummary,
   deliveryLeaseRecovery,
   pushCleanup,
 ];

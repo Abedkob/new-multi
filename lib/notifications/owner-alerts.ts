@@ -30,7 +30,7 @@ import {
   storeOverview,
 } from "@/lib/analytics/report";
 import { claimNotification, lastNotificationFor } from "@/lib/data/notifications";
-import { ensureOwnerPreferences, wantsNotification } from "@/lib/data/notification-preferences";
+import { wantsNotification } from "@/lib/data/notification-preferences";
 import { sendableDevices } from "@/lib/data/push-subscriptions";
 import { ownerAlertText, weeklySummaryText, type NotificationLocale } from "@/lib/notifications/templates";
 import { deliverNotification } from "@/lib/notifications/deliver";
