@@ -2,7 +2,7 @@ import NextAuth from "next-auth";
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 import { authConfig } from "@/auth.config";
-import { homeForRole } from "@/lib/roles";
+import { homeForRole, isAdminRole } from "@/lib/roles";
 import { env } from "@/lib/env";
 import { prisma } from "@/lib/prisma";
 import { getStoreUrl } from "@/lib/store-url";
@@ -198,7 +198,11 @@ export default auth(async (req) => {
   }
 
   if (pathname === "/admin" || pathname.startsWith("/admin/")) {
-    if (user?.role !== "STORE_OWNER") return redirectTo("/login");
+    // Both roles that belong to a store are admitted here, and this gate deliberately does not
+    // know which of them may see what. That is lib/permissions.ts's capability table, checked
+    // inside each page and action, where the tenant scope and the database are. The proxy stays
+    // what its own header comment says it is: optimistic, and not a security boundary.
+    if (!isAdminRole(user?.role)) return redirectTo("/login");
     if (
       user.mustChangePassword &&
       pathname !== "/admin/change-password"

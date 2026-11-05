@@ -20,6 +20,8 @@ export const { handlers, auth, signIn, signOut, unstable_update } = NextAuth({
           where: { email },
           include: { tenant: { select: { id: true } } },
         });
+        // An owner's store comes from the ownership relation; a staff member's from the column
+        // that employs them (D71). Exactly one of the two is ever set, by a CHECK constraint.
         // Always run a bcrypt compare so unknown emails cost the same time.
         const valid = await verifyPassword(
           password,
@@ -32,7 +34,7 @@ export const { handlers, auth, signIn, signOut, unstable_update } = NextAuth({
           email: user.email,
           name: user.name,
           role: user.role,
-          tenantId: user.tenant?.id ?? null,
+          tenantId: user.tenant?.id ?? user.staffTenantId ?? null,
           mustChangePassword: user.mustChangePassword,
           sessionVersion: user.sessionVersion,
         };

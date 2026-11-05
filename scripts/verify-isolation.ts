@@ -364,6 +364,58 @@ async function main() {
       assert.equal(after.body, "You have a new order.");
     });
 
+    await check("a staff account must name exactly one store, and only a staff account may", async () => {
+      // P7-01. The database's share of D71, asserted here rather than in a permission suite
+      // because it is an invariant of the schema: a STAFF row with no tenant is a principal
+      // with no isolation scope, and every policy in this file keys on the tenant. Both halves
+      // fail differently — without the first a staff account is unscoped, without the second an
+      // owner could be given a staff tenant and be scoped to two stores at once.
+      await assert.rejects(
+        withBypass((db) =>
+          db.user.create({
+            data: {
+              email: `staff-nowhere-${Date.now()}@example.test`,
+              passwordHash: "x",
+              name: "Staff nowhere",
+              role: "STAFF",
+            },
+          }),
+        ),
+        /User_staff_tenant_required|violates check constraint/i,
+        "a staff account with no store must be refused by the database",
+      );
+      await assert.rejects(
+        withBypass((db) =>
+          db.user.create({
+            data: {
+              email: `owner-with-staff-tenant-${Date.now()}@example.test`,
+              passwordHash: "x",
+              name: "Owner with a staff tenant",
+              role: "STORE_OWNER",
+              staffTenantId: A,
+            },
+          }),
+        ),
+        /User_staff_tenant_required|violates check constraint/i,
+        "and a non-staff account must not be given one",
+      );
+      // The allowed shape, so the constraint is not merely refusing everything.
+      const staff = await withBypass((db) =>
+        db.user.create({
+          data: {
+            email: `staff-ok-${Date.now()}@example.test`,
+            passwordHash: "x",
+            name: "Staff of A",
+            role: "STAFF",
+            staffTenantId: A,
+          },
+          select: { id: true, staffTenantId: true },
+        }),
+      );
+      assert.equal(staff.staffTenantId, A);
+      await withBypass((db) => db.user.delete({ where: { id: staff.id } }));
+    });
+
     console.log("Sanity: owners can manage their own data:");
     await check("A can update and delete its own product", async () => {
       assert.equal(await updateProduct(A, pa.id, { name: "A renamed", ...input }), true);

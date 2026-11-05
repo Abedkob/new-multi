@@ -10,6 +10,16 @@ datasource db {
 enum Role {
   PLATFORM_ADMIN
   STORE_OWNER
+  /// A member of one store's staff (D70). Added in Phase 7.
+  ///
+  /// A new enum value rather than a `User.isStaff` flag on purpose: every existing
+  /// `role === "STORE_OWNER"` comparison in the codebase would have been silently true for a
+  /// staff account, which is the one failure mode worth designing against. A new value makes
+  /// each exhaustive `switch` a compile error until somebody has considered it.
+  ///
+  /// What a staff account may do is NOT encoded here. It is one table, `lib/permissions.ts`,
+  /// where the default is deny.
+  STAFF
 }
 
 model User {
@@ -34,6 +44,18 @@ model User {
 
   // One owner owns exactly one tenant.
   tenant Tenant?
+
+  /// The store a STAFF account belongs to (D71), and null for every other role.
+  ///
+  /// Separate from `tenant` above, which is the ownership relation (Tenant.ownerId). A staff
+  /// member belongs to a store without owning it, so the two cannot share a field.
+  ///
+  /// Both halves of "STAFF implies exactly one store, anything else implies none" are a CHECK
+  /// constraint in the migration as well as a rule in code. This is the one invariant in the
+  /// phase worth having the database refuse: a staff row with no tenant would be a principal
+  /// with no isolation scope.
+  staffTenantId String?
+  staffTenant   Tenant? @relation("TenantStaff", fields: [staffTenantId], references: [id], onDelete: Cascade)
 
   pushSubscriptions      PushSubscription[]
   ownerNotificationPrefs OwnerNotificationPreference?
@@ -135,6 +157,7 @@ model Tenant {
   pushSubscriptions         PushSubscription[]
   adminNotifications        AdminNotification[]
   notificationAlertStates   NotificationAlertState[] @relation("TenantAlertStates")
+  staff                     User[]                   @relation("TenantStaff")
 }
 
 // A campaign the owner saved while building a tracked link (D39).
