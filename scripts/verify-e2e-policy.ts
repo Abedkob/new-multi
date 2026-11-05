@@ -38,15 +38,12 @@ const INFRASTRUCTURE = new Set(["browser.ts", "custom-domain.ts"]);
  * exercised against the thing being piloted.
  */
 const PENDING_LEG = new Set([
-  "categories.ts",
-  "checkout.ts",
   "discounts.ts",
   "kinetic.ts",
   "mirage.ts",
   "prism.ts",
   "social-links.ts",
   "storefront-pages.ts",
-  "variants.ts",
 ]);
 
 let failures = 0;

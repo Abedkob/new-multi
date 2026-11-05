@@ -6,6 +6,7 @@ import type { Page } from "playwright-core";
 import { prisma } from "../../lib/prisma";
 import { createCategory } from "../../lib/data/categories";
 import { BASE, launch, login, makeStore } from "./browser";
+import { assertDevOriginAllowed, onCustomDomain } from "./custom-domain";
 
 async function main() {
   const store = await makeStore("Variants UI");
@@ -148,6 +149,70 @@ async function main() {
     assert.equal(await status(), "In stock");
     assert.equal(await price(), "$25.00");
     ok("size + color product: needs both choices, and unavailable combinations are reported");
+
+    // ---- The picker, on the store's own domain
+    // Mandatory since 2026-11-04 (scripts/e2e/custom-domain.ts): a leg that cannot run FAILS.
+    //
+    // The variant picker is the most JavaScript-dependent thing a shopper touches: price, stock,
+    // image and availability all come from client state, and not one of them is in the HTML the
+    // server sent. That makes it the exact shape of the Phase 3 failure — a page that renders
+    // and does nothing, because off localhost the browser was never served the bundle. The
+    // assertions below are the same ones made above on the shared host, on purpose: if the
+    // client code does not run here, every one of them reports the pre-selection state instead.
+    //
+    // It runs last because proxy.ts caches slug -> domain for 30 seconds, so a path-based
+    // /store/<slug> URL stays redirected to this hostname for a while after the domain is gone.
+    const domain = "variants-e2e.test";
+    assertDevOriginAllowed(domain);
+    await prisma.tenant.update({ where: { id: T }, data: { domain } });
+    try {
+      await onCustomDomain(domain, async ({ context: domainContext, origin }) => {
+        const d = await domainContext.newPage();
+        const dStatus = () => d.locator('[data-testid="stock-status"]').first().innerText();
+        const dPrice = () => d.locator('[data-testid="product-price"]').first().innerText();
+        const dImage = () => d.locator("main img").first().getAttribute("src");
+
+        await d.goto(`${origin}/products/e2e-sneaker`, { waitUntil: "load" });
+        await d.locator('[data-testid="variant-picker"]').waitFor();
+        assert.equal(await dStatus(), "Select options");
+        assert.equal(await dPrice(), "From $100.00");
+
+        await d.click('[data-option="size:41"]');
+        assert.equal(await dStatus(), "Out of stock", "the picker did not react — is its JS running?");
+        assert.equal(await dPrice(), "$120.00");
+        assert.equal(await dImage(), "/demo/sneaker.svg");
+        await d.click('[data-option="size:40"]');
+        assert.equal(await dStatus(), "In stock");
+        assert.equal(await dPrice(), "$100.00");
+        assert.equal(await d.locator('[data-option="size:41"]').getAttribute("data-available"), "false");
+        ok(`on ${domain} the picker hydrates: price, image, stock and availability follow the variant`);
+
+        // The variant's image override is a host-relative public/ asset, and proxy.ts has to
+        // pass those through unrewritten — rewrite it into /store/<slug>/demo/sneaker.svg and
+        // every product photo on every custom-domain storefront 404s.
+        assert.equal(
+          (await d.goto(`${origin}/demo/sneaker.svg`))?.status(),
+          200,
+          "a public/ asset must be served unrewritten from a store's own domain",
+        );
+        ok(`on ${domain} the variant's image override is actually served (public/ passthrough)`);
+
+        // Two attributes: both choices required, and the combination that does not exist is
+        // named as such rather than silently falling back to the first variant.
+        await d.goto(`${origin}/products/e2e-tee`, { waitUntil: "load" });
+        await d.locator('[data-testid="variant-picker"]').first().waitFor();
+        await d.click('[data-option="size:M"]');
+        assert.equal(await dStatus(), "Select options");
+        await d.click('[data-option="color:Black"]');
+        assert.equal(await dStatus(), "This combination isn't available");
+        await d.click('[data-option="color:White"]');
+        assert.equal(await dStatus(), "In stock");
+        assert.equal(await dPrice(), "$25.00");
+        ok(`on ${domain} a two-attribute product needs both choices and reports an impossible pair`);
+      });
+    } finally {
+      await prisma.tenant.update({ where: { id: T }, data: { domain: null } });
+    }
   } finally {
     await browser.close();
     await store.remove();

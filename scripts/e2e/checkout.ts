@@ -7,13 +7,14 @@
 import "dotenv/config";
 import "../_owner";
 import assert from "node:assert/strict";
-import type { Page } from "playwright-core";
+import type { Cookie, Page } from "playwright-core";
 import { prisma } from "../../lib/prisma";
 import { createCategory } from "../../lib/data/categories";
 import { createProduct } from "../../lib/data/products";
 import { setTenantTemplate } from "../../lib/data/theme";
 import { TEMPLATE_IDS } from "../../templates/meta";
 import { BASE, launch, login, makeStore } from "./browser";
+import { PRODUCTION_BUILD_HINT, assertDevOriginAllowed, onCustomDomain } from "./custom-domain";
 
 const v = (attributes: Record<string, string>, stock: number, price: number | null = null) => ({
   attributes,
@@ -291,6 +292,150 @@ async function main() {
       await p.close();
     }
     ok(`product page -> add to cart -> cart -> checkout works in all ${TEMPLATE_IDS.length} storefront templates`);
+
+    // ------------------------------------------------- the whole money path, on the store's own
+    // domain. Mandatory since 2026-11-04 (scripts/e2e/custom-domain.ts): a leg that cannot run
+    // FAILS. If exactly one suite in this repo had a custom-domain leg, it would be this one —
+    // everything here either takes an order or loses one.
+    //
+    // It runs LAST on purpose. proxy.ts caches slug -> domain for 30 seconds, so once this
+    // tenant has a domain the path-based /store/<slug> URLs every check above uses would be
+    // 307'd to a hostname only this leg's browser can resolve, for half a minute after the
+    // domain is cleared again.
+    //
+    // What is NOT here, and why: the `after()` new-order push. Nothing in that chain depends on
+    // the host — it runs after the response, against ids, and verify:notifications drives it end
+    // to end with real devices and leases. An assertion that only fires when VAPID keys happen
+    // to be configured is the very thing this policy forbids, so it is not written here at all.
+    const domain = "checkout-e2e.test";
+    assertDevOriginAllowed(domain);
+    await prisma.productVariant.update({ where: { id: capVariant.id }, data: { stock: 5 } });
+    await prisma.tenant.update({ where: { id: T }, data: { domain } });
+    try {
+      await onCustomDomain(domain, async ({ context: domainContext, origin }) => {
+        const d = await domainContext.newPage();
+        const host = new URL(origin).host;
+
+        // 1. The consent cookie at the DOMAIN ROOT. This is the Phase 2 bug verbatim: written
+        //    under /store/<slug>, it is never sent back to a visitor whose store IS the root, so
+        //    the decision was taken and then immediately forgotten on every page.
+        await d.goto(origin, { waitUntil: "load" });
+        const acceptAll = d.locator('[data-testid="consent-accept-all"]');
+        await acceptAll.click();
+        // Wait for the banner to go rather than for a duration: recording the decision is a
+        // Server Action, and the cookie arrives with its response. A fixed sleep here was
+        // shorter than the round trip and failed this leg for no reason at all.
+        await acceptAll.waitFor({ state: "detached" });
+        const consent = (await domainContext.cookies(origin)).find((c: Cookie) =>
+          c.name.startsWith("store_consent_"),
+        );
+        assert.ok(consent, `on ${domain}: ${PRODUCTION_BUILD_HINT}`);
+        assert.equal(
+          consent.path,
+          "/",
+          `the consent cookie must be scoped to the domain root, not ${consent.path} — a store ` +
+            "on its own domain is served from / and would never be sent a deeper cookie back",
+        );
+        ok(`on ${domain} the consent decision is stored at the domain root`);
+
+        // 2. Every storefront link drops the /store/<slug> prefix on a domain
+        //    (getStoreBasePath), and the cart lives in React state in the storefront layout, so
+        //    it must survive a navigation here exactly as it does on the shared host.
+        await d.goto(`${origin}/products/cap`, { waitUntil: "load" });
+        const dAdd = d.locator('[data-testid="add-to-cart-button"]');
+        await dAdd.click();
+        assert.equal(await cartCount(d), "(1)");
+        await Promise.all([
+          d.waitForURL(/\/shop$/),
+          d.locator('header a[href$="/shop"]').first().click(),
+        ]);
+        assert.equal(new URL(d.url()).host, host);
+        assert.equal(await cartCount(d), "(1)", "the cart must survive navigation on a domain too");
+        ok(`on ${domain} root-relative links work and the cart survives navigation`);
+
+        // 3. The WhatsApp handoff is built in the browser from window.location.origin, so on a
+        //    domain it must hand the shopper the domain's own URL. A /store/<slug> link pasted
+        //    into a chat would 307 at best and is not a URL this store is reachable at.
+        await d.goto(`${origin}/products/cap`, { waitUntil: "load" });
+        // The server has no origin to build an absolute link from, so it renders the message
+        // without the URL and the client adds it on its first render (templates/product-client
+        // .tsx's useOrigin). Waiting for it to appear is the assertion that the client ran at
+        // all; if it never does, this throws rather than reading the server's half-built text.
+        await d.waitForFunction(
+          (expected) =>
+            document
+              .querySelector('[data-testid="whatsapp-button"]')
+              ?.getAttribute("href")
+              ?.includes(encodeURIComponent(expected)) ?? false,
+          `${origin}/products/cap`,
+        );
+        const chat = await d.locator('[data-testid="whatsapp-button"]').getAttribute("href");
+        assert.ok(chat, "the product page must offer a WhatsApp handoff");
+        const handoff = decodeURIComponent(new URL(chat).searchParams.get("text") ?? "");
+        assert.ok(
+          handoff.includes(`${origin}/products/cap`),
+          `the WhatsApp message must carry the domain's own product URL, got: ${handoff}`,
+        );
+        assert.ok(
+          !handoff.includes("/store/"),
+          `the WhatsApp message must not leak a path-based URL, got: ${handoff}`,
+        );
+        ok(`on ${domain} the WhatsApp handoff carries the domain's own product URL`);
+
+        // 4. The order itself. Placing it is a Server Action POST, which Next refuses outright
+        //    when the Origin header does not match the host it was served from — so this single
+        //    click is also the origin check, and a 307 from the proxy mid-POST would show up
+        //    here as a lost order rather than a redirect.
+        // Added again, because the full page load above is a real reload and the cart lives in
+        // React state — it is meant to be lost there, and step 2 is where surviving navigation
+        // is asserted. From here on the journey is client-side, as a shopper's would be.
+        await dAdd.click();
+        assert.equal(await cartCount(d), "(1)");
+        await Promise.all([
+          d.waitForURL(/\/cart$/),
+          d.locator('[data-testid="cart-link"]').first().click(),
+        ]);
+        await d.waitForSelector('[data-testid="cart-line"]');
+        await Promise.all([d.waitForURL(/\/checkout$/), d.click('[data-testid="go-to-checkout"]')]);
+        await d.waitForSelector("#co-customerName");
+        await fillCheckout(d, "Domain Buyer");
+        assert.equal(await d.locator('[data-testid="checkout-total"]').innerText(), "$25.00");
+        await Promise.all([
+          d.waitForURL(/order-confirmation\//),
+          d.click('[data-testid="place-order"]'),
+        ]);
+        await d.locator('[data-testid="confirmation-page"]').waitFor();
+        const confirmation = new URL(d.url());
+        assert.equal(confirmation.host, host);
+        assert.ok(
+          !confirmation.pathname.startsWith("/store/"),
+          `the confirmation must stay on the domain, got ${confirmation.pathname}`,
+        );
+        const domainOrder = await prisma.order.findFirstOrThrow({
+          where: { tenantId: T, customerName: "Domain Buyer" },
+          include: { items: true },
+        });
+        assert.equal(domainOrder.status, "PENDING");
+        assert.equal(domainOrder.deliveryFeeCentsSnapshot, 500);
+        assert.equal(domainOrder.items[0].productNameSnapshot, "Cap");
+        assert.equal(await stock(capVariant.id), 4, "a domain order must deduct stock too");
+        ok(`on ${domain} an order is placed, snapshots its delivery fee and deducts stock`);
+
+        // 5. And the admin console does not exist here, session or no session. A domain pointed
+        //    at this server reaches one store's shop and nothing else (proxy.ts's
+        //    PLATFORM_ONLY_PREFIXES) — these are 404s, not redirects to the platform host.
+        for (const path of ["/admin", "/admin/orders", "/login", "/platform"]) {
+          assert.equal(
+            (await d.goto(`${origin}${path}`))?.status(),
+            404,
+            `${path} must be a 404 from a store's own domain`,
+          );
+        }
+        ok(`on ${domain} /admin, /login and /platform are 404 — the console is not reachable`);
+      });
+    } finally {
+      await prisma.tenant.update({ where: { id: T }, data: { domain: null } });
+    }
   } finally {
     await browser.close();
     await store.remove();

@@ -3,7 +3,9 @@ import "dotenv/config";
 import "../_owner";
 import assert from "node:assert/strict";
 import { prisma } from "../../lib/prisma";
+import { createProduct } from "../../lib/data/products";
 import { BASE, launch, login, makeStore } from "./browser";
+import { assertDevOriginAllowed, onCustomDomain } from "./custom-domain";
 
 const norm = (s: string) => s.replace(/[\s └]+/g, " ").trim();
 
@@ -52,7 +54,10 @@ async function main() {
       trs.map((tr) => ({
         depth: Number(tr.getAttribute("data-depth")),
         name: tr.querySelector('[data-testid="category-name"]')!.textContent!.trim(),
-        indent: (tr.querySelector("td span") as HTMLElement).style.paddingLeft,
+        // The indent is a LOGICAL inline style (paddingInlineStart), not paddingLeft: the admin
+        // renders in Arabic too, where the tree has to indent from the right. Reading
+        // paddingLeft here returned "" for every row and said nothing about the nesting.
+        indent: (tr.querySelector("td span") as HTMLElement).style.paddingInlineStart,
       })),
     );
     assert.deepEqual(
@@ -64,6 +69,86 @@ async function main() {
       ["0rem", "1.5rem", "3rem", "0rem"],
     );
     ok("tree renders with correct nesting and indentation");
+
+    // ------------------------------------------- the tree's public face, on the store's own
+    // domain. Mandatory since 2026-11-04 (scripts/e2e/custom-domain.ts): a leg that cannot run
+    // FAILS.
+    //
+    // A category tree is built in the admin and spent on the storefront, and the storefront is
+    // where the host matters: on a domain every link loses its /store/<slug> prefix
+    // (getStoreBasePath), so a chip or breadcrumb built the other way 404s. The admin half of
+    // this feature has no custom-domain behaviour to test — it has the opposite, which is
+    // checked below: it must not be reachable from a store's domain at all, even by the owner.
+    const domain = "categories-e2e.test";
+    assertDevOriginAllowed(domain);
+    const nike = await prisma.category.findFirstOrThrow({
+      where: { tenantId: store.tenant.id, name: "Nike" },
+    });
+    await createProduct(store.tenant.id, {
+      name: "Deep Shoe",
+      description: "Filed three levels down, under Nike",
+      basePriceCents: 9000,
+      imageUrl: "",
+      images: [],
+      isBestSeller: false,
+      categoryId: nike.id,
+      variants: [{ attributes: {}, stock: 3, priceCentsOverride: null, imageUrl: null }],
+    });
+    // The owner's own session, replayed against their store's domain. Without this the 404s
+    // below would prove only that an anonymous visitor is refused, which is not the claim.
+    const ownerCookies = (await context.cookies(BASE))
+      .filter((c) => c.name.includes("authjs") || c.name.includes("next-auth"))
+      .map((c) => ({ ...c, domain, path: "/", sameSite: "Lax" as const }));
+    assert.ok(ownerCookies.length > 0, "the owner must be logged in for this leg to mean anything");
+    await prisma.tenant.update({ where: { id: store.tenant.id }, data: { domain } });
+    try {
+      await onCustomDomain(domain, async ({ context: domainContext, origin }) => {
+        await domainContext.addCookies(ownerCookies);
+        const d = await domainContext.newPage();
+        const host = new URL(origin).host;
+
+        // A parent category shows everything underneath it, three levels down included.
+        await d.goto(`${origin}/category/men`, { waitUntil: "load" });
+        await d.locator('[data-testid="catalog-page"]').waitFor();
+        assert.match(
+          await d.locator('[data-testid="catalog-page"]').innerText(),
+          /Deep Shoe/,
+          "a parent category must still show a product filed under its grandchild",
+        );
+
+        // The chips are the tree as a shopper sees it, and on a domain they are root-relative.
+        const chips = await d.locator('[data-testid="category-chips"] a').evaluateAll((as) =>
+          (as as HTMLAnchorElement[]).map((a) => a.getAttribute("href")),
+        );
+        assert.ok(chips.length > 0, "Men has a subcategory, so it must offer chips");
+        for (const href of chips) {
+          assert.ok(
+            href?.startsWith("/category/"),
+            `on a domain a category link must be root-relative, got ${href}`,
+          );
+        }
+        await Promise.all([
+          d.waitForURL(/\/category\/shoes$/),
+          d.locator('[data-testid="category-chips"] a', { hasText: "Shoes" }).click(),
+        ]);
+        assert.equal(new URL(d.url()).host, host);
+        assert.match(await d.locator('[data-testid="catalog-page"]').innerText(), /Deep Shoe/);
+        ok(`on ${domain} a category page descends the tree and its chips are root-relative`);
+
+        // And the admin tree itself is not reachable here, with the owner's own cookie attached.
+        for (const path of ["/admin/categories", "/admin/categories/new", "/admin"]) {
+          assert.equal(
+            (await d.goto(`${origin}${path}`))?.status(),
+            404,
+            `${path} must be a 404 from a store's own domain, even for the logged-in owner`,
+          );
+        }
+        ok(`on ${domain} the owner's own session does not open /admin — the console is a 404`);
+      });
+    } finally {
+      await prisma.tenant.update({ where: { id: store.tenant.id }, data: { domain: null } });
+      await prisma.product.deleteMany({ where: { tenantId: store.tenant.id } });
+    }
 
     // Deleting Men is blocked and nothing is deleted.
     await page.locator("tbody tr", { hasText: "Men" }).first().getByRole("button", { name: "Delete" }).click();
