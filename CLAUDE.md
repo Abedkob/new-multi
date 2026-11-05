@@ -278,7 +278,7 @@ leg was added — and that leg's first run skipped itself with a plausible excus
 
 ## Known Gaps
 
-See [KNOWN_GAPS.md](KNOWN_GAPS.md) for:
+See [PHASE_5_ACCEPTANCE.md](PHASE_5_ACCEPTANCE.md) for what the analytics and marketing screens are proven to do, and [KNOWN_GAPS.md](KNOWN_GAPS.md) for:
 - Intentional MVP limitations (e.g., no caching, cart is in-memory only, no pagination on admin products).
 - Production readiness TODOs (e.g., no automated scheduler, etc.).
 - Rough edges flagged for future work (e.g., `ContentKey` is untyped, content editor doesn't warn about missing-content optional sections).

@@ -105,9 +105,13 @@ async function main() {
     // Both calls are real runs against the real lock; only the timing is arranged.
     const first = runScheduled([slowStage(2_000)], { log: quiet });
     await sleep(300);
-    const before = await prisma.analyticsScheduledRun.count();
+    // Counted over THIS suite's own stage names, not over the table. A bare count made the
+    // check fail whenever anything else wrote a run row in the 300ms window — a real scheduled
+    // run on the dev server beside it, say — which is a flake, not a lock that leaked.
+    const ours = { stage: { startsWith: "verify-" } };
+    const before = await prisma.analyticsScheduledRun.count({ where: ours });
     const second = await runScheduled([okStage("verify-should-not-run")], { log: quiet });
-    const after = await prisma.analyticsScheduledRun.count();
+    const after = await prisma.analyticsScheduledRun.count({ where: ours });
     const firstReport = await first;
 
     assert.equal(second.acquired, false, "a second concurrent run must not acquire the lock");

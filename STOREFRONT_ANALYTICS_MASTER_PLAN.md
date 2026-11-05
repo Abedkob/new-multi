@@ -949,6 +949,8 @@ Also, agreed before [PHASE_5_PLAN.md](PHASE_5_PLAN.md) was written, because they
 
 Verify small-store exact values, insight thresholds, no person-level access, platform aggregate-only boundaries, and order/aggregate reconciliation.
 
+**Built and verified** — all 34 items in [PHASE_5_ACCEPTANCE.md](PHASE_5_ACCEPTANCE.md) pass. `ANALYTICS_ROLLOUT_MODE` stays `off`: §13 holds the launch until Phase 7.
+
 **After launch, deliberately not in Phase 5** (each would slow the build, and none is needed to launch): a coupon tied to a campaign and what it earned; shopper-facing push notifications ("back in stock", "new offer"), which are a different audience and consent basis from Phase 6's merchant push; and server-side conversion reporting to Meta and Google. §8 of the Phase 5 plan notes what to avoid now so each stays cheap later.
 
 ### Phase 6 — Admin PWA, Web Push, and Notification Control

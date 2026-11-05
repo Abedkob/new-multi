@@ -390,3 +390,18 @@ comments. Delete this section once it's no longer useful.
   images won't show; real uploads (PNG/JPG/WEBP) do.
 - **Language is hardcoded to English** (`<html lang="en">`, left-to-right). Arabic stores need
   per-store language support (see the i18n discussion) before their SEO is right.
+
+## Phase 5 (reports and marketing) — what is not covered
+
+- **No phone has been looked at.** P5-30 and P5-31 prove the mechanism — dense tables become
+  cards below `md`, wide ones scroll in a focusable region, every screen renders RTL with its
+  Arabic copy — but nobody has opened these screens at 375px. Visual overflow is unproven.
+- **The Overview runs seven reads in sequence.** Each report opens its own `withTenant`
+  transaction, and seven at once starved the pool. The faster fix is one transaction doing all
+  seven, like `loadStorefrontData`; it needs `lib/analytics/report.ts`'s internals to take a
+  client.
+- **The platform console is English only.** It is an internal operations screen; §5.9's Arabic
+  requirement covers the owner's dashboard and the storefront.
+- **`MarketingCampaign` holds no numbers on purpose** (D39). If a future screen wants a
+  campaign's figures, they come from the acquisition aggregates — never from this table, or a
+  report starts depending on whether the owner remembered to save the campaign.
