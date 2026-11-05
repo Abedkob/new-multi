@@ -106,11 +106,16 @@ async function main() {
     data: { mustChangePassword: false },
   });
 
-  const staff = await createStaffAccount(tenantId, {
-    name: "Packer",
-    email: `staff-${run}@example.test`,
-    passwordHash: await hashPassword(staffPassword),
-  });
+  const actor = { userId: created.user.id, email: created.user.email };
+  const staff = await createStaffAccount(
+    tenantId,
+    {
+      name: "Packer",
+      email: `staff-${run}@example.test`,
+      passwordHash: await hashPassword(staffPassword),
+    },
+    actor,
+  );
 
   // A product with stock, and an order to move along. Both are the staff member's actual job,
   // so there is something real behind every page this suite opens.
@@ -213,10 +218,11 @@ async function main() {
       ["/admin/delivery", "Delivery settings"],
       ["/admin/products/new", "the new-product form"],
       [`/admin/products/${product.id}/edit`, "the product form"],
+      ["/admin/staff", "staff management — a staff member cannot add or remove colleagues"],
     ] as const) {
       assertRefused(await session.get(where), `${what} (${where})`);
     }
-    ok("all 13 owner-only screens refuse a staff member, each to /admin/no-access");
+    ok("all 14 owner-only screens refuse a staff member, each to /admin/no-access");
 
     // The refusal page itself must work, or the refusal is a loop.
     const refused = await session.get("/admin/no-access");
@@ -292,8 +298,42 @@ async function main() {
     }
     ok("a staff member receives new orders and is refused every analytics notification");
 
+    // ------------------------------------------------------- the owner's own staff screen
+    const owner = await new Session().login(created.user.email, ownerPassword);
+    const screen = await owner.get("/admin/staff");
+    assert.equal(screen.status, 200, "the owner must be able to open Staff");
+    assert.ok(
+      screen.body.includes('data-testid="staff-scope"'),
+      "the screen must say what a staff account can and cannot do before one is created",
+    );
+    assert.ok(screen.body.includes(staff.email), "and list the account that exists");
+    assert.ok(
+      !screen.body.includes(staffPassword),
+      "and never the password, which is not stored anywhere this screen could read back",
+    );
+    assert.ok(
+      screen.body.includes('href="/admin/staff"'),
+      "the owner's sidebar must offer the section",
+    );
+    ok("the owner's Staff screen opens, lists the account and states its scope");
+
+    // Every grant and removal leaves an append-only row the owner cannot edit.
+    const audit = await prisma.analyticsAuditLog.findMany({
+      where: { tenantId, action: "STAFF_CHANGE" },
+      select: { subject: true, detail: true, actorEmail: true },
+    });
+    assert.ok(
+      audit.some((row) => row.detail === "added" && row.subject === staff.email),
+      `adding a staff account must leave an audit row, got ${JSON.stringify(audit)}`,
+    );
+    assert.ok(
+      !audit.some((row) => (row.detail ?? "").includes(staffPassword)),
+      "and no audit row may contain a password",
+    );
+    ok("adding a staff account leaves one audit row, with no password in it");
+
     // ------------------------------------------------------------------------- revocation
-    assert.equal(await revokeStaffAccount(tenantId, staff.id), true);
+    assert.equal(await revokeStaffAccount(tenantId, staff.id, actor), true);
     const afterRevoke = await session.get("/admin/orders");
     assert.equal(
       path(afterRevoke),
@@ -313,14 +353,19 @@ async function main() {
       ownerEmail: `staff-other-${run}@example.test`,
       passwordHash: await hashPassword(generateTempPassword()),
     });
-    const theirs = await createStaffAccount(other.tenant.id, {
-      name: "Theirs",
-      email: `staff-theirs-${run}@example.test`,
-      passwordHash: await hashPassword(generateTempPassword()),
-    });
+    const theirOwner = { userId: other.user.id, email: other.user.email };
+    const theirs = await createStaffAccount(
+      other.tenant.id,
+      {
+        name: "Theirs",
+        email: `staff-theirs-${run}@example.test`,
+        passwordHash: await hashPassword(generateTempPassword()),
+      },
+      theirOwner,
+    );
     try {
       assert.equal(
-        await revokeStaffAccount(tenantId, theirs.id),
+        await revokeStaffAccount(tenantId, theirs.id, actor),
         false,
         "one store must not be able to remove another store's staff",
       );

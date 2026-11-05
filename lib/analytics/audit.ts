@@ -18,7 +18,16 @@ export type AuditAction =
   | "PRIVACY_ERASE"
   | "INTEGRATION_CHANGE"
   /** A platform admin opened the cross-store console (D43). One row per view, not per query. */
-  | "PLATFORM_CONSOLE_VIEW";
+  | "PLATFORM_CONSOLE_VIEW"
+  /**
+   * An owner added, removed or reset the password of a staff account (Phase 7, D71).
+   *
+   * Here rather than in a table of its own because this log already exists for exactly this
+   * purpose — an append-only record of who changed access to what, which the owner cannot read,
+   * edit or erase. The detail says which of the three happened and the subject is the account's
+   * email; a password never appears in either.
+   */
+  | "STAFF_CHANGE";
 
 export type AuditEntry = {
   tenantId: string | null;

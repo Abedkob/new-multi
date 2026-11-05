@@ -973,6 +973,22 @@ export const ar: Record<DictionaryKey, string> = {
 
   // Staff accounts (app/admin/(panel)/staff/*, Phase 7 D70-D73)
   "nav.staff": "الفريق",
+  "staff.page.description": "من يساعدك في إدارة المتجر. يرون الطلبات ويعالجونها ويعدّلون المخزون؛ ولا شيء آخر في متجرك من حقهم تغييره.",
+  "staff.what.title": "ما يستطيع حساب الفريق فعله",
+  "staff.what.can": "فتح الطلبات، ورؤية اسم العميل ورقمه وعنوانه، ونقل الطلب إلى «مؤكد» أو «تم التوصيل»، ورؤية منتجاتك وتصنيفاتك، وتعديل عدد القطع المتوفرة من كل خيار.",
+  "staff.what.cannot": "لا يمكنهم إلغاء طلب، ولا تغيير منتج أو سعر، ولا رؤية أي تقرير، ولا المساس بالخصومات أو المحتوى أو إعدادات التوصيل أو ربط جوجل وميتا، ولا إضافة أعضاء إلى الفريق.",
+  "staff.add.title": "أضف شخصاً",
+  "staff.add.email": "البريد الذي سيسجّل الدخول به",
+  "staff.add.submit": "إنشاء الحساب",
+  "staff.list.empty": "لا أحد بعد. كل شيء في هذا المتجر لك وحدك.",
+  "staff.status.mustChange": "لم يسجّل الدخول بعد",
+  "staff.resetPassword": "إعادة تعيين كلمة المرور",
+  "staff.revoke": "إزالة",
+  "staff.revoke.confirm": "إزالة صلاحية هذا الشخص؟ سيُخرَج من الحساب فوراً ويتوقف هاتفه عن استلام طلباتك.",
+  "staff.password.heading": "أعطِه كلمة المرور هذه",
+  "staff.password.note": "تظهر مرة واحدة. عليه تغييرها عند أول تسجيل دخول. إذا فقدتها فأعد تعيينها — لا أحد يستطيع قراءتها، ونحن كذلك.",
+  "staff.error.EMAIL_TAKEN": "هذا البريد له حساب على المنصة أصلاً.",
+  "staff.error.NOT_FOUND": "هذا الحساب لم يعد موجوداً. أعد تحميل الصفحة.",
 
   // Stock-only editing (app/admin/(panel)/products/[id]/stock, Phase 7 "products:stock")
   "products.stock.title": "المخزون",

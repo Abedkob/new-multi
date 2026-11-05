@@ -972,6 +972,22 @@ export const en = {
 
   // Staff accounts (app/admin/(panel)/staff/*, Phase 7 D70-D73)
   "nav.staff": "Staff",
+  "staff.page.description": "People who help you run the shop. They see and process orders and can update stock; nothing else about your store is theirs to change.",
+  "staff.what.title": "What a staff account can do",
+  "staff.what.can": "Open Orders, see a customer's name, phone and address, move an order to Confirmed or Delivered, see your products and categories, and change how many of each option are in stock.",
+  "staff.what.cannot": "They cannot cancel an order, change a product or a price, see any report, touch your discounts, content, delivery settings or your Google and Meta connections, or add staff of their own.",
+  "staff.add.title": "Add someone",
+  "staff.add.email": "Email they will sign in with",
+  "staff.add.submit": "Create account",
+  "staff.list.empty": "Nobody yet. Everything in this store is yours alone.",
+  "staff.status.mustChange": "has not signed in yet",
+  "staff.resetPassword": "Reset password",
+  "staff.revoke": "Remove",
+  "staff.revoke.confirm": "Remove this person's access? They are signed out immediately and their phone stops receiving your orders.",
+  "staff.password.heading": "Give them this password",
+  "staff.password.note": "Shown once. They must change it the first time they sign in. If you lose it, reset it — nobody can read it back, including us.",
+  "staff.error.EMAIL_TAKEN": "That email already has an account on this platform.",
+  "staff.error.NOT_FOUND": "That account is no longer there. Reload the page.",
 
   // Stock-only editing (app/admin/(panel)/products/[id]/stock, Phase 7 "products:stock")
   "products.stock.title": "Stock",

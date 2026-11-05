@@ -17,6 +17,18 @@ import { isIanaTimeZone } from "@/lib/time-zones";
 import { slugifyUtm } from "@/lib/utm";
 import { variantSetIssues } from "@/lib/variants";
 
+/**
+ * A staff account the owner is creating (Phase 7, D71).
+ *
+ * No password field: the owner does not choose one. The action generates a first password and
+ * shows it once, the same way the platform admin's owner reset does — a password typed into a
+ * form is a password that ends up in a browser's autofill and in somebody's notes.
+ */
+export const staffAccountSchema = z.object({
+  name: z.string().trim().min(1, "Enter a name").max(80, "That name is too long"),
+  email: z.string().trim().toLowerCase().pipe(z.email("Enter a valid email")),
+});
+
 export const loginSchema = z.object({
   email: z.string().trim().toLowerCase().pipe(z.email("Enter a valid email")),
   password: z.string().min(1, "Password is required"),
