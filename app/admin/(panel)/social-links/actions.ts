@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { updateTenantSocialLinks } from "@/lib/data/tenants";
-import { requireOwner } from "@/lib/session";
+import { requireCapability } from "@/lib/permissions";
 import {
   SOCIAL_LINK_FIELDS,
   socialLinksSchema,
@@ -18,7 +18,7 @@ export async function saveSocialLinksAction(
   _previous: SocialLinksActionState,
   formData: FormData,
 ): Promise<SocialLinksActionState> {
-  const { tenantId } = await requireOwner();
+  const { tenantId } = await requireCapability("settings:write");
   const submitted = Object.fromEntries(
     SOCIAL_LINK_FIELDS.map(({ key }) => [key, String(formData.get(key) ?? "")]),
   ) as Record<SocialLinkKey, string>;

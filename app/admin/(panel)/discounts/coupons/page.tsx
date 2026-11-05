@@ -9,7 +9,7 @@ import { Card } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { listCouponsPage } from "@/lib/data/coupons";
 import { getT } from "@/lib/i18n/locale";
-import { requireOwner } from "@/lib/session";
+import { requireCapability } from "@/lib/permissions";
 import { DiscountTypeNav } from "../discount-type-nav";
 import { CouponActions } from "./coupon-actions";
 import { CouponAnnouncementState, CouponOfferLabel, CouponStatusBadge } from "./coupon-summary";
@@ -18,7 +18,7 @@ import { CouponScheduleLabel } from "./coupon-schedule-label";
 const first = (value: string | string[] | undefined) => Array.isArray(value) ? value[0] : value;
 
 export default async function CouponsPage({ searchParams }: { searchParams: Promise<Record<string, string | string[] | undefined>> }) {
-  const { tenantId } = await requireOwner();
+  const { tenantId } = await requireCapability("discounts:write");
   const t = await getT();
   const query = await searchParams;
   const archived = first(query.archived) === "1";

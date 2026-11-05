@@ -5,14 +5,14 @@ import { z } from "zod";
 import { signIn } from "@/auth";
 import { setPassword } from "@/lib/data/users";
 import { hashPassword } from "@/lib/passwords";
-import { requireOwner } from "@/lib/session";
+import { requireTenantMember } from "@/lib/session";
 import { changePasswordSchema, type FormState } from "@/lib/validation";
 
 export async function changePasswordAction(
   _prev: FormState,
   formData: FormData,
 ): Promise<FormState> {
-  const { userId, email } = await requireOwner({ allowMustChange: true });
+  const { userId, email } = await requireTenantMember({ allowMustChange: true });
 
   const parsed = changePasswordSchema.safeParse({
     password: formData.get("password"),

@@ -17,13 +17,13 @@ import {
 } from "@/components/ui/table";
 import { listCategoriesPage } from "@/lib/data/categories";
 import { getT } from "@/lib/i18n/locale";
-import { requireOwner } from "@/lib/session";
+import { requireCapability } from "@/lib/permissions";
 import { DeleteCategoryButton } from "./delete-category-button";
 
 const first = (value: string | string[] | undefined) => (Array.isArray(value) ? value[0] : value);
 
 export default async function CategoriesPage({ searchParams }: PageProps<"/admin/categories">) {
-  const { tenantId } = await requireOwner();
+  const { tenantId } = await requireCapability("categories:read");
   const t = await getT();
   const query = await searchParams;
   const requestedPage = Number.parseInt(first(query.page) ?? "1", 10) || 1;

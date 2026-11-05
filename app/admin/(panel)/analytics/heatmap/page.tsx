@@ -5,7 +5,7 @@ import { rangeFromPeriod } from "@/lib/analytics/range";
 import { activityHeatmap, type HeatmapMeasure } from "@/lib/analytics/report";
 import { getTenantById } from "@/lib/data/tenants";
 import { getT } from "@/lib/i18n/locale";
-import { requireOwner } from "@/lib/session";
+import { requireCapability } from "@/lib/permissions";
 import { HeatmapGrid } from "./heatmap-grid";
 
 const MEASURES: HeatmapMeasure[] = ["sessions", "orders", "orderValueCents"];
@@ -25,7 +25,7 @@ export default async function HeatmapReportPage({
 }: {
   searchParams: Promise<{ period?: string; measure?: string }>;
 }) {
-  const { tenantId } = await requireOwner();
+  const { tenantId } = await requireCapability("analytics:read");
   const t = await getT();
   const tenant = await getTenantById(tenantId);
   if (!tenant) notFound();

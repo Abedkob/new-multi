@@ -969,6 +969,14 @@ export const en = {
   "notifications.iphone.note": "Do this once per device. Android phones and computers need none of it.",
 
   "notifications.error.endpoint": "That device could not be registered. Its notification address is not one this platform recognises.",
+
+  // Staff accounts (app/admin/(panel)/staff/*, Phase 7 D70-D73)
+  "nav.staff": "Staff",
+
+  // Stock-only editing (app/admin/(panel)/products/[id]/stock, Phase 7 "products:stock")
+  "products.stock.title": "Stock",
+  "products.stock.description": "Change how many of each option you have. Nothing else about the product changes here.",
+  "products.stock.link": "Stock",
 } satisfies Record<string, string>;
 
 export type DictionaryKey = keyof typeof en;

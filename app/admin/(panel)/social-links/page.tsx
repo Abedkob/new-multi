@@ -2,12 +2,12 @@ import { notFound } from "next/navigation";
 import { PageHeader } from "@/components/admin/page-header";
 import { getTenantById } from "@/lib/data/tenants";
 import { getT } from "@/lib/i18n/locale";
-import { requireOwner } from "@/lib/session";
+import { requireCapability } from "@/lib/permissions";
 import { SOCIAL_LINK_FIELDS, socialLinksFromStore } from "@/lib/social-links";
 import { SocialLinksForm } from "./social-links-form";
 
 export default async function SocialLinksPage() {
-  const { tenantId } = await requireOwner();
+  const { tenantId } = await requireCapability("settings:write");
   const t = await getT();
   const tenant = await getTenantById(tenantId);
   if (!tenant) notFound();

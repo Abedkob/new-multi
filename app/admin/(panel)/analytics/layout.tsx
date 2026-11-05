@@ -1,7 +1,7 @@
 import { PageHeader } from "@/components/admin/page-header";
 import { SectionTabs, type SectionTab } from "@/components/admin/section-tabs";
 import { getT } from "@/lib/i18n/locale";
-import { requireOwner } from "@/lib/session";
+import { requireCapability } from "@/lib/permissions";
 
 /**
  * The Analytics section: what happened in the store (D38).
@@ -11,11 +11,11 @@ import { requireOwner } from "@/lib/session";
  * screens is computed once in lib/analytics/report.ts and Marketing's Results links here
  * rather than restating the channel view.
  *
- * `requireOwner` here as well as in each page: a layout runs for every route beneath it, but a
+ * `requireCapability` here as well as in each page: a layout runs for every route beneath it, but a
  * Server Action imported by one of those pages does not go through it.
  */
 export default async function AnalyticsLayout({ children }: { children: React.ReactNode }) {
-  await requireOwner();
+  await requireCapability("analytics:read");
   const t = await getT();
 
   const tabs: SectionTab[] = [

@@ -10,12 +10,14 @@ import "dotenv/config";
 import "./_owner";
 import assert from "node:assert/strict";
 import { readdirSync, readFileSync, statSync } from "node:fs";
-import { join } from "node:path";
+import { basename, join } from "node:path";
 import { prisma } from "../lib/prisma";
 import { createStoreWithOwner } from "../lib/data/tenants";
 import { saveCampaign } from "../lib/data/campaigns";
 import { recordIntegrationChange } from "../lib/analytics/audit";
 import { generateTempPassword, hashPassword } from "../lib/passwords";
+import { ADMIN_CAPABILITIES, CAPABILITIES, can } from "../lib/permissions";
+import type { Capability } from "../lib/permissions";
 
 const BASE = process.env.BASE_URL ?? "http://localhost:3000";
 const DEMO_SLUG = process.env.STORE_SLUG ?? "demo-boutique";
@@ -75,6 +77,155 @@ function walk(dir: string): string[] {
   });
 }
 
+/**
+ * P7-04: every page, layout and action under app/admin names a capability.
+ *
+ * This is the rule that inverts the old default. Before the capability table, a new admin screen
+ * was reachable by whoever `requireOwner` happened to admit, and working out what a role could
+ * do meant reading fifty files. Now a screen that names nothing fails this check, so a page
+ * built after Phase 7 is refused to staff until somebody decides what it is for.
+ *
+ * Two narrow exemptions, both listed by name rather than matched by a pattern:
+ *   - SELF: surfaces that grant nothing beyond "you work here" — the panel shell, the language
+ *     switch, the change-password screen. They call requireTenantMember.
+ *   - NO_GUARD: a file with no guard at all, which must be either the locale wrapper or a module
+ *     whose entire body is a redirect. Asserted, not taken on trust.
+ */
+/**
+ * Every capability named inside a `requireCapability(...)` call.
+ *
+ * Reads the whole argument list rather than only a literal first argument, because one call
+ * legitimately chooses between two: `updateOrderStatusAction` asks for "orders:cancel" or
+ * "orders:advance" depending on the status requested (D73). A check that only understood the
+ * simple shape would have reported that action as naming nothing, and the obvious way to make
+ * it pass would have been to widen the action to one capability — which is the opposite of what
+ * this phase is for.
+ */
+function capabilitiesNamedIn(src: string): string[] {
+  const found: string[] = [];
+  const needle = "requireCapability(";
+  for (let at = src.indexOf(needle); at !== -1; at = src.indexOf(needle, at + 1)) {
+    let depth = 0;
+    let end = at + needle.length - 1;
+    for (; end < src.length; end++) {
+      if (src[end] === "(") depth++;
+      else if (src[end] === ")" && --depth === 0) break;
+    }
+    const args = src.slice(at + needle.length, end);
+    // Only the arguments that look like a capability. A conditional call also quotes the thing
+    // it is branching on ("CANCELLED"), which is not one — but anything containing a colon is
+    // claiming to be, so a typo there is caught below rather than silently ignored.
+    for (const m of args.matchAll(/"([^"]+)"/g)) if (m[1].includes(":")) found.push(m[1]);
+  }
+  return found;
+}
+
+function adminCapabilityGuard() {
+  console.log("Admin capabilities:");
+  const SELF = new Set(
+    [
+      ["app", "admin", "(panel)", "layout.tsx"],
+      ["app", "admin", "actions.ts"],
+      ["app", "admin", "change-password", "page.tsx"],
+      ["app", "admin", "change-password", "actions.ts"],
+      ["app", "admin", "no-access", "page.tsx"],
+    ].map((parts) => join(...parts)),
+  );
+  const NO_GUARD = new Set(
+    [
+      ["app", "admin", "layout.tsx"],
+      ["app", "admin", "(panel)", "marketing", "page.tsx"],
+      ["app", "admin", "(panel)", "analytics", "links", "page.tsx"],
+    ].map((parts) => join(...parts)),
+  );
+
+  const named = new Map<Capability, string[]>();
+  let guarded = 0;
+  const files = walk(join("app", "admin")).filter((f) =>
+    ["page.tsx", "layout.tsx", "actions.ts"].some((name) => basename(f) === name),
+  );
+  assert.ok(files.length > 40, `expected the whole admin surface, found ${files.length} files`);
+
+  for (const file of files) {
+    const src = readFileSync(file, "utf8");
+    const caps = capabilitiesNamedIn(src);
+
+    if (NO_GUARD.has(file)) {
+      assert.ok(
+        !src.includes("requireCapability(") && !src.includes("requireTenantMember("),
+        `${file} is listed as needing no guard but has one — remove it from NO_GUARD`,
+      );
+      assert.ok(
+        /\b(permanentRedirect|redirect)\(/.test(src) ||
+          file.endsWith(join("app", "admin", "layout.tsx")),
+        `${file} has no guard and is not a redirect: it must name a capability`,
+      );
+      continue;
+    }
+
+    if (SELF.has(file)) {
+      assert.ok(
+        src.includes("requireTenantMember("),
+        `${file} is listed as granting nothing beyond membership, so it must call requireTenantMember`,
+      );
+      assert.equal(caps.length, 0, `${file} both grants membership and names a capability`);
+      guarded++;
+      continue;
+    }
+
+    assert.ok(
+      caps.length > 0,
+      `${file} names no capability. Every admin page and action must call ` +
+        "requireCapability(...) from lib/permissions.ts — see D72. If it genuinely grants " +
+        "nothing, add it to SELF in this script and say why.",
+    );
+    for (const cap of caps) {
+      assert.ok(
+        (CAPABILITIES as string[]).includes(cap),
+        `${file} names "${cap}", which is not in ADMIN_CAPABILITIES`,
+      );
+      (named.get(cap as Capability) ?? named.set(cap as Capability, []).get(cap as Capability)!).push(file);
+    }
+    // Every exported server action in the file has to carry the guard itself, not inherit it
+    // from the page that imports it: an action is its own HTTP endpoint.
+    if (file.endsWith("actions.ts")) {
+      for (const part of src.split(/^export async function /m).slice(1)) {
+        const name = part.slice(0, part.indexOf("("));
+        assert.ok(
+          /requireCapability\(/.test(part),
+          `${file}: ${name}() does not call requireCapability itself`,
+        );
+      }
+    }
+    guarded++;
+  }
+
+  ok(`all ${guarded} admin pages, layouts and actions name a capability from one table`);
+
+  // Every capability is reachable, and every owner-only one is genuinely owner-only. A row
+  // nothing names is a row nobody is enforcing.
+  const unused = CAPABILITIES.filter((cap) => !named.has(cap) && cap !== "staff:manage");
+  assert.deepEqual(unused, [], `capabilities declared but never named by any route: ${unused.join(", ")}`);
+  for (const cap of CAPABILITIES) {
+    const roles = ADMIN_CAPABILITIES[cap] as readonly string[];
+    assert.ok(roles.includes("STORE_OWNER"), `${cap} must be available to the owner`);
+  }
+  assert.deepEqual(
+    CAPABILITIES.filter((cap) => can("STAFF", cap)).sort(),
+    [
+      "categories:read",
+      "notifications:self",
+      "orders:advance",
+      "orders:read",
+      "products:read",
+      "products:stock",
+    ],
+    "D73: exactly these six capabilities belong to staff. Changing this list is a product " +
+      "decision, so it is written here as well as in the table.",
+  );
+  ok(`staff hold exactly 6 of ${CAPABILITIES.length} capabilities, and the owner holds all of them`);
+}
+
 function staticActionGuard() {
   console.log("Server actions:");
   // Login and logout are intentionally public.
@@ -82,6 +233,8 @@ function staticActionGuard() {
   let count = 0;
   const indirect: string[] = [];
   for (const file of walk("app").filter((f) => /actions?\.ts$/.test(f))) {
+    // The admin subtree is held to the stricter capability rule above, not to this one.
+    if (file.startsWith(join("app", "admin") + "\\") || file.startsWith("app/admin/")) continue;
     const src = readFileSync(file, "utf8");
     if (!src.trimStart().startsWith('"use server"')) continue;
     if (publicFiles.has(file)) continue;
@@ -127,6 +280,7 @@ function staticActionGuard() {
 }
 
 async function main() {
+  adminCapabilityGuard();
   staticActionGuard();
 
   const demo = await prisma.tenant.findUnique({ where: { slug: DEMO_SLUG } });

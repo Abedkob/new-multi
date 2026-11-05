@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { deliveryFeeInputValue, deliverySettingsSchema } from "@/lib/delivery";
 import { updateTenantDeliverySettings } from "@/lib/data/tenants";
-import { requireOwner } from "@/lib/session";
+import { requireCapability } from "@/lib/permissions";
 import type { FormState } from "@/lib/validation";
 
 type DeliveryValues = { deliveryFee: string; deliveryNote: string };
@@ -14,7 +14,7 @@ export async function saveDeliverySettingsAction(
   _previous: DeliveryActionState,
   formData: FormData,
 ): Promise<DeliveryActionState> {
-  const { tenantId } = await requireOwner();
+  const { tenantId } = await requireCapability("settings:write");
   const submitted: DeliveryValues = {
     deliveryFee: String(formData.get("deliveryFee") ?? ""),
     deliveryNote: String(formData.get("deliveryNote") ?? ""),

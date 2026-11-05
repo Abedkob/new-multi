@@ -18,27 +18,44 @@ import {
   Megaphone,
   ChartNoAxesColumn,
   Bell,
+  Users,
 } from "lucide-react";
 import { logoutAction } from "@/app/actions/auth";
 import { setAdminLocaleAction } from "@/app/admin/actions";
 import { useT, useLocale } from "@/lib/i18n/context";
+import type { Capability } from "@/lib/permissions";
 import type { Locale } from "@/lib/i18n/types";
 import { cn } from "@/lib/utils";
 
-function useNavLinks() {
+/**
+ * Every destination carries the capability that opens it, and the layout passes in the ones this
+ * person has (D72). A link nobody filtered out but the page then refuses is worse than no link:
+ * it reads as a broken dashboard rather than as a job description.
+ *
+ * `Capability` is a type-only import, so the capability table itself — which lives in a module
+ * that reaches the session and the database — never reaches the browser.
+ */
+function useNavLinks(): {
+  href: string;
+  label: string;
+  icon: typeof House;
+  capability: Capability;
+  badge?: "pending";
+}[] {
   const t = useT();
   return [
-    { href: "/admin", label: t("nav.home"), icon: House },
-    { href: "/admin/orders", label: t("nav.orders"), icon: ShoppingBag, badge: "pending" as const },
-    { href: "/admin/delivery", label: t("nav.delivery"), icon: Truck },
-    { href: "/admin/products", label: t("nav.products"), icon: Package },
-    { href: "/admin/discounts", label: t("nav.discounts"), icon: BadgePercent },
-    { href: "/admin/categories", label: t("nav.categories"), icon: FolderTree },
-    { href: "/admin/content", label: t("nav.storeContent"), icon: Paintbrush },
-    { href: "/admin/social-links", label: t("nav.socialLinks"), icon: Share2 },
-    { href: "/admin/marketing", label: t("nav.marketing"), icon: Megaphone },
-    { href: "/admin/analytics", label: t("nav.analytics"), icon: ChartNoAxesColumn },
-    { href: "/admin/notifications", label: t("nav.notifications"), icon: Bell },
+    { href: "/admin", label: t("nav.home"), icon: House, capability: "analytics:read" },
+    { href: "/admin/orders", label: t("nav.orders"), icon: ShoppingBag, capability: "orders:read", badge: "pending" as const },
+    { href: "/admin/delivery", label: t("nav.delivery"), icon: Truck, capability: "settings:write" },
+    { href: "/admin/products", label: t("nav.products"), icon: Package, capability: "products:read" },
+    { href: "/admin/discounts", label: t("nav.discounts"), icon: BadgePercent, capability: "discounts:write" },
+    { href: "/admin/categories", label: t("nav.categories"), icon: FolderTree, capability: "categories:read" },
+    { href: "/admin/content", label: t("nav.storeContent"), icon: Paintbrush, capability: "content:write" },
+    { href: "/admin/social-links", label: t("nav.socialLinks"), icon: Share2, capability: "settings:write" },
+    { href: "/admin/marketing", label: t("nav.marketing"), icon: Megaphone, capability: "marketing:read" },
+    { href: "/admin/analytics", label: t("nav.analytics"), icon: ChartNoAxesColumn, capability: "analytics:read" },
+    { href: "/admin/staff", label: t("nav.staff"), icon: Users, capability: "staff:manage" },
+    { href: "/admin/notifications", label: t("nav.notifications"), icon: Bell, capability: "notifications:self" },
   ];
 }
 
@@ -123,15 +140,18 @@ export function AdminNav({
   storeUrl,
   email,
   pendingOrders,
+  allowed,
 }: {
   storeName: string;
   storeUrl: string;
   email: string;
   pendingOrders: number;
+  /** The capabilities this person has, resolved on the server (lib/permissions.ts). */
+  allowed: Capability[];
 }) {
   const pathname = usePathname();
   const t = useT();
-  const navLinks = useNavLinks();
+  const navLinks = useNavLinks().filter((link) => allowed.includes(link.capability));
   const initial = [...storeName.trim()][0]?.toUpperCase() ?? "S";
 
   const links = (compact: boolean) =>

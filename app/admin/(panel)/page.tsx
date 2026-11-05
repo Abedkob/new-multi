@@ -25,7 +25,7 @@ import { formatPrice } from "@/lib/format";
 import { getT } from "@/lib/i18n/locale";
 import { encodeMessage, resolveMessage } from "@/lib/i18n/types";
 import { orderRef, orderTotal } from "@/lib/orders";
-import { requireOwner } from "@/lib/session";
+import { requireCapability } from "@/lib/permissions";
 import { getStoreUrl } from "@/lib/store-url";
 import { timeAgo } from "@/lib/time-ago";
 import { cn } from "@/lib/utils";
@@ -33,7 +33,7 @@ import { parseAttributes, variantLabel } from "@/lib/variants";
 import { StatusBadge } from "./orders/status-badge";
 
 export default async function AdminHome() {
-  const { tenantId, name } = await requireOwner();
+  const { tenantId, name } = await requireCapability("analytics:read");
   const t = await getT();
   const [tenant, d] = await Promise.all([getTenantById(tenantId), getDashboard(tenantId)]);
   if (!tenant) notFound();

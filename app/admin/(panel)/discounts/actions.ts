@@ -10,7 +10,7 @@ import {
   setDiscountAssignmentsForProducts,
   updateDiscount,
 } from "@/lib/data/discounts";
-import { requireOwner } from "@/lib/session";
+import { requireCapability } from "@/lib/permissions";
 import {
   discountFormSchema,
   type DiscountFormInput,
@@ -33,7 +33,7 @@ function flatten(error: z.ZodError): Record<string, string[]> {
 export async function createDiscountAction(
   input: DiscountFormInput,
 ): Promise<DiscountActionState> {
-  const { tenantId } = await requireOwner();
+  const { tenantId } = await requireCapability("discounts:write");
   const parsed = discountFormSchema.safeParse(input);
   if (!parsed.success) {
     return { error: "validation.someFieldsNeedAttention", fieldErrors: flatten(parsed.error) };
@@ -51,7 +51,7 @@ export async function updateDiscountAction(
   id: string,
   input: DiscountFormInput,
 ): Promise<DiscountActionState> {
-  const { tenantId } = await requireOwner();
+  const { tenantId } = await requireCapability("discounts:write");
   const parsed = discountFormSchema.safeParse(input);
   if (!parsed.success) {
     return { error: "validation.someFieldsNeedAttention", fieldErrors: flatten(parsed.error) };
@@ -66,13 +66,13 @@ export async function updateDiscountAction(
 }
 
 export async function archiveDiscountAction(id: string) {
-  const { tenantId } = await requireOwner();
+  const { tenantId } = await requireCapability("discounts:write");
   if (!(await archiveDiscount(tenantId, id))) notFound();
   redirect("/admin/discounts");
 }
 
 export async function restoreDiscountAction(id: string) {
-  const { tenantId } = await requireOwner();
+  const { tenantId } = await requireCapability("discounts:write");
   if (!(await restoreDiscount(tenantId, id))) notFound();
   redirect(`/admin/discounts/${id}/edit`);
 }
@@ -83,7 +83,7 @@ export async function updateDiscountProductsAction(
   page: number,
   formData: FormData,
 ) {
-  const { tenantId } = await requireOwner();
+  const { tenantId } = await requireCapability("discounts:write");
   const visible = formData.getAll("visibleProductIds").map(String);
   const selected = formData.getAll("selectedProductIds").map(String);
   try {

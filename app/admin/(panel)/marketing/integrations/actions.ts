@@ -5,7 +5,7 @@ import { z } from "zod";
 import { diffIntegrations, recordIntegrationChange } from "@/lib/analytics/audit";
 import { getTenantById, updateTenantIntegrations } from "@/lib/data/tenants";
 import { INTEGRATION_FORMATS, type IntegrationKey } from "@/lib/integrations";
-import { requireOwner } from "@/lib/session";
+import { requireCapability } from "@/lib/permissions";
 import { ownerIntegrationsSchema, type FormState } from "@/lib/validation";
 
 export type IntegrationsActionState = FormState & {
@@ -17,7 +17,7 @@ const KEYS = Object.keys(INTEGRATION_FORMATS) as IntegrationKey[];
 /**
  * The owner saves their own Google and Meta ids (D40).
  *
- * `requireOwner` gives the tenant id; the form never does. A tenant id in a hidden field is how
+ * `requireCapability` gives the tenant id; the form never does. A tenant id in a hidden field is how
  * one store edits another's settings, and this action takes no store argument at all.
  *
  * Every write is audited with the actor, the fields and their before and after values — the
@@ -31,7 +31,7 @@ export async function saveOwnerIntegrationsAction(
   _previous: IntegrationsActionState,
   formData: FormData,
 ): Promise<IntegrationsActionState> {
-  const owner = await requireOwner();
+  const owner = await requireCapability("integrations:write");
   const submitted = Object.fromEntries(
     KEYS.map((key) => [key, String(formData.get(key) ?? "")]),
   ) as Record<IntegrationKey, string>;

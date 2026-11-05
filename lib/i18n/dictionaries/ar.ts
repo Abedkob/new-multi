@@ -970,4 +970,12 @@ export const ar: Record<DictionaryKey, string> = {
   "notifications.iphone.note": "مرة واحدة لكل جهاز. هواتف أندرويد والحواسيب لا تحتاج شيئًا من هذا.",
 
   "notifications.error.endpoint": "لم يتم تسجيل هذا الجهاز. عنوان الإشعار الخاص به ليس مما تعرفه المنصة.",
+
+  // Staff accounts (app/admin/(panel)/staff/*, Phase 7 D70-D73)
+  "nav.staff": "الفريق",
+
+  // Stock-only editing (app/admin/(panel)/products/[id]/stock, Phase 7 "products:stock")
+  "products.stock.title": "المخزون",
+  "products.stock.description": "عدّل عدد القطع المتوفرة من كل خيار. لا يتغير أي شيء آخر في المنتج من هنا.",
+  "products.stock.link": "المخزون",
 };

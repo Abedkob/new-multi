@@ -1,11 +1,11 @@
 import { PageHeader } from "@/components/admin/page-header";
 import { getT } from "@/lib/i18n/locale";
-import { requireOwner } from "@/lib/session";
+import { requireCapability } from "@/lib/permissions";
 import { createDiscountAction } from "../actions";
 import { DiscountForm } from "../discount-form";
 
 export default async function NewDiscountPage() {
-  await requireOwner();
+  await requireCapability("discounts:write");
   const t = await getT();
   return (
     <div className="grid">

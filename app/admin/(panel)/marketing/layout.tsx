@@ -1,7 +1,7 @@
 import { PageHeader } from "@/components/admin/page-header";
 import { SectionTabs, type SectionTab } from "@/components/admin/section-tabs";
 import { getT } from "@/lib/i18n/locale";
-import { requireOwner } from "@/lib/session";
+import { requireCapability } from "@/lib/permissions";
 
 /**
  * The Marketing section (D38): what the owner DOES to get traffic, and what came of it.
@@ -12,7 +12,7 @@ import { requireOwner } from "@/lib/session";
  * Acquisition rather than restating the channel view. Two homes for one figure is how two
  * screens come to disagree.
  *
- * `requireOwner` here as well as in each page, not instead of: a layout runs for every route
+ * `requireCapability` here as well as in each page, not instead of: a layout runs for every route
  * beneath it, but a Server Action imported by one of those pages does not go through it. Every
  * action re-checks on its own.
  *
@@ -20,7 +20,7 @@ import { requireOwner } from "@/lib/session";
  * "what came of it" is what an owner opens Marketing to find out.
  */
 export default async function MarketingLayout({ children }: { children: React.ReactNode }) {
-  await requireOwner();
+  await requireCapability("marketing:read");
   const t = await getT();
 
   const tabs: SectionTab[] = [

@@ -20,14 +20,19 @@ import { listProductsPage } from "@/lib/data/products";
 import { formatPrice } from "@/lib/format";
 import { getT } from "@/lib/i18n/locale";
 import { calculatePrice } from "@/lib/pricing";
-import { requireOwner } from "@/lib/session";
+import { can, requireCapability } from "@/lib/permissions";
 import { deleteProductAction } from "./actions";
 import { DeleteButton } from "./delete-button";
 
 const first = (v: string | string[] | undefined) => (Array.isArray(v) ? v[0] : v);
 
 export default async function ProductsPage({ searchParams }: PageProps<"/admin/products">) {
-  const { tenantId } = await requireOwner();
+  const { tenantId, role } = await requireCapability("products:read");
+  // Staff see the catalogue and may change stock; everything else about a product is the
+  // owner's (D73). Drawn from the same table the pages enforce, so a link can never offer
+  // something the page behind it would refuse.
+  const mayWrite = can(role, "products:write");
+  const mayStock = can(role, "products:stock");
   const t = await getT();
   const sp = await searchParams;
   const q = (first(sp.q) ?? "").trim().slice(0, 100);
@@ -41,11 +46,11 @@ export default async function ProductsPage({ searchParams }: PageProps<"/admin/p
   );
   const pricedAt = new Date();
 
-  const addButton = (
+  const addButton = mayWrite ? (
     <Link href="/admin/products/new" className={buttonVariants()}>
       <Plus className="size-4" aria-hidden /> {t("products.page.newProduct")}
     </Link>
-  );
+  ) : undefined;
 
   return (
     <div className="grid gap-4">
@@ -115,7 +120,10 @@ export default async function ProductsPage({ searchParams }: PageProps<"/admin/p
                 return (
                   <TableRow key={p.id}>
                     <TableCell className="ps-4">
-                      <Link href={`/admin/products/${p.id}/edit`} className="flex items-center gap-3">
+                      <Link
+                        href={`/admin/products/${p.id}/${mayWrite ? "edit" : "stock"}`}
+                        className="flex items-center gap-3"
+                      >
                         <Thumb src={p.imageUrl} />
                         <span className="min-w-0">
                           <span className="block font-medium hover:underline">
@@ -162,15 +170,27 @@ export default async function ProductsPage({ searchParams }: PageProps<"/admin/p
                     </TableCell>
                     <TableCell className="pe-4">
                       <div className="flex justify-end gap-2">
-                        <Link
-                          href={`/admin/products/${p.id}/edit`}
-                          className={buttonVariants({ variant: "outline", size: "sm" })}
-                        >
-                          {t("common.edit")}
-                        </Link>
-                        <form action={deleteProductAction.bind(null, p.id)}>
-                          <DeleteButton name={p.name} />
-                        </form>
+                        {mayStock && (
+                          <Link
+                            href={`/admin/products/${p.id}/stock`}
+                            className={buttonVariants({ variant: "outline", size: "sm" })}
+                          >
+                            {t("products.stock.link")}
+                          </Link>
+                        )}
+                        {mayWrite && (
+                          <>
+                            <Link
+                              href={`/admin/products/${p.id}/edit`}
+                              className={buttonVariants({ variant: "outline", size: "sm" })}
+                            >
+                              {t("common.edit")}
+                            </Link>
+                            <form action={deleteProductAction.bind(null, p.id)}>
+                              <DeleteButton name={p.name} />
+                            </form>
+                          </>
+                        )}
                       </div>
                     </TableCell>
                   </TableRow>

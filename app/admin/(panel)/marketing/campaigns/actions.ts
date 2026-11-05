@@ -7,13 +7,13 @@ import {
   saveCampaign,
   setCampaignArchived,
 } from "@/lib/data/campaigns";
-import { requireOwner } from "@/lib/session";
+import { requireCapability } from "@/lib/permissions";
 import { saveCampaignSchema } from "@/lib/validation";
 
 /**
  * Saving and archiving a campaign (D39).
  *
- * The tenant comes from `requireOwner`, never from the caller — `saveCampaignAction` is handed
+ * The tenant comes from `requireCapability`, never from the caller — `saveCampaignAction` is handed
  * to the link builder as a prop, so its argument is whatever a browser chose to send. The store
  * it writes to is not part of that argument.
  *
@@ -28,7 +28,7 @@ export async function saveCampaignAction(input: {
   channel: string;
   destinationPath: string;
 }): Promise<{ error?: string }> {
-  const owner = await requireOwner();
+  const owner = await requireCapability("marketing:write");
   const parsed = saveCampaignSchema.safeParse(input);
   if (!parsed.success) {
     // The first message, not the whole tree: the builder has one line to show it in, and the
@@ -52,7 +52,7 @@ export async function saveCampaignAction(input: {
 }
 
 export async function setCampaignArchivedAction(id: string, archived: boolean) {
-  const owner = await requireOwner();
+  const owner = await requireCapability("marketing:write");
   try {
     await setCampaignArchived(owner.tenantId, id, archived);
   } catch (error) {

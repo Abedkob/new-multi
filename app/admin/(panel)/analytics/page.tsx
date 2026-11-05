@@ -19,7 +19,7 @@ import { countConsentReceipts } from "@/lib/data/consent";
 import { getTenantById } from "@/lib/data/tenants";
 import { formatPrice } from "@/lib/format";
 import { getT } from "@/lib/i18n/locale";
-import { requireOwner } from "@/lib/session";
+import { requireCapability } from "@/lib/permissions";
 import { FreshnessNote } from "./freshness-note";
 import { LiveVisitors } from "./live-visitors";
 import { NotMeasuring } from "./not-measuring";
@@ -45,7 +45,7 @@ export default async function AnalyticsOverviewPage({
 }: {
   searchParams: Promise<{ period?: string }>;
 }) {
-  const { tenantId } = await requireOwner();
+  const { tenantId } = await requireCapability("analytics:read");
   const t = await getT();
   const tenant = await getTenantById(tenantId);
   if (!tenant) notFound();

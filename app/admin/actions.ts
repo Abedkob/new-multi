@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { cookies } from "next/headers";
 import { savePreferredAdminLocale } from "@/lib/data/users";
-import { requireOwner } from "@/lib/session";
+import { requireTenantMember } from "@/lib/session";
 import { ADMIN_LOCALE_COOKIE } from "@/lib/i18n/locale";
 import { LOCALES, type Locale } from "@/lib/i18n/types";
 
@@ -14,7 +14,7 @@ const ONE_YEAR_SECONDS = 60 * 60 * 24 * 365;
  * Arabic on that very page — otherwise the switcher would be unreachable on first login.
  */
 export async function setAdminLocaleAction(locale: Locale) {
-  const owner = await requireOwner({ allowMustChange: true });
+  const owner = await requireTenantMember({ allowMustChange: true });
   if (!(LOCALES as readonly string[]).includes(locale)) return;
 
   const store = await cookies();

@@ -5,7 +5,7 @@ import { rangeFromPeriod } from "@/lib/analytics/range";
 import { acquisitionReport, type AttributionBasis } from "@/lib/analytics/report";
 import { getTenantById } from "@/lib/data/tenants";
 import { getT } from "@/lib/i18n/locale";
-import { requireOwner } from "@/lib/session";
+import { requireCapability } from "@/lib/permissions";
 import { AcquisitionTable } from "./acquisition-table";
 
 /**
@@ -25,7 +25,7 @@ export default async function AcquisitionReportPage({
 }: {
   searchParams: Promise<{ period?: string; basis?: string }>;
 }) {
-  const { tenantId } = await requireOwner();
+  const { tenantId } = await requireCapability("analytics:read");
   const t = await getT();
   const tenant = await getTenantById(tenantId);
   if (!tenant) notFound();

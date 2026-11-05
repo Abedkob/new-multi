@@ -3,7 +3,7 @@ import { CONTENT_KEYS, CONTENT_SECTIONS } from "@/lib/content";
 import { listContentRows } from "@/lib/data/content";
 import { getTenantById } from "@/lib/data/tenants";
 import { parseSectionVisibility } from "@/lib/sections";
-import { requireOwner } from "@/lib/session";
+import { requireCapability } from "@/lib/permissions";
 import { getStoreUrl } from "@/lib/store-url";
 import { ContentEditor, type ContentSectionView } from "./content-editor";
 
@@ -12,7 +12,7 @@ import { ContentEditor, type ContentSectionView } from "./content-editor";
  * of the storefront next to it. Template and colors are not shown here.
  */
 export default async function ContentPage() {
-  const { tenantId } = await requireOwner();
+  const { tenantId } = await requireCapability("content:write");
   const [rows, tenant] = await Promise.all([
     listContentRows(tenantId),
     getTenantById(tenantId),

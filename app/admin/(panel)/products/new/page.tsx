@@ -1,13 +1,13 @@
 import { flattenCategories } from "@/lib/categories";
 import { listCategories } from "@/lib/data/categories";
 import { getT } from "@/lib/i18n/locale";
-import { requireOwner } from "@/lib/session";
+import { requireCapability } from "@/lib/permissions";
 import { createProductAction } from "../actions";
 import { ProductForm } from "../product-form";
 import { PageHeader } from "@/components/admin/page-header";
 
 export default async function NewProductPage() {
-  const { tenantId } = await requireOwner();
+  const { tenantId } = await requireCapability("products:write");
   const t = await getT();
   const categories = flattenCategories(await listCategories(tenantId)).map((c) => ({
     id: c.id,

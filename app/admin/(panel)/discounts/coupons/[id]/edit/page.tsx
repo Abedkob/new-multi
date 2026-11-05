@@ -2,12 +2,12 @@ import { notFound } from "next/navigation";
 import { PageHeader } from "@/components/admin/page-header";
 import { getCoupon, getSelectedAnnouncedCoupon, listCouponProductChoices } from "@/lib/data/coupons";
 import { getT } from "@/lib/i18n/locale";
-import { requireOwner } from "@/lib/session";
+import { requireCapability } from "@/lib/permissions";
 import { updateCouponAction } from "../../../coupons/actions";
 import { CouponForm } from "../../../coupons/coupon-form";
 
 export default async function EditCouponPage({ params }: { params: Promise<{ id: string }> }) {
-  const { tenantId } = await requireOwner();
+  const { tenantId } = await requireCapability("discounts:write");
   const t = await getT();
   const { id } = await params;
   const [coupon, products, another] = await Promise.all([getCoupon(tenantId, id), listCouponProductChoices(tenantId), getSelectedAnnouncedCoupon(tenantId, id)]);

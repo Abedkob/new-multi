@@ -5,7 +5,7 @@ import { listCategories } from "@/lib/data/categories";
 import { listProducts } from "@/lib/data/products";
 import { getTenantById } from "@/lib/data/tenants";
 import { getT } from "@/lib/i18n/locale";
-import { requireOwner } from "@/lib/session";
+import { requireCapability } from "@/lib/permissions";
 import { getStoreUrl } from "@/lib/store-url";
 
 /**
@@ -17,7 +17,7 @@ import { getStoreUrl } from "@/lib/store-url";
  * at all (P4-35's property, P5-15's requirement); the Phase 4 path is now a redirect.
  */
 export default async function TrackedLinksPage() {
-  const { tenantId } = await requireOwner();
+  const { tenantId } = await requireCapability("marketing:read");
   const t = await getT();
   const tenant = await getTenantById(tenantId);
   if (!tenant) notFound();

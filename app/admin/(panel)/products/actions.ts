@@ -1,9 +1,16 @@
 "use server";
 
 import { notFound, redirect } from "next/navigation";
+import { revalidatePath } from "next/cache";
 import type { z } from "zod";
-import { ProductError, createProduct, deleteProduct, updateProduct } from "@/lib/data/products";
-import { requireOwner } from "@/lib/session";
+import {
+  ProductError,
+  createProduct,
+  deleteProduct,
+  setVariantStock,
+  updateProduct,
+} from "@/lib/data/products";
+import { requireCapability } from "@/lib/permissions";
 import { productFormSchema, type FormState, type ProductFormInput } from "@/lib/validation";
 
 export type ProductActionState = FormState & {
@@ -40,7 +47,7 @@ function toInput(p: z.output<typeof productFormSchema>) {
 }
 
 export async function createProductAction(input: ProductFormInput): Promise<ProductActionState> {
-  const { tenantId } = await requireOwner();
+  const { tenantId } = await requireCapability("products:write");
   const parsed = productFormSchema.safeParse(input);
   if (!parsed.success)
     return { error: "validation.someFieldsNeedAttention", fieldErrors: flatten(parsed.error) };
@@ -57,7 +64,7 @@ export async function updateProductAction(
   id: string,
   input: ProductFormInput,
 ): Promise<ProductActionState> {
-  const { tenantId } = await requireOwner();
+  const { tenantId } = await requireCapability("products:write");
   const parsed = productFormSchema.safeParse(input);
   if (!parsed.success)
     return { error: "validation.someFieldsNeedAttention", fieldErrors: flatten(parsed.error) };
@@ -72,7 +79,29 @@ export async function updateProductAction(
 }
 
 export async function deleteProductAction(id: string) {
-  const { tenantId } = await requireOwner();
+  const { tenantId } = await requireCapability("products:write");
   await deleteProduct(tenantId, id);
   redirect("/admin/products");
+}
+
+/**
+ * Stock, and nothing else (D73, "products:stock").
+ *
+ * Its own action rather than a flag on `updateProductAction`, because that one replaces the
+ * whole product — name, price, images, the variant set — from a form. Letting staff call it with
+ * a narrower intent would mean trusting the submitted body to contain no other change, which is
+ * not a permission check. This takes one variant and one number and can express nothing else.
+ */
+export async function setVariantStockAction(
+  variantId: string,
+  stock: number,
+): Promise<FormState> {
+  const { tenantId } = await requireCapability("products:stock");
+  if (!Number.isInteger(stock) || stock < 0 || stock > 1_000_000) {
+    return { error: "validation.someFieldsNeedAttention" };
+  }
+  // Scoped through the product, because ProductVariant has no tenantId of its own.
+  if (!(await setVariantStock(tenantId, variantId, stock))) notFound();
+  revalidatePath("/admin/products");
+  return { ok: true };
 }

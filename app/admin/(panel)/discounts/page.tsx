@@ -9,7 +9,7 @@ import { Card } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { listDiscountsPage } from "@/lib/data/discounts";
 import { getT } from "@/lib/i18n/locale";
-import { requireOwner } from "@/lib/session";
+import { requireCapability } from "@/lib/permissions";
 import { DiscountCampaignActions } from "./discount-actions";
 import { DiscountTypeNav } from "./discount-type-nav";
 import { DiscountScheduleLabel, DiscountStatusBadge, DiscountValueLabel } from "./discount-summary";
@@ -21,7 +21,7 @@ export default async function DiscountsPage({
 }: {
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
-  const { tenantId } = await requireOwner();
+  const { tenantId } = await requireCapability("discounts:write");
   const t = await getT();
   const query = await searchParams;
   const requested = Number.parseInt(first(query.page) ?? "1", 10) || 1;

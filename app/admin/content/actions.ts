@@ -4,7 +4,7 @@ import { CONTENT_KEYS } from "@/lib/content";
 import { saveContent } from "@/lib/data/content";
 import { setSectionVisible } from "@/lib/data/sections";
 import { optionalSectionSchema } from "@/lib/sections";
-import { requireOwner } from "@/lib/session";
+import { requireCapability } from "@/lib/permissions";
 import { RATE_LIMITS, rateLimit, retryAfterText } from "@/lib/rate-limit";
 import { importImageFromUrl, isOwnImageUrl, storeImage } from "@/lib/storage";
 import { contentSchema, type FormState } from "@/lib/validation";
@@ -23,7 +23,7 @@ export async function saveContentAction(
   values: Record<string, string>,
   visibility?: Record<string, boolean>
 ): Promise<ContentFormState> {
-  const { tenantId } = await requireOwner();
+  const { tenantId } = await requireCapability("content:write");
 
   const entries = CONTENT_KEYS.map((c) => ({
     key: c.key as string,
@@ -70,7 +70,7 @@ export type UploadImageResult = { url?: string; error?: string };
  * owner image field: content (logo, hero...), products, variants and categories.
  */
 export async function uploadImageAction(formData: FormData): Promise<UploadImageResult> {
-  const { tenantId } = await requireOwner();
+  const { tenantId } = await requireCapability("content:write");
 
   const file = formData.get("file");
   if (!(file instanceof File)) return { error: "Choose an image file." };
@@ -82,7 +82,7 @@ export async function uploadImageAction(formData: FormData): Promise<UploadImage
  * already ours comes back unchanged without counting against the rate limit.
  */
 export async function importImageUrlAction(link: string): Promise<UploadImageResult> {
-  const { tenantId } = await requireOwner();
+  const { tenantId } = await requireCapability("content:write");
   if (typeof link !== "string" || !link.trim() || link.length > 2000) {
     return { error: "That doesn't look like a link." };
   }
@@ -103,7 +103,7 @@ export async function setSectionVisibilityAction(
   section: string,
   visible: boolean,
 ): Promise<FormState> {
-  const { tenantId } = await requireOwner();
+  const { tenantId } = await requireCapability("content:write");
 
   const parsedSection = optionalSectionSchema.safeParse(section);
   if (!parsedSection.success || typeof visible !== "boolean") {

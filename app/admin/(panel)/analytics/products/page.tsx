@@ -4,7 +4,7 @@ import { rangeFromPeriod } from "@/lib/analytics/range";
 import { productReport } from "@/lib/analytics/report";
 import { getTenantById } from "@/lib/data/tenants";
 import { getT } from "@/lib/i18n/locale";
-import { requireOwner } from "@/lib/session";
+import { requireCapability } from "@/lib/permissions";
 import { ProductsTable } from "./products-table";
 
 /**
@@ -20,7 +20,7 @@ export default async function ProductsReportPage({
 }: {
   searchParams: Promise<{ period?: string }>;
 }) {
-  const { tenantId } = await requireOwner();
+  const { tenantId } = await requireCapability("analytics:read");
   const t = await getT();
   const tenant = await getTenantById(tenantId);
   if (!tenant) notFound();

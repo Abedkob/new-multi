@@ -20,7 +20,7 @@ import { getT } from "@/lib/i18n/locale";
 import type { DictionaryKey } from "@/lib/i18n/dictionaries/en";
 import { encodeMessage, resolveMessage } from "@/lib/i18n/types";
 import { ORDER_STATUSES, orderRef, orderTotal, type OrderStatusValue } from "@/lib/orders";
-import { requireOwner } from "@/lib/session";
+import { requireCapability } from "@/lib/permissions";
 import { timeAgo } from "@/lib/time-ago";
 import { cn } from "@/lib/utils";
 import { STATUS_DOT, StatusBadge } from "./status-badge";
@@ -44,7 +44,7 @@ const EMPTY_TEXT_KEYS: Record<OrderStatusValue | "ALL", DictionaryKey> = {
 };
 
 export default async function OrdersPage({ searchParams }: PageProps<"/admin/orders">) {
-  const { tenantId } = await requireOwner();
+  const { tenantId } = await requireCapability("orders:read");
   const t = await getT();
   const sp = await searchParams;
   const requested = Number.parseInt(first(sp.page) ?? "1", 10) || 1;

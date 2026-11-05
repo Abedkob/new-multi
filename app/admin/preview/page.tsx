@@ -5,7 +5,7 @@ import { listBestSellers, listNewArrivals } from "@/lib/data/products";
 import { listCategoryProductImages } from "@/lib/data/storefront";
 import { getTenantById } from "@/lib/data/tenants";
 import { parseSectionVisibility } from "@/lib/sections";
-import { requireOwner } from "@/lib/session";
+import { requireCapability } from "@/lib/permissions";
 import { toStoreProduct } from "@/lib/store-product";
 import { parseThemeFonts } from "@/lib/fonts";
 import { parseThemeOverrides, resolveTheme } from "@/lib/theme";
@@ -20,7 +20,7 @@ export const dynamic = "force-dynamic";
  * template and colors; the editor streams unsaved text into it.
  */
 export default async function OwnerPreviewPage() {
-  const { tenantId } = await requireOwner();
+  const { tenantId } = await requireCapability("storefront:preview");
   const tenant = await getTenantById(tenantId);
   if (!tenant) notFound();
 

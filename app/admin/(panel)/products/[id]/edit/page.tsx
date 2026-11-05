@@ -3,7 +3,7 @@ import { flattenCategories } from "@/lib/categories";
 import { listCategories } from "@/lib/data/categories";
 import { getProduct } from "@/lib/data/products";
 import { getT } from "@/lib/i18n/locale";
-import { requireOwner } from "@/lib/session";
+import { requireCapability } from "@/lib/permissions";
 import { parseAttributes } from "@/lib/variants";
 import { updateProductAction } from "../../actions";
 import { ProductForm } from "../../product-form";
@@ -12,7 +12,7 @@ import { PageHeader } from "@/components/admin/page-header";
 export default async function EditProductPage({
   params,
 }: PageProps<"/admin/products/[id]/edit">) {
-  const { tenantId } = await requireOwner();
+  const { tenantId } = await requireCapability("products:write");
   const t = await getT();
   const { id } = await params;
 

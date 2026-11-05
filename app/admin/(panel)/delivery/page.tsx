@@ -3,11 +3,11 @@ import { PageHeader } from "@/components/admin/page-header";
 import { getTenantById } from "@/lib/data/tenants";
 import { deliveryFeeInputValue, deliverySettingsFromStore } from "@/lib/delivery";
 import { getT } from "@/lib/i18n/locale";
-import { requireOwner } from "@/lib/session";
+import { requireCapability } from "@/lib/permissions";
 import { DeliverySettingsForm } from "./delivery-settings-form";
 
 export default async function DeliverySettingsPage() {
-  const { tenantId } = await requireOwner();
+  const { tenantId } = await requireCapability("settings:write");
   const t = await getT();
   const tenant = await getTenantById(tenantId);
   if (!tenant) notFound();

@@ -7,11 +7,11 @@ import {
 } from "@/components/ui/card";
 import { getT } from "@/lib/i18n/locale";
 import { encodeMessage, resolveMessage } from "@/lib/i18n/types";
-import { requireOwner } from "@/lib/session";
+import { requireTenantMember } from "@/lib/session";
 import { ChangePasswordForm } from "./change-password-form";
 
 export default async function ChangePasswordPage() {
-  const owner = await requireOwner({ allowMustChange: true });
+  const owner = await requireTenantMember({ allowMustChange: true });
   const t = await getT();
   return (
     <main className="flex flex-1 items-center justify-center bg-muted/40 p-4">

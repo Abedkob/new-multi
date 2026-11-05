@@ -38,7 +38,7 @@ export type TenantMember = {
  * it to homeForRole("STAFF") and straight back here — a redirect loop instead of a refusal. It
  * is also simply true: they are signed in, and this page is not theirs.
  */
-const REFUSED = "/admin/no-access";
+export const REFUSED_PATH = "/admin/no-access";
 
 /**
  * Re-reads the session user and applies the checks that cannot be delegated to the JWT.
@@ -97,7 +97,7 @@ async function loadMember(opts?: { allowMustChange?: boolean }) {
  */
 export async function requireOwner(opts?: { allowMustChange?: boolean }) {
   const member = await loadMember(opts);
-  if (member.role !== "STORE_OWNER") redirect(REFUSED);
+  if (member.role !== "STORE_OWNER") redirect(REFUSED_PATH);
   return { userId: member.userId, tenantId: member.tenantId, name: member.name, email: member.email };
 }
 

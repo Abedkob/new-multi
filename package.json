@@ -16,6 +16,7 @@
     "typecheck": "tsc --noEmit",
     "demo:seed": "tsx scripts/seed-demo.ts",
     "verify:templates": "tsx scripts/verify-templates.ts",
+    "verify:staff": "tsx scripts/verify-staff.ts",
     "verify:permissions": "tsx scripts/verify-permissions.ts",
     "verify:commerce": "tsx scripts/verify-commerce.ts",
     "verify:coupons": "tsx scripts/verify-coupons.ts",

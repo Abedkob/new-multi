@@ -17,7 +17,7 @@ import { getT } from "@/lib/i18n/locale";
 import type { DictionaryKey } from "@/lib/i18n/dictionaries/en";
 import { encodeMessage, resolveMessage } from "@/lib/i18n/types";
 import { orderRef, orderSubtotal, orderTotal, type OrderStatusValue } from "@/lib/orders";
-import { requireOwner } from "@/lib/session";
+import { requireCapability } from "@/lib/permissions";
 import { cn } from "@/lib/utils";
 import { parseAttributes, variantLabel } from "@/lib/variants";
 import { StatusBadge } from "../status-badge";
@@ -48,7 +48,7 @@ const STEPS: { status: OrderStatusValue; label: DictionaryKey }[] = [
 ];
 
 export default async function OrderDetailPage({ params }: PageProps<"/admin/orders/[id]">) {
-  const { tenantId } = await requireOwner();
+  const { tenantId } = await requireCapability("orders:read");
   const t = await getT();
   const { id } = await params;
 

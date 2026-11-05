@@ -21,12 +21,12 @@ import { decryptPushSecret } from "@/lib/push/crypto";
 import { pushConfigured } from "@/lib/push/keys";
 import { buildNewOrderPayload } from "@/lib/push/payload";
 import { sendPush } from "@/lib/push/send";
-import { requireOwner } from "@/lib/session";
+import { requireCapability } from "@/lib/permissions";
 
 /**
  * The owner's own notification settings (§11.2).
  *
- * `requireOwner` on every action, not just the page: a Server Action imported by a page does not
+ * `requireCapability` on every action, not just the page: a Server Action imported by a page does not
  * go through that page's layout. The user id comes from the session and the device id is checked
  * against it, so the worst a crafted call can do is remove a device the caller already owns.
  */
@@ -46,7 +46,7 @@ export type DeviceInput = {
  * and hands the result here. This never asks for permission and never could.
  */
 export async function registerDeviceAction(input: DeviceInput) {
-  const owner = await requireOwner();
+  const owner = await requireCapability("notifications:self");
   if (!pushConfigured()) return { error: "notifications.error.unavailable" };
   if (!input.endpoint || !input.p256dh || !input.auth) {
     return { error: "notifications.error.incomplete" };
@@ -74,7 +74,7 @@ export async function registerDeviceAction(input: DeviceInput) {
 }
 
 export async function removeDeviceAction(deviceId: string) {
-  const owner = await requireOwner();
+  const owner = await requireCapability("notifications:self");
   const removed = await revokeDevice(owner.userId, deviceId);
   if (!removed) return { error: "notifications.error.deviceGone" };
   revalidatePath("/admin/notifications");
@@ -82,7 +82,7 @@ export async function removeDeviceAction(deviceId: string) {
 }
 
 export async function saveOwnerPreferencesAction(values: OwnerPreferences) {
-  const owner = await requireOwner();
+  const owner = await requireCapability("notifications:self");
   const before = await ensureOwnerPreferences(owner.userId);
   // Booleans only, and only the known keys: the form is the owner's, but the shape of what is
   // written must not be.
@@ -124,7 +124,7 @@ export async function saveOwnerPreferencesAction(values: OwnerPreferences) {
  * so a test that arrives proves the real path — the point of having one.
  */
 export async function sendTestNotificationAction() {
-  const owner = await requireOwner();
+  const owner = await requireCapability("notifications:self");
   if (!pushConfigured()) return { error: "notifications.error.unavailable" };
 
   const devices = await sendableDevices(owner.userId, "OWNER");

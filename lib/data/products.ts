@@ -281,6 +281,28 @@ export async function deleteProduct(tenantId: string, id: string) {
   });
 }
 
+/**
+ * Set one variant's stock, and touch nothing else (Phase 7, "products:stock").
+ *
+ * Deliberately the narrowest write in this file. The owner's product form goes through
+ * `updateProduct`, which replaces the product and its whole variant set; this exists so that
+ * "may change how many are on the shelf" can be granted without also granting "may rename the
+ * product and change its price".
+ *
+ * Scoped through the product, because ProductVariant has no tenantId of its own — so another
+ * store's variant id updates zero rows and comes back false, the same way every other function
+ * here behaves for a foreign id.
+ */
+export async function setVariantStock(tenantId: string, variantId: string, stock: number) {
+  return withTenant(tenantId, async (db) => {
+    const { count } = await db.productVariant.updateMany({
+      where: { id: variantId, product: { tenantId } },
+      data: { stock },
+    });
+    return count > 0;
+  });
+}
+
 // ---- storefront ----------------------------------------------------------------------------
 
 export function getProductBySlug(tenantId: string, slug: string) {

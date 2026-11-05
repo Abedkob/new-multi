@@ -2,7 +2,7 @@ import { notFound } from "next/navigation";
 import { descendantIds, flattenCategories } from "@/lib/categories";
 import { getCategory, listCategories } from "@/lib/data/categories";
 import { getT } from "@/lib/i18n/locale";
-import { requireOwner } from "@/lib/session";
+import { requireCapability } from "@/lib/permissions";
 import { updateCategoryAction } from "../../actions";
 import { CategoryForm } from "../../category-form";
 import { PageHeader } from "@/components/admin/page-header";
@@ -10,7 +10,7 @@ import { PageHeader } from "@/components/admin/page-header";
 export default async function EditCategoryPage({
   params,
 }: PageProps<"/admin/categories/[id]/edit">) {
-  const { tenantId } = await requireOwner();
+  const { tenantId } = await requireCapability("categories:write");
   const t = await getT();
   const { id } = await params;
 

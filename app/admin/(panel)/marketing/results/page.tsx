@@ -6,7 +6,7 @@ import { rangeFromPeriod } from "@/lib/analytics/range";
 import { listSavedCampaigns } from "@/lib/data/campaigns";
 import { getTenantById } from "@/lib/data/tenants";
 import { getT } from "@/lib/i18n/locale";
-import { requireOwner } from "@/lib/session";
+import { requireCapability } from "@/lib/permissions";
 import { ResultsTable } from "./results-table";
 
 /**
@@ -33,7 +33,7 @@ export default async function MarketingResultsPage({
 }: {
   searchParams: Promise<{ period?: string }>;
 }) {
-  const { tenantId } = await requireOwner();
+  const { tenantId } = await requireCapability("marketing:read");
   const t = await getT();
   const tenant = await getTenantById(tenantId);
   if (!tenant) notFound();

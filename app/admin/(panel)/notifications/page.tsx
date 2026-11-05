@@ -3,7 +3,7 @@ import { ensureOwnerPreferences } from "@/lib/data/notification-preferences";
 import { listDevices } from "@/lib/data/push-subscriptions";
 import { pushConfigured, vapidPublicKey } from "@/lib/push/keys";
 import { getT } from "@/lib/i18n/locale";
-import { requireOwner } from "@/lib/session";
+import { requireCapability } from "@/lib/permissions";
 import { IphoneGuide } from "@/components/admin/notifications/iphone-guide";
 import { OwnerNotificationSections } from "./owner-sections";
 
@@ -19,7 +19,7 @@ import { OwnerNotificationSections } from "./owner-sections";
  * worse than a sentence explaining why there isn't one.
  */
 export default async function NotificationsPage() {
-  const owner = await requireOwner();
+  const owner = await requireCapability("notifications:self");
   const t = await getT();
   const [preferences, devices] = await Promise.all([
     ensureOwnerPreferences(owner.userId),

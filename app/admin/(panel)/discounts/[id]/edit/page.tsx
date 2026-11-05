@@ -8,7 +8,7 @@ import { getDiscount, listDiscountProductsPage } from "@/lib/data/discounts";
 import { getT } from "@/lib/i18n/locale";
 import { encodeMessage, resolveMessage } from "@/lib/i18n/types";
 import { applyDiscount, discountSchedulesOverlap } from "@/lib/pricing";
-import { requireOwner } from "@/lib/session";
+import { requireCapability } from "@/lib/permissions";
 import { updateDiscountAction, updateDiscountProductsAction } from "../../actions";
 import { DiscountForm } from "../../discount-form";
 import { DiscountProductPicker, type DiscountProductPickerItem } from "../../discount-product-picker";
@@ -23,7 +23,7 @@ export default async function EditDiscountPage({
   params: Promise<{ id: string }>;
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
-  const { tenantId } = await requireOwner();
+  const { tenantId } = await requireCapability("discounts:write");
   const t = await getT();
   const { id } = await params;
   const query = await searchParams;

@@ -3,7 +3,7 @@
 import { redirect } from "next/navigation";
 import { z } from "zod";
 import { CategoryError, createCategory, deleteCategory, updateCategory } from "@/lib/data/categories";
-import { requireOwner } from "@/lib/session";
+import { requireCapability } from "@/lib/permissions";
 import { categorySchema, type FormState } from "@/lib/validation";
 
 export type CategoryFormState = FormState & {
@@ -24,7 +24,7 @@ export async function createCategoryAction(
   _prev: CategoryFormState,
   formData: FormData,
 ): Promise<CategoryFormState> {
-  const { tenantId } = await requireOwner();
+  const { tenantId } = await requireCapability("categories:write");
   const { raw, parsed } = read(formData);
   if (!parsed.success) {
     return { fieldErrors: z.flattenError(parsed.error).fieldErrors, values: raw };
@@ -43,7 +43,7 @@ export async function updateCategoryAction(
   _prev: CategoryFormState,
   formData: FormData,
 ): Promise<CategoryFormState> {
-  const { tenantId } = await requireOwner();
+  const { tenantId } = await requireCapability("categories:write");
   const { raw, parsed } = read(formData);
   if (!parsed.success) {
     return { fieldErrors: z.flattenError(parsed.error).fieldErrors, values: raw };
@@ -63,7 +63,7 @@ export async function deleteCategoryAction(
   // Required by useActionState, which passes (prev, formData) by position.
   _prev: FormState,
 ): Promise<FormState> {
-  const { tenantId } = await requireOwner();
+  const { tenantId } = await requireCapability("categories:write");
   try {
     await deleteCategory(tenantId, id);
   } catch (e) {
