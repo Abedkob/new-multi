@@ -1,0 +1,41 @@
+<!--
+  The merchant admin's mark: a shop front (D76).
+
+  Two rules this file has to keep, because scripts/build-icons.ts depends on them and will
+  refuse to run otherwise:
+
+    * one element with id="bg" carrying the icon's background fill — the generator reads that
+      colour and paints it edge to edge, because an app icon is never transparent and a
+      maskable one must have no corner the mask can cut into;
+    * one group with id="mark" holding everything else, drawn inside this 512 viewBox — the
+      generator scales that group on its own, tighter for the maskable variant than for the
+      plain one, so the two are genuinely different art rather than the same file twice.
+
+  Drawn with filled shapes and heavy strokes on purpose: the smallest place this appears is a
+  48px notification badge, where thin lines disappear and detail turns to mud. It has to read
+  as "a shop" at that size and be told apart from the platform console's mark at a glance,
+  which is why the two differ in both silhouette and hue.
+-->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <rect id="bg" width="512" height="512" fill="#0f172a" />
+  <g id="mark">
+    <!-- The shop body, drawn FIRST and left open at the bottom so the doorway reads as one.
+         Anywhere it meets the awning, the awning is painted over it. -->
+    <path
+      d="M112 168 V416 H400 V168"
+      fill="none"
+      stroke="#ffffff"
+      stroke-width="34"
+      stroke-linejoin="miter"
+    />
+    <!-- The awning, overhanging the body on both sides, with four scallops along its lower
+         edge. This is the shape doing all the work: a straight roof made the whole thing read
+         as a house instead of a shop. -->
+    <path
+      d="M64 104 H448 V176 a48 48 0 0 1 -96 0 a48 48 0 0 1 -96 0 a48 48 0 0 1 -96 0 a48 48 0 0 1 -96 0 Z"
+      fill="#ffffff"
+    />
+    <!-- The doorway. -->
+    <path d="M208 416 V288 H304 V416 Z" fill="#ffffff" />
+  </g>
+</svg>

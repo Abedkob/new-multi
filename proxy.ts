@@ -137,16 +137,45 @@ const looksLikeStaticFile = (pathname: string) =>
 
 const PLATFORM_ONLY_PREFIXES = ["/admin", "/platform", "/login", "/force-logout"];
 
+/**
+ * Paths under /admin and /platform that must answer with no session at all.
+ *
+ * The two webmanifests. A browser fetches a manifest with `credentials: "omit"` unless the
+ * <link> says otherwise, so the gates below saw an anonymous request and redirected it to
+ * /login — for a signed-in owner too. A manifest that 307s is a manifest the browser never
+ * parses, and an app that cannot be installed: the whole of §11.1, defeated by the role gate
+ * that is supposed to protect the pages the manifest points at.
+ *
+ * Safe to open, and already meant to be: a manifest is a name, a colour and a list of icons,
+ * identical for every store, which is why `lib/push/manifest.ts` is a plain function with no
+ * tenant in it. The pages it names stay gated; only the description of them is public. On a
+ * store's own domain these are still 404 (PLATFORM_ONLY_PREFIXES, above) — a shop's customers
+ * must not be offered the admin app.
+ */
+const PUBLIC_CONSOLE_PATHS = new Set([
+  "/admin/manifest.webmanifest",
+  "/platform/manifest.webmanifest",
+]);
+
 async function handleCustomDomainHost(req: NextRequest, pathname: string, hostname: string) {
-  if (pathname.startsWith("/api") || pathname.startsWith("/_next") || looksLikeStaticFile(pathname)) {
+  if (pathname.startsWith("/api") || pathname.startsWith("/_next")) {
     return NextResponse.next();
   }
 
   // The admin/platform consoles, auth pages, etc. don't exist from a store's own domain — a
   // domain pointed at this server for an unrelated reason must never reach them.
+  //
+  // Checked BEFORE the static-file passthrough below, not after. That order used to be the
+  // other way round, and `looksLikeStaticFile` keys on a dotted last segment — so
+  // /admin/manifest.webmanifest was handed straight through and a shop's own domain served
+  // its owner's admin manifest, which is the one thing §11.1 says must never happen. No
+  // public/ asset lives under these prefixes, so nothing legitimate is lost by refusing them
+  // first. Found by pnpm e2e:checkout's custom-domain leg.
   if (PLATFORM_ONLY_PREFIXES.some((p) => pathname === p || pathname.startsWith(`${p}/`))) {
     return new NextResponse("Not found", { status: 404 });
   }
+
+  if (looksLikeStaticFile(pathname)) return NextResponse.next();
 
   // Junk Host headers (IP literals, garbage) can never be a stored domain: answer without a query.
   if (!isValidDomainFormat(hostname)) return new NextResponse("Not found", { status: 404 });
@@ -183,6 +212,8 @@ export default auth(async (req) => {
   if (!platformHost) {
     return handleCustomDomainHost(req, pathname, hostname);
   }
+
+  if (PUBLIC_CONSOLE_PATHS.has(pathname)) return;
 
   const user = req.auth?.user;
   const redirectTo = (path: string) =>

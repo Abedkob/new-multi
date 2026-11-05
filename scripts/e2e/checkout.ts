@@ -424,14 +424,25 @@ async function main() {
         // 5. And the admin console does not exist here, session or no session. A domain pointed
         //    at this server reaches one store's shop and nothing else (proxy.ts's
         //    PLATFORM_ONLY_PREFIXES) — these are 404s, not redirects to the platform host.
-        for (const path of ["/admin", "/admin/orders", "/login", "/platform"]) {
+        for (const path of [
+          "/admin",
+          "/admin/orders",
+          "/login",
+          "/platform",
+          // The webmanifest is deliberately public on the platform host (a browser fetches it
+          // with no cookies, so the role gate was turning every install into a /login
+          // redirect). It must stay 404 here: §11.1's rule is that a shop's customers are
+          // never offered an install prompt for their shopkeeper's admin app.
+          "/admin/manifest.webmanifest",
+          "/platform/manifest.webmanifest",
+        ]) {
           assert.equal(
             (await d.goto(`${origin}${path}`))?.status(),
             404,
             `${path} must be a 404 from a store's own domain`,
           );
         }
-        ok(`on ${domain} /admin, /login and /platform are 404 — the console is not reachable`);
+        ok(`on ${domain} /admin, /login, /platform and both manifests are 404`);
       });
     } finally {
       await prisma.tenant.update({ where: { id: T }, data: { domain: null } });

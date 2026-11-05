@@ -10,10 +10,15 @@
  * prompt for the admin app — which is what a root `app/manifest.ts` would do, since Next links
  * it from every page.
  *
- * Icons are the platform favicon for now: a real icon set is a design task, and a manifest that
- * points at icons which do not exist fails to install at all on Android. Noted in the plan
- * rather than faked here.
+ * Icons come from lib/push/icons.ts, generated from assets/icon-{admin,platform}.svg and
+ * committed under public/icons (D76). The two apps have genuinely different marks, because an
+ * operator who taps the wrong one of two identical Home Screen icons is looking at another
+ * tenant's data before they notice. `pnpm verify:icons` checks every src here resolves to a
+ * real PNG of the size it claims — Android refuses to install a manifest whose icons 404, and
+ * it does not say why.
  */
+
+import { iconSet } from "@/lib/push/icons";
 
 export type AdminManifest = {
   id: string;
@@ -44,10 +49,14 @@ function manifest(kind: "admin" | "platform"): AdminManifest {
     orientation: "portrait",
     background_color: "#ffffff",
     theme_color: "#ffffff",
-    icons: [
-      { src: "/favicon.ico", sizes: "48x48", type: "image/x-icon" },
-      { src: "/favicon.ico", sizes: "any", type: "image/x-icon", purpose: "maskable" },
-    ],
+    icons: iconSet(kind)
+      .filter((icon) => icon.target === "manifest")
+      .map((icon) => ({
+        src: icon.src,
+        sizes: `${icon.size}x${icon.size}`,
+        type: "image/png",
+        purpose: icon.purpose,
+      })),
   };
 }
 

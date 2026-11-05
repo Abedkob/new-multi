@@ -310,6 +310,34 @@ async function main() {
     }
     ok("admin and platform pages redirect to /login");
 
+    // ...but the two webmanifests must NOT, and this is the one exception under those prefixes.
+    //
+    // A browser fetches a manifest with `credentials: "omit"` unless the <link> says otherwise,
+    // so the role gate saw an anonymous request and 307'd both of them to /login — for a
+    // signed-in owner too. The browser never parsed either, and neither app could be installed
+    // on any device. Nothing else noticed: every page behind them was correctly protected,
+    // which is exactly what made it invisible. Found in Phase 7 by fetching the manifest.
+    for (const [kind, path] of [
+      ["merchant admin", "/admin/manifest.webmanifest"],
+      ["platform console", "/platform/manifest.webmanifest"],
+    ] as const) {
+      const response = await anon.get(path);
+      assert.equal(
+        response.status,
+        200,
+        `${path} must answer an anonymous request (a browser sends no cookies for a manifest), ` +
+          `got ${response.status} -> ${response.location}`,
+      );
+      const manifest = JSON.parse(response.body) as { icons?: { src: string }[] };
+      assert.ok(manifest.icons?.length, `the ${kind} manifest lists no icons`);
+      // Android refuses the install if an icon 404s, and the icons are fetched anonymously too.
+      for (const icon of manifest.icons) {
+        const served = await fetch(`${BASE}${icon.src}`);
+        assert.equal(served.status, 200, `${icon.src} must be served (${kind}), got ${served.status}`);
+      }
+    }
+    ok("both webmanifests and every icon they name are served to a browser with no session");
+
     console.log("Store owner:");
     const owner = await new Session().login(created.user.email, ownerPassword);
     const content = await owner.get("/admin/content");

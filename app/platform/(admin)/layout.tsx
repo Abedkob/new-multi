@@ -1,10 +1,19 @@
 import type { Metadata } from "next";
 import { DashboardNav } from "@/components/dashboard-nav";
 import { PlatformAnalytics } from "@/components/platform-analytics";
+import { appleTouchIcon } from "@/lib/push/icons";
 import { requirePlatformAdmin } from "@/lib/session";
 
-/** The platform console's own installable identity (§11.1). */
-export const metadata: Metadata = { manifest: "/platform/manifest.webmanifest" };
+/**
+ * The platform console's own installable identity (§11.1), with its own icon — see
+ * app/admin/layout.tsx for why the apple-touch link is needed at all, and
+ * assets/icon-platform.svg for why this mark is a different shape and colour rather than the
+ * merchant one recoloured.
+ */
+export const metadata: Metadata = {
+  manifest: "/platform/manifest.webmanifest",
+  icons: { icon: "/icons/platform-192.png", apple: appleTouchIcon("platform") },
+};
 
 export default async function PlatformLayout({
   children,

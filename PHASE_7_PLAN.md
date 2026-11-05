@@ -34,7 +34,7 @@ a laptop. Phase 7 can produce:
 | 4 | **Legs: `checkout.ts`, `categories.ts`, `variants.ts`.** checkout buys on the domain (consent cookie at the root, root-relative links, the WhatsApp handoff, the Server Action origin check, `/admin` 404 from there); categories replays the owner's own session against the domain to prove `/admin` is a 404 even for them; variants proves the picker hydrates and that `public/` assets are passed through. Fixed two stale assertions that were testing nothing: the category tree indents with `paddingInlineStart` (Arabic), and the WhatsApp URL arrives on the client's first render. | done |
 | 5 | **Legs: `discounts.ts`, `social-links.ts`, `storefront-pages.ts`.** discounts does not read the sale price, it buys the thing and checks the order snapshot (8000). social-links separates the footer's absolute social links from its root-relative own links. storefront-pages adds the one nothing covered: `robots.txt` and `sitemap.xml` at the **host root**, which proxy.ts has always rewritten — both route docstrings called it future work and are now correct. Hardened two flakes that read a value the instant its selector appeared. | done |
 | 6 | **Legs: `kinetic.ts`, `mirage.ts`, `prism.ts`. `PENDING_LEG` is empty**, and the set stays rather than being deleted so a new suite without a leg still fails. A template is almost all client code, so each leg's own assertion is that the code ran on a non-localhost host (a `.pin-spacer`, an inline style GSAP wrote); `assertStorefrontDomainBasics` holds the three things every template owes a store with a domain. | done |
-| 7 | The real app icon set, and both manifests pointing at it. | not started |
+| 7 | **The icon set, and the two bugs it uncovered.** Two source SVGs → eight committed PNGs via `pnpm icons:build` (Chrome, no new dependency), one declaration in `lib/push/icons.ts` that the generator, both manifests and `verify:icons` all read. The icons were the easy half: **both manifests were 307ing to `/login`**, so neither app could be installed by anyone — a browser fetches a manifest with no cookies — and a store's own domain was serving the admin manifest, because `.webmanifest` has a dot in it and the custom-domain branch checked for static files before refusing platform paths. `verify:icons` 16, `verify:permissions` 25. | done |
 | 8 | Edge hardening: forced HTTPS, HSTS, and the trusted-proxy guard that makes `cf-ipcountry` safe to believe. | not started |
 | 9 | Production keys, `PHASE_7_DEPLOY_CHECKLIST.md`, and the `pilot` runbook. | not started |
 | 10 | Load test, backup/restore drill, cross-tenant penetration script. | not started |
@@ -366,9 +366,26 @@ exists before the matrix does can only be refused, which is the correct directio
 
 ### The PWA
 
-- P7-17 Every icon `src` in both manifests resolves to a committed file.
-- P7-18 Both manifests install on Android without an icon error.
+- P7-17 Every icon `src` in both manifests resolves to a committed file. **Done (commit 7):**
+  `pnpm verify:icons`, 16 checks — each file exists, is a real PNG, and its own IHDR header
+  agrees with the size the manifest advertises (a 512-byte placeholder named `icon-512.png`
+  passed every other check in the repository). Extended beyond the original wording to cover
+  the apple-touch icon, which no manifest names and iOS uses instead of the manifest.
+- P7-18 Both manifests install on Android without an icon error. **Blocked on a real device
+  (yours), but the two reasons it could not have worked are fixed and held down by checks.**
+  Both manifests were 307ing to `/login`: a browser fetches a manifest with `credentials:
+  "omit"`, so the role gate saw an anonymous request, and neither app could be installed by
+  anyone, signed in or not. `verify:permissions` now fetches both with no session and fetches
+  every icon they name. Separately, a store's own domain was serving the admin manifest,
+  because the custom-domain branch's static-file passthrough ran before its platform-only
+  refusal and `.webmanifest` has a dot in it; `e2e:checkout`'s leg now asserts both are 404
+  there.
 - P7-19 The merchant and platform apps install as two apps with two Home Screen icons.
+  **Partly done (commit 7); the install itself is P7-33/P7-34 on your devices.** The two marks
+  are different in silhouette and hue rather than one recoloured copy of the other, and
+  `verify:icons` hashes both 512s and fails if they match — an operator who taps the wrong one
+  of two identical icons is looking at another tenant's data before they notice. Each subtree
+  also links its own apple-touch icon, without which an iPhone shows a screenshot of the page.
 
 ### Keys and configuration
 

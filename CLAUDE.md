@@ -53,6 +53,8 @@ pnpm dev                              # http://localhost:3000
 | `pnpm verify:notifications` | Test admin push end to end: the ledger under concurrent senders, delivery leases, the payload rules (no customer data, money opt-in), the endpoint allowlist, owner alerts at §6’s thresholds, platform alerts on transition, and both languages |
 | `pnpm verify:report-states` | Test the report screens' states (nothing measured yet, traffic without orders, Redis down, Arabic/RTL, phone cards, admin paths refused on a custom domain) |
 | `pnpm verify:e2e-policy` | Static check that every E2E suite has a custom-domain leg and no skip path (no server needed) |
+| `pnpm verify:icons` | Static check of the installable apps' icons: every manifest `src` resolves to a real PNG of the size it claims, both apps' marks differ, no orphans (no server needed) |
+| `pnpm icons:build` | Re-render `public/icons/*.png` from `assets/icon-{admin,platform}.svg` (needs Chrome). Commit what it writes |
 | `pnpm verify:reports` | Test the report read layer (aggregate-only rule, store-local date ranges across DST, null-not-zero rates, trend thresholds) |
 | `pnpm verify:insights` | Test §6's insight rules at, just below and just above every threshold (pure; no server or database) |
 | `pnpm verify:integrations` | Test the owner's Google/Meta connections: snippet extraction, consent gating, verification tags on a custom domain, audit rows (needs server) |
@@ -231,6 +233,18 @@ const allProducts = await withBypass(async (tx) => {
   (`/platform`), each with its own manifest route linked from its own layout — never from the
   root, which would offer a shop's customers the admin app. `public/sw.js` handles `push` and
   `notificationclick` and **caches nothing**: no fetch handler, no Cache API (D57).
+- **Both manifests are public, and that is deliberate** (`PUBLIC_CONSOLE_PATHS` in `proxy.ts`).
+  A browser fetches a manifest with `credentials: "omit"`, so the `/admin` role gate saw an
+  anonymous request and redirected it to `/login` — which meant neither app could be installed
+  by anyone, signed in or not, while every page behind the gate looked correctly protected. A
+  manifest is a name, a colour and a list of icons, identical for every store. On a store's own
+  domain both are still 404: `PLATFORM_ONLY_PREFIXES` is now checked *before* the static-file
+  passthrough, because `.webmanifest` has a dot in it and was being handed straight through.
+- **Icons** (D76): `assets/icon-{admin,platform}.svg` → `pnpm icons:build` → eight committed
+  PNGs. The set is declared once in `lib/push/icons.ts`, which the generator, `manifest.ts` and
+  `verify:icons` all read, so a manifest cannot name a file nobody generates. The two marks
+  differ in shape *and* colour on purpose, and iOS needs the `apple-touch-icon` link in each
+  subtree's metadata because it ignores manifest icons entirely.
 - **A push never costs an order.** `app/store/[slug]/checkout/actions.ts` schedules
   `announceNewOrderSafely` with `after()` after the transaction commits; the sender has a ~2.5s
   timeout and never throws. Anything missed is picked up by the `new-order-catch-up` stage.
