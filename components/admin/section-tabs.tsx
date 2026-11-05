@@ -4,7 +4,16 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { cn } from "@/lib/utils";
 
-export type SectionTab = { href: string; label: string };
+export type SectionTab = {
+  href: string;
+  label: string;
+  /**
+   * True for a tab that IS its section's index (Analytics' Overview at /admin/analytics):
+   * without it, a prefix match marks the index active on every tab beneath it, and the row
+   * shows two current tabs at once.
+   */
+  exact?: boolean;
+};
 
 /**
  * The tab row inside a section of the admin (Marketing's four tabs, to start with).
@@ -18,7 +27,9 @@ export function SectionTabs({ tabs, ariaLabel }: { tabs: readonly SectionTab[]; 
   return (
     <nav aria-label={ariaLabel} className="-mb-px flex flex-wrap gap-1 border-b">
       {tabs.map((tab) => {
-        const active = pathname === tab.href || pathname.startsWith(`${tab.href}/`);
+        const active = tab.exact
+          ? pathname === tab.href
+          : pathname === tab.href || pathname.startsWith(`${tab.href}/`);
         return (
           <Link
             key={tab.href}

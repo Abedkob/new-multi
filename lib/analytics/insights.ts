@@ -47,6 +47,14 @@ export type InsightSubject = {
   campaign?: string;
   /** A funnel step key, as `report.ts` names them. */
   step?: string;
+  /**
+   * Which measure the insight is about, for the kinds that lead by one of several (top-product).
+   *
+   * Structural rather than only in `evidence`, because `evidence` is dev-facing English: the
+   * shipped copy is built from `kind` + `subject` + `numbers`, and P5-11 requires the
+   * top-product line to say which measure it leads by. A screen cannot translate a sentence.
+   */
+  measure?: "purchasingSessions" | "whatsappClickSessions" | "viewSessions";
 };
 
 export type Insight = {
@@ -125,7 +133,11 @@ export function topProductInsight(products: readonly ProductRow[]): Insight | nu
     return {
       kind: "top-product",
       tone: "fact",
-      subject: { productId: leader.productId, productName: leader.productName },
+      subject: {
+        productId: leader.productId,
+        productName: leader.productName,
+        measure: measure.key,
+      },
       numbers: {
         value: leader[measure.key],
         runnerUp: runnerUp ? runnerUp[measure.key] : 0,

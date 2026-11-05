@@ -16,6 +16,7 @@ import {
   ShoppingBag,
   Truck,
   Megaphone,
+  ChartNoAxesColumn,
 } from "lucide-react";
 import { logoutAction } from "@/app/actions/auth";
 import { setAdminLocaleAction } from "@/app/admin/actions";
@@ -35,6 +36,7 @@ function useNavLinks() {
     { href: "/admin/content", label: t("nav.storeContent"), icon: Paintbrush },
     { href: "/admin/social-links", label: t("nav.socialLinks"), icon: Share2 },
     { href: "/admin/marketing", label: t("nav.marketing"), icon: Megaphone },
+    { href: "/admin/analytics", label: t("nav.analytics"), icon: ChartNoAxesColumn },
   ];
 }
 

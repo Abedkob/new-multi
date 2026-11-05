@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { notFound } from "next/navigation";
 import { PeriodPicker } from "@/components/admin/period-picker";
 import { campaignResults } from "@/lib/analytics/report";
@@ -58,6 +59,15 @@ export default async function MarketingResultsPage({
           ariaLabel={t("results.period.label")}
         />
       </div>
+      {/* The channel view lives in Analytics (D38). A link, not a second copy of it. */}
+      <p className="text-sm">
+        <Link
+          href={`/admin/analytics/acquisition?period=${current}`}
+          className="underline underline-offset-4"
+        >
+          {t("results.seeAcquisition")}
+        </Link>
+      </p>
       <ResultsTable
         rows={rows.map((row) => ({
           campaign: row.campaign,
