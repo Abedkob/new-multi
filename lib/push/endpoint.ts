@@ -39,21 +39,26 @@ const ALLOWED_HOSTS = [
 export type EndpointVerdict = { ok: true; host: string } | { ok: false; reason: string };
 
 /**
- * One extra host, outside production only.
+ * Extra `host:port` pairs, outside production only.
  *
  * `verify:notifications` has to point the sender at a server it controls to prove that a push
  * service which goes dark costs one timeout and nothing else (P6-01) — and that check is the
  * reason D51 can be believed. The alternatives were a test-only flag threaded through the
  * sender, which is production code shaped by a test, or no check at all.
  *
- * Read from the environment, honoured only when NODE_ENV is not "production", so the rule that
- * matters cannot be relaxed where it matters: a production deployment refuses this host even if
- * the variable is set.
+ * **Host AND port**, which it was not at first. A host-only concession for `127.0.0.1` allows
+ * every port on it, so the suite's own "127.0.0.1:6379 must be refused" case stopped being true
+ * the moment the concession was switched on — the check caught it. Naming the port keeps the
+ * hole the size of the one server the suite started.
+ *
+ * Honoured only when NODE_ENV is not "production", so the rule that matters cannot be relaxed
+ * where it matters: a production deployment refuses these even if the variable is set.
  */
-function testHost(): string | null {
-  if (process.env.NODE_ENV === "production") return null;
-  const host = process.env.PUSH_TEST_ENDPOINT_HOST?.trim().toLowerCase();
-  return host || null;
+function testTargets(): string[] {
+  if (process.env.NODE_ENV === "production") return [];
+  const raw = process.env.PUSH_TEST_ENDPOINT_HOST?.trim().toLowerCase();
+  if (!raw) return [];
+  return raw.split(",").map((entry) => entry.trim()).filter(Boolean);
 }
 
 export function checkPushEndpoint(endpoint: string): EndpointVerdict {
@@ -76,8 +81,10 @@ export function checkPushEndpoint(endpoint: string): EndpointVerdict {
     entry.startsWith(".") ? host.endsWith(entry) : host === entry,
   );
   if (!allowed) {
-    if (host === testHost()) return { ok: true, host };
-    return { ok: false, reason: `host ${host}` };
+    // https, so an absent port means 443.
+    const target = `${host}:${url.port || "443"}`;
+    if (testTargets().includes(target)) return { ok: true, host };
+    return { ok: false, reason: `host ${target}` };
   }
   return { ok: true, host };
 }

@@ -65,8 +65,42 @@ import {
   revokeDevice,
 } from "../lib/data/push-subscriptions";
 import { ALLOWED_PUSH_HOSTS, checkPushEndpoint } from "../lib/push/endpoint";
+import { announceNewOrder, BATCH_WINDOW_MS } from "../lib/notifications/new-order";
+import { newOrderText } from "../lib/notifications/templates";
+import { saveOwnerPreferences as setPreferences } from "../lib/data/notification-preferences";
 import { createServer, type Socket } from "node:net";
 import { createECDH, randomBytes } from "node:crypto";
+
+/**
+ * Where this suite's fixture devices "live".
+ *
+ * A closed local port, not a real push service. The first version used
+ * `https://fcm.googleapis.com/fcm/send/<made-up token>`, which the allowlist accepts — and which
+ * meant every delivery check made a real HTTPS request to Google with a token that could not
+ * exist. Slow, dependent on the network, and sending this platform's traffic somewhere it has no
+ * business going. Port 1 refuses immediately, so a delivery fails in microseconds and is
+ * recorded as unreachable, which is exactly the state under test.
+ *
+ * Allowed only because PUSH_TEST_ENDPOINT_HOST is set and this is not production
+ * (lib/push/endpoint.ts).
+ */
+process.env.PUSH_TEST_ENDPOINT_HOST = "127.0.0.1:1";
+const fixtureEndpoint = (name: string) => `https://127.0.0.1:1/push/${name}`;
+
+/**
+ * Real subscription keys for the fixture devices.
+ *
+ * Not "p" and "a", which is what they were at first: web-push rejects a malformed `p256dh`
+ * during payload encryption, so every delivery failed before touching the network and was
+ * recorded as an "unknown" error. The checks still passed — the deliveries did fail — but they
+ * were proving the wrong failure. With a real pair, a send gets as far as the socket and comes
+ * back ECONNREFUSED, which is the state the classification is actually about.
+ */
+const fixtureKeys = (() => {
+  const ecdh = createECDH("prime256v1");
+  ecdh.generateKeys();
+  return { p256dh: ecdh.getPublicKey().toString("base64url"), auth: randomBytes(16).toString("base64url") };
+})();
 
 let checks = 0;
 const ok = (id: string, message: string) => {
@@ -267,7 +301,8 @@ async function senderChecks() {
     // https, because web-push speaks TLS to an endpoint whatever the URL says, and the host is
     // allowed only because PUSH_TEST_ENDPOINT_HOST is set and this is not production (see
     // lib/push/endpoint.ts). The allowlist refusing this by default is the point of it.
-    process.env.PUSH_TEST_ENDPOINT_HOST = "127.0.0.1";
+    // Added to the list rather than replacing it: the fixture devices above still need theirs.
+    process.env.PUSH_TEST_ENDPOINT_HOST = `127.0.0.1:1,127.0.0.1:${port}`;
     const target = {
       endpoint: `https://127.0.0.1:${port}/push`,
       p256dh: subscriber.getPublicKey().toString("base64url"),
@@ -450,9 +485,8 @@ async function preferenceChecks(userId: string, tenantId: string) {
       userId,
       tenantId,
       audience: "OWNER",
-      endpoint: `https://fcm.googleapis.com/fcm/send/dev-${n}-${Date.now()}`,
-      p256dh: "p",
-      auth: "a",
+      endpoint: fixtureEndpoint(`dev-${n}-${Date.now()}`),
+      ...fixtureKeys,
       deviceLabel: `Device ${n}`,
       deviceClass: "Chrome/Android",
     });
@@ -481,14 +515,13 @@ async function preferenceChecks(userId: string, tenantId: string) {
 
   // Re-registering the same endpoint updates the row rather than listing the phone twice, and
   // brings a device the push service had given up on back to life.
-  const endpoint = `https://fcm.googleapis.com/fcm/send/stable-${userId}`;
+  const endpoint = fixtureEndpoint(`stable-${userId}`);
   const again = await registerDevice({
     userId,
     tenantId,
     audience: "OWNER",
     endpoint,
-    p256dh: "p",
-    auth: "a",
+    ...fixtureKeys,
     deviceLabel: "Chrome on Android",
     deviceClass: "Chrome/Android",
   });
@@ -497,8 +530,7 @@ async function preferenceChecks(userId: string, tenantId: string) {
     tenantId,
     audience: "OWNER",
     endpoint,
-    p256dh: "p2",
-    auth: "a2",
+    ...fixtureKeys,
     deviceLabel: "Chrome on Android",
     deviceClass: "Chrome/Android",
   });
@@ -537,8 +569,13 @@ function endpointChecks() {
   // The concession for this suite's own fake push service is non-production only: with
   // NODE_ENV=production the same host is refused, which is what keeps it from being a hole.
   const previousNodeEnv = process.env.NODE_ENV;
-  process.env.PUSH_TEST_ENDPOINT_HOST = "127.0.0.1";
+  process.env.PUSH_TEST_ENDPOINT_HOST = "127.0.0.1:9";
   assert.equal(checkPushEndpoint("https://127.0.0.1:9/push").ok, true, "allowed outside production");
+  assert.equal(
+    checkPushEndpoint("https://127.0.0.1:6379/push").ok,
+    false,
+    "and only that port: naming the host alone would open every port on it",
+  );
   // Cast because NODE_ENV is typed read-only; it is a plain writable env var at runtime, and
   // defineProperty is what process.env refuses.
   const mutableEnv = process.env as Record<string, string | undefined>;
@@ -549,7 +586,8 @@ function endpointChecks() {
     "and refused in production, however the environment is set",
   );
   mutableEnv.NODE_ENV = previousNodeEnv;
-  delete process.env.PUSH_TEST_ENDPOINT_HOST;
+  // Restored, not deleted: the fixture devices registered above live on 127.0.0.1:1.
+  process.env.PUSH_TEST_ENDPOINT_HOST = "127.0.0.1:1";
 
   const accepted = [
     "https://fcm.googleapis.com/fcm/send/abc123",
@@ -607,11 +645,150 @@ async function endpointEnforcementChecks(userId: string, tenantId: string) {
   ok("SSRF", "registration and the sender each refuse an endpoint that is not a push service");
 }
 
+/**
+ * P6-03: no push call can happen inside the order transaction.
+ *
+ * Static, over the checkout path. The failure it guards against is not a wrong notification: it
+ * is a database connection held open across a network round trip to a push service, inside the
+ * transaction that deducts stock. A slow push service would then slow down checkout for every
+ * shopper, and a hanging one would hold a connection until the pool ran out.
+ */
+function checkoutCouplingChecks() {
+  const checkout = readFileSync("app/store/[slug]/checkout/actions.ts", "utf8");
+  const code = checkout.replace(/\/\*[\s\S]*?\*\//g, "").replace(/^\s*\/\/.*$/gm, "");
+  assert.ok(code.includes("after(() => announceNewOrderSafely"), "the notify call must be in after()");
+  // It must come after placeOrder returned, not before it and not inside it.
+  const placeAt = code.indexOf("await placeOrder(");
+  // The CALL, not the import at the top of the file — which is what this matched on its first
+  // run, making the assertion pass for the wrong reason in the other direction.
+  const notifyAt = code.indexOf("after(() => announceNewOrderSafely");
+  assert.ok(placeAt > 0 && notifyAt > placeAt, "the notification must be scheduled after the commit");
+  for (const needle of ["sendPush", "@/lib/push/send"]) {
+    assert.ok(!code.includes(needle), `the checkout path must not reach the sender (${needle})`);
+  }
+  // And the order module itself — the transaction — must know nothing about notifications.
+  const orders = readFileSync("lib/data/orders.ts", "utf8");
+  for (const needle of ["@/lib/push/", "@/lib/notifications/", "announceNewOrder"]) {
+    assert.ok(
+      !orders.includes(needle),
+      `lib/data/orders.ts reaches for ${needle}: nothing in the order transaction may push`,
+    );
+  }
+  ok("P6-03", "the notification is scheduled in after(), after the commit, and never from the transaction");
+}
+
+/**
+ * The instant path, end to end, against the database (P6-02, P6-05, P6-07, D50, D53).
+ *
+ * `waitMs: 0` where the batching window is not what is under test, so the suite does not spend
+ * four seconds per case proving something else.
+ */
+async function instantPathChecks(tenantId: string, ownerId: string, place: () => Promise<string>) {
+  // A device to send to, and the amount setting off (its default).
+  await registerDevice({
+    userId: ownerId,
+    tenantId,
+    audience: "OWNER",
+    endpoint: fixtureEndpoint(`instant-${Date.now()}`),
+    ...fixtureKeys,
+    deviceLabel: "Instant device",
+    deviceClass: "Chrome/Android",
+  });
+
+  const orderA = await place();
+  const first = await announceNewOrder(tenantId, orderA, { waitMs: 0 });
+  assert.equal(first.kind, "sent", `expected a notification, got ${JSON.stringify(first)}`);
+  if (first.kind !== "sent") throw new Error("unreachable");
+  assert.equal(first.orders, 1);
+  assert.ok(first.devices >= 1, "it must queue a delivery per device");
+
+  const stored = await notificationWithDeliveries(first.notificationId);
+  assert.ok(stored, "the notification must be in the ledger");
+  // The fixture's push service is a closed port, so every delivery must be recorded as
+  // unreachable — not "unknown". An unknown here means the send failed before the socket, which
+  // is what happened while the fixture keys were placeholders.
+  for (const delivery of stored.deliveries) {
+    assert.equal(delivery.state, "FAILED", "a closed port is a failed delivery");
+    assert.equal(
+      delivery.errorCategory,
+      "unreachable",
+      `expected an unreachable delivery, got ${delivery.errorCategory}`,
+    );
+  }
+  // D50, on a real body read back out of the ledger: the fixture's customer data must not be
+  // anywhere in what was sent, and with the amount off neither must any money.
+  const sent = `${stored.title}\n${stored.body}`;
+  for (const value of [customer.customerName, customer.customerPhone, customer.customerAddress]) {
+    assert.ok(!sent.includes(value), `the body contains customer data: ${value}`);
+  }
+  assert.ok(!/[$]\d/.test(sent), `with the amount off no money may appear, got "${sent}"`);
+  assert.equal(sent.includes("You have a new order"), true);
+  ok("P6-05", "an order produces one notification, queued to every device, with no customer data");
+
+  // Running it again for the same order says nothing new (P6-06 from the instant side).
+  const again = await announceNewOrder(tenantId, orderA, { waitMs: 0 });
+  assert.equal(again.kind, "nothing", "the same order must not be announced twice");
+
+  // D50 with the toggle ON: the amount appears, and only then.
+  const prefs = await ensureOwnerPreferences(ownerId);
+  await setPreferences(ownerId, { ...prefs, showOrderAmount: true });
+  const orderB = await place();
+  const withAmount = await announceNewOrder(tenantId, orderB, { waitMs: 0 });
+  assert.equal(withAmount.kind, "sent");
+  if (withAmount.kind !== "sent") throw new Error("unreachable");
+  const amountBody = await notificationWithDeliveries(withAmount.notificationId);
+  assert.ok(/[$]\d/.test(amountBody?.body ?? ""), "with the toggle on the amount must appear");
+  for (const value of [customer.customerName, customer.customerPhone]) {
+    assert.ok(!(amountBody?.body ?? "").includes(value), "and still no customer data");
+  }
+  await setPreferences(ownerId, { ...prefs, showOrderAmount: false });
+  ok("D50", "the amount appears only with the toggle on; customer data never, either way");
+
+  // P6-07, with the real window: two orders a moment apart become one notification. The second
+  // call finds the lock held and defers, and the first claims both.
+  const orderC = await place();
+  const batched = announceNewOrder(tenantId, orderC, { waitMs: BATCH_WINDOW_MS });
+  await new Promise((resolve) => setTimeout(resolve, 150));
+  const orderD = await place();
+  const second = await announceNewOrder(tenantId, orderD, { waitMs: BATCH_WINDOW_MS });
+  const firstResult = await batched;
+  assert.equal(second.kind, "deferred", "the second callback must find the owner's lock held");
+  assert.equal(firstResult.kind, "sent");
+  if (firstResult.kind !== "sent") throw new Error("unreachable");
+  assert.equal(firstResult.orders, 2, "and the first must claim both orders");
+  const batchBody = await notificationWithDeliveries(firstResult.notificationId);
+  assert.equal(batchBody?.body, newOrderText("en", { count: 2, totalCents: null }).body);
+  ok("P6-07", "two orders 150ms apart become one notification saying 2, from one lock holder");
+
+  // P6-02: an order that was cancelled is not news, and an id that never committed is nothing.
+  const orderE = await place();
+  await prisma.order.update({ where: { id: orderE }, data: { status: "CANCELLED" } });
+  const cancelled = await announceNewOrder(tenantId, orderE, { waitMs: 0 });
+  assert.equal(cancelled.kind, "nothing", "a cancelled order must not be announced");
+  const ghost = await announceNewOrder(tenantId, `never-committed-${Date.now()}`, { waitMs: 0 });
+  assert.equal(ghost.kind, "nothing", "an order that does not exist must produce nothing");
+  ok("P6-02", "a cancelled order and an order that never existed each produce no notification");
+
+  // P6-14 from the sending side: switched off means nothing is written at all.
+  await setPreferences(ownerId, { ...prefs, newOrders: false, showOrderAmount: false });
+  const orderF = await place();
+  const refused = await announceNewOrder(tenantId, orderF, { waitMs: 0 });
+  assert.equal(refused.kind, "nothing");
+  assert.equal(
+    (await announcedOrderIds(ownerId, [orderF])).size,
+    0,
+    "a switched-off type must leave no ledger row, not an unsent one",
+  );
+  await setPreferences(ownerId, { ...prefs, newOrders: true, showOrderAmount: false });
+  ok("P6-14", "with new orders switched off, nothing is claimed and nothing is written");
+}
+
 async function main() {
   matrixChecks();
   serviceWorkerChecks();
   permissionChecks();
   endpointChecks();
+  checkoutCouplingChecks();
   payloadChecks();
   cryptoChecks();
   await senderChecks();
@@ -667,6 +844,8 @@ async function main() {
     await preferenceChecks(ownerId, T);
     await endpointEnforcementChecks(ownerId, T);
 
+    await instantPathChecks(T, ownerId, place);
+
     // ---------------------------------------------------------------------------------------
     // D52: one order, one notification, however many senders try.
     // ---------------------------------------------------------------------------------------
@@ -675,8 +854,13 @@ async function main() {
     assert.equal(first.kind, "claimed");
     const second = await claimOrdersForNotification(draft(`owner-order:${ownerId}:${orderA}`), [orderA]);
     assert.equal(second.kind, "already-sent", "the same trigger twice must claim nothing");
+    // Counted by THIS order's dedupe key, not over the owner's whole trail: the instant-path
+    // checks above have already written notifications for this same owner, and a bare count
+    // made this assertion depend on what ran before it.
     assert.equal(
-      await prisma.adminNotification.count({ where: { recipientUserId: ownerId } }),
+      await prisma.adminNotification.count({
+        where: { dedupeKey: `owner-order:${ownerId}:${orderA}` },
+      }),
       1,
       "and must leave exactly one notification",
     );
@@ -705,7 +889,9 @@ async function main() {
       "and the winner must carry both orders, so neither is announced later",
     );
     assert.equal(
-      await prisma.adminNotificationOrder.count({ where: { recipientUserId: ownerId } }),
+      await prisma.adminNotificationOrder.count({
+        where: { recipientUserId: ownerId, orderId: { in: [orderA, orderB, orderC] } },
+      }),
       3,
       "three orders, three claims, no duplicates",
     );

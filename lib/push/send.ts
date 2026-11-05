@@ -56,6 +56,16 @@ function configure(): boolean {
 export type FailureVerdict = Exclude<SendVerdict, { state: "SENT" } | { state: "SKIPPED" }>;
 
 export function classifyPushError(error: unknown): FailureVerdict {
+  // Node's connect attempts come back as an AggregateError whose own message is empty and whose
+  // `errors` hold the real ones (one per address family). Without this every refused connection
+  // was classified "unknown" instead of "unreachable" — which is the same shape of mistake that
+  // cost an afternoon in lib/redis.ts, and it showed up here as 10 mystery verdicts in the
+  // verification log.
+  if (error instanceof AggregateError && Array.isArray(error.errors) && error.errors.length) {
+    const inner = error.errors.map((e) => classifyPushError(e));
+    // A permanent verdict wins: if any attempt said "gone", the endpoint is gone.
+    return inner.find((verdict) => verdict.state === "EXPIRED") ?? inner[0];
+  }
   if (error instanceof WebPushError) {
     if (error.statusCode === 404 || error.statusCode === 410) {
       return { state: "EXPIRED", errorCategory: "gone" };

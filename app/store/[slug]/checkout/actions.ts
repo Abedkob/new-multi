@@ -1,8 +1,10 @@
 "use server";
 
+import { after } from "next/server";
 import { headers } from "next/headers";
 import { z } from "zod";
 import { resolveOrderAttribution } from "@/lib/analytics/order-attribution";
+import { announceNewOrderSafely } from "@/lib/notifications/new-order";
 import { OrderError, placeOrder, previewCoupon } from "@/lib/data/orders";
 import { getTenantBySlug } from "@/lib/data/tenants";
 import { RATE_LIMITS, clientIp, rateLimit, retryAfterText } from "@/lib/rate-limit";
@@ -108,6 +110,22 @@ export async function placeOrderAction(
       expectedTotalCents: input.expectedTotalCents,
       attribution,
     });
+    // Tell the owner, AFTER the transaction committed and AFTER this response is on its way
+    // (D51). Three rules hold here, and all three are about the order rather than the
+    // notification:
+    //
+    //   - `after()`, never inline: the shopper waits for nothing, and a push service that
+    //     hangs costs the sender's own 2.5s timeout in a callback nobody is waiting on.
+    //   - After commit, never inside the transaction: a notification for an order that then
+    //     rolled back is worse than a missed one, and a push call inside a transaction holds a
+    //     database connection open on a network round trip.
+    //   - `announceNewOrderSafely` swallows everything. An unhandled rejection in `after()`
+    //     becomes an uncaughtException in Next.js, which would turn a quiet push failure into
+    //     a crashed request — exactly what Phase 5 hit with Redis.
+    //
+    // Anything missed here (a deploy mid-flight, a 10s container shutdown) is picked up by the
+    // scheduled catch-up stage, which is why this path is allowed to be best-effort.
+    after(() => announceNewOrderSafely(tenant.id, order.id));
     return { ok: true, orderId: order.id };
   } catch (e) {
     if (e instanceof OrderError) {
