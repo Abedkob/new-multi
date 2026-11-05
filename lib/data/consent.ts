@@ -51,3 +51,15 @@ export function listConsentReceipts(tenantId: string, take = 20) {
     }),
   );
 }
+
+/**
+ * How many consent decisions this store has ever recorded.
+ *
+ * Used by the owner's own Overview to tell "nothing has been counted yet" apart from "nobody
+ * came" (P5-25): a store with no receipt at all has not had a visitor answer the banner, which
+ * is a different problem from a quiet week. A count, never the rows — the Overview has no
+ * business reading individual decisions.
+ */
+export function countConsentReceipts(tenantId: string) {
+  return withTenant(tenantId, (db) => db.analyticsConsentReceipt.count({ where: { tenantId } }));
+}

@@ -452,8 +452,11 @@ function platformGaChecks() {
   assert.ok(!/G-[A-Z0-9]{6,}/.test(component), "no hardcoded measurement id");
   ok("P1-04", "the platform's GA id comes from PLATFORM_GA_ID, not from source");
 
+  // Matched on the IMPORT, not on the identifier: a page component called
+  // PlatformAnalyticsPage contains the string "PlatformAnalytics" and mounts nothing, and this
+  // check failed on exactly that in Phase 5. What matters is which files pull the component in.
   const mounts = sourceFiles(["app", "components"])
-    .filter((file) => readFileSync(file, "utf8").includes("PlatformAnalytics"))
+    .filter((file) => readFileSync(file, "utf8").includes('from "@/components/platform-analytics"'))
     .filter((file) => file !== "components/platform-analytics.tsx");
   assert.deepEqual(
     mounts.sort(),

@@ -793,6 +793,17 @@ export const ar: Record<DictionaryKey, string> = {
   "weekday.5": "الجمعة",
   "weekday.6": "السبت",
 
+  // التقارير والملاحطات
+  "reports.notMeasuring.title": "لم يُقَس أي شيء بعد",
+  "reports.notMeasuring.body": "وهذا ليس معناه «لا زوار». القياس يحتاج أمرين معًا، وحتى يتحققا لا يوجد ما يُحسب — لا أنّ شيئًا لم يحدث.",
+  "reports.notMeasuring.rolloutOn": "متجرك مُفعَّل للقياس.",
+  "reports.notMeasuring.rolloutOff": "متجرك غير مُفعَّل للقياس بعد. المنصة وحدها تستطيع تفعيله — اسأل من أنشأ متجرك.",
+  "reports.notMeasuring.consentSeen": "زائر واحد على الأقل أجاب على إشعار الخصوصية.",
+  "reports.notMeasuring.consentNone": "لم يوافق أي زائر على القياس بعد. ومن يرفض لا يُحسب أبدًا، وهذا مقصود.",
+  "reports.notMeasuring.note": "تظهر الأرقام هنا بعد التحديث المجدول التالي، الذي يعمل كل بضع دقائق. ومن رفض القياس لن يظهر فيها أبدًا.",
+  "reports.live.label": "هنا الآن",
+  "reports.live.unavailable": "غير متاح مؤقتًا",
+
   // فترات التقارير
   "period.7": "آخر ٧ أيام",
   "period.28": "آخر ٢٨ يومًا",

@@ -36,6 +36,7 @@
     "verify:campaigns": "tsx scripts/verify-campaigns.ts",
     "verify:report-ui": "tsx scripts/verify-report-ui.ts",
     "verify:platform-console": "tsx scripts/verify-platform-console.ts",
+    "verify:report-states": "tsx scripts/verify-report-states.ts",
     "analytics:scheduled": "tsx scripts/analytics-scheduled.ts",
     "uploads:migrate": "tsx scripts/migrate-uploads-to-r2.ts",
     "e2e:categories": "tsx scripts/e2e/categories.ts",

@@ -1,13 +1,6 @@
 "use client";
 
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
+import { DataTable, type DataColumn } from "@/components/admin/analytics/data-table";
 import { formatPrice } from "@/lib/format";
 import type { DictionaryKey } from "@/lib/i18n/dictionaries/en";
 import { useT } from "@/lib/i18n/context";
@@ -62,52 +55,67 @@ export function AcquisitionTable({
 
   const unmeasured = rows.some((r) => r.visitorDays === null);
 
+  const columns: DataColumn<AcquisitionTableRow>[] = [
+    {
+      key: "source",
+      header: t("acquisition.table.source"),
+      cell: (row) => (
+        <div className="grid gap-0.5">
+          <span className="font-medium">
+            {row.source ||
+              (KIND_LABEL[row.sourceKind] ? t(KIND_LABEL[row.sourceKind]) : row.sourceKind)}
+          </span>
+          <span className="text-xs text-muted-foreground">
+            {[row.medium, row.campaign].filter(Boolean).join(" · ")}
+            {row.conversionRate !== null
+              ? ` · ${(row.conversionRate * 100).toFixed(1)}% ${t("acquisition.table.conversion")}`
+              : ""}
+          </span>
+        </div>
+      ),
+    },
+    {
+      key: "sessions",
+      header: t("acquisition.table.sessions"),
+      numeric: true,
+      cell: (r) => r.sessions,
+    },
+    {
+      key: "visitorDays",
+      header: t("acquisition.table.visitorDays"),
+      numeric: true,
+      cell: (r) => r.visitorDays ?? <span title={t("reports.unmeasured")}>—</span>,
+    },
+    {
+      key: "orders",
+      header: t(basis === "last" ? "acquisition.table.ordersLast" : "acquisition.table.ordersFirst"),
+      numeric: true,
+      cell: (r) => r.orders,
+    },
+    {
+      key: "orderValue",
+      header: t("acquisition.table.orderValue"),
+      numeric: true,
+      cell: (r) => formatPrice(r.orderValueCents),
+    },
+    {
+      key: "whatsapp",
+      header: t("acquisition.table.whatsapp"),
+      numeric: true,
+      cell: (r) => r.whatsappClickSessions,
+    },
+  ];
+
   return (
     <div className="grid gap-2">
-      <Table>
-        <TableHeader>
-          <TableRow>
-            <TableHead>{t("acquisition.table.source")}</TableHead>
-            <TableHead className="text-right">{t("acquisition.table.sessions")}</TableHead>
-            <TableHead className="text-right">{t("acquisition.table.visitorDays")}</TableHead>
-            <TableHead className="text-right">
-              {t(basis === "last" ? "acquisition.table.ordersLast" : "acquisition.table.ordersFirst")}
-            </TableHead>
-            <TableHead className="text-right">{t("acquisition.table.orderValue")}</TableHead>
-            <TableHead className="text-right">{t("acquisition.table.whatsapp")}</TableHead>
-          </TableRow>
-        </TableHeader>
-        <TableBody>
-          {rows.map((row) => (
-            <TableRow key={row.key} data-source={row.source || row.sourceKind}>
-              <TableCell>
-                <div className="grid gap-0.5">
-                  <span className="font-medium">
-                    {row.source ||
-                      (KIND_LABEL[row.sourceKind] ? t(KIND_LABEL[row.sourceKind]) : row.sourceKind)}
-                  </span>
-                  <span className="text-xs text-muted-foreground">
-                    {[row.medium, row.campaign].filter(Boolean).join(" · ")}
-                    {row.conversionRate !== null
-                      ? ` · ${(row.conversionRate * 100).toFixed(1)}% ${t("acquisition.table.conversion")}`
-                      : ""}
-                  </span>
-                </div>
-              </TableCell>
-              <TableCell className="text-right tabular-nums">{row.sessions}</TableCell>
-              <TableCell className="text-right tabular-nums">
-                {row.visitorDays ?? <span title={t("reports.unmeasured")}>—</span>}
-              </TableCell>
-              <TableCell className="text-right tabular-nums">{row.orders}</TableCell>
-              <TableCell className="text-right tabular-nums">
-                {formatPrice(row.orderValueCents)}
-              </TableCell>
-              <TableCell className="text-right tabular-nums">{row.whatsappClickSessions}</TableCell>
-            </TableRow>
-          ))}
-        </TableBody>
-      </Table>
-      <p className="text-xs text-muted-foreground">{t("acquisition.table.note")}</p>
+      <DataTable
+        columns={columns}
+        rows={rows}
+        rowKey={(row) => row.key}
+        rowAttrs={(row) => ({ "data-source": row.source || row.sourceKind })}
+        caption={t("acquisition.page.description")}
+        note={t("acquisition.table.note")}
+      />
       {unmeasured ? <p className="text-xs text-muted-foreground">{t("reports.unmeasured")}</p> : null}
     </div>
   );

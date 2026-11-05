@@ -24,7 +24,7 @@ import { requirePlatformAdmin } from "@/lib/session";
  * staff, not a merchant-facing one. §5.9's Arabic requirement is about the store owner's
  * dashboard and the storefront.
  */
-export default async function PlatformAnalyticsPage({
+export default async function PlatformConsolePage({
   searchParams,
 }: {
   searchParams: Promise<{ period?: string }>;

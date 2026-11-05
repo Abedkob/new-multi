@@ -28,59 +28,88 @@ export async function getRedisClient(): Promise<RedisClient | null> {
   return redisClient;
 }
 
+/**
+ * The client being brought up, kept across calls.
+ *
+ * It survives a failed attempt on purpose: node-redis keeps retrying in the background, so when
+ * Redis comes back a later call adopts the connection instead of starting another one.
+ */
+let warming: RedisClient | null = null;
+
+const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
+/**
+ * Brings a client up, or gives up on it for this request — and never throws either way.
+ *
+ * The shape here is unusual and the reason is a node-redis failure mode that cost an afternoon.
+ * A bounded `reconnectStrategy` (`false`, or an Error, after N tries) makes the library build an
+ * `AggregateError` out of a list of collected errors that is by then null; the `TypeError` that
+ * throws escapes asynchronously, where no `try`/`catch` of ours can reach it, and Next.js turns
+ * it into an `uncaughtException` that aborts whatever request happened to trigger the connect.
+ * So a Redis that is merely absent — a developer machine, a container that has not started yet —
+ * would take down the page that touched it. It was found by the "here right now" tile (P5-27),
+ * which is the first thing to ask Redis a question during a page render.
+ *
+ * So the strategy never gives up, and the WAITING is bounded instead: this polls `isReady` for
+ * CONNECT_TIMEOUT_MS and then returns null, leaving the client to keep trying on its own. The
+ * caller degrades immediately (the in-memory limiter, "temporarily unavailable"), and nothing is
+ * ever thrown from a socket nobody is listening to any more.
+ */
 async function connect(): Promise<RedisClient | null> {
   if (!env.REDIS_URL) return null;
+  if (warming?.isReady) return warming;
 
-  try {
-    const client = createClient({
+  if (!warming) {
+    warming = createClient({
       url: env.REDIS_URL,
       socket: {
         connectTimeout: CONNECT_TIMEOUT_MS,
-        // Bounded on purpose. An endless strategy means client.connect() against a dead server
-        // never settles, so every caller awaiting getRedisClient() waits forever — which for the
-        // rate limiter means login, checkout and coupon validation hang rather than degrade.
-        // `false` gives up instead, which is what lets the in-memory limiter take over.
-        reconnectStrategy: (retries) => (retries > 3 ? false : Math.min(retries * 50, 500)),
+        // Unbounded, with a capped delay: see the note above on why giving up is the dangerous
+        // option. One background timer per process is the cost, and the benefit is that a Redis
+        // that comes back is picked up without a restart.
+        reconnectStrategy: (retries) => Math.min(1000, 50 * (retries + 1)),
       },
     });
-
-    client.on("error", (err) => {
-      console.error("[redis] connection error:", err);
+    warming.on("error", (err) => {
+      // Logged, not thrown. An error event with no listener is an uncaughtException.
+      console.error("[redis] connection error:", err instanceof Error ? err.message : err);
     });
-
-    // A belt-and-braces bound: connectTimeout covers the socket, this covers the whole handshake
-    // (auth, client setup) so no single step can stall a request indefinitely.
-    await Promise.race([
-      client.connect(),
-      new Promise((_, reject) =>
-        setTimeout(() => reject(new Error("connect timed out")), CONNECT_TIMEOUT_MS * 2),
-      ),
-    ]);
-    console.log("[redis] connected");
-    return client;
-  } catch (error) {
-    console.error(
-      "[redis] failed to connect, falling back to in-memory limits:",
-      error instanceof Error ? error.message : error,
-    );
-    return null;
+    // Deliberately not awaited to completion: its rejection is handled here so that abandoning
+    // the wait below can never leave an unhandled rejection behind.
+    warming.connect().catch((error: unknown) => {
+      console.error(
+        "[redis] connect failed, falling back to in-memory limits:",
+        error instanceof Error ? error.message : error,
+      );
+    });
   }
+
+  const deadline = Date.now() + CONNECT_TIMEOUT_MS;
+  while (Date.now() < deadline) {
+    if (warming.isReady) {
+      console.log("[redis] connected");
+      return warming;
+    }
+    await sleep(25);
+  }
+  return null;
 }
 
 /**
  * Closes the connection. Bounded, because quit() waits for a reply the server may never send:
  * against a Redis that has gone away it would hang, which is how a scheduled script or a
  * shutdown hook ends up never finishing.
+ *
+ * It tears down a client that never finished connecting too. That client is still retrying on a
+ * timer, and a timer is enough to stop a verification script from ever exiting.
  */
 export async function closeRedis(): Promise<void> {
-  const client = redisClient;
+  const client = redisClient ?? warming;
   redisClient = null;
+  warming = null;
   if (!client) return;
   try {
-    await Promise.race([
-      client.quit(),
-      new Promise((resolve) => setTimeout(resolve, 1000)),
-    ]);
+    await Promise.race([client.quit(), sleep(1000)]);
   } catch {
     // Already gone; the forced teardown below is what matters.
   }

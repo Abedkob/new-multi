@@ -13,11 +13,16 @@ import {
   searchReport,
   storeOverview,
 } from "@/lib/analytics/report";
+import { activeVisitors } from "@/lib/analytics/presence";
+import { rolloutIncludes } from "@/lib/analytics/rollout";
+import { countConsentReceipts } from "@/lib/data/consent";
 import { getTenantById } from "@/lib/data/tenants";
 import { formatPrice } from "@/lib/format";
 import { getT } from "@/lib/i18n/locale";
 import { requireOwner } from "@/lib/session";
 import { FreshnessNote } from "./freshness-note";
+import { LiveVisitors } from "./live-visitors";
+import { NotMeasuring } from "./not-measuring";
 
 /**
  * Analytics -> Overview (§5.1): the store's own period, and §6's insights beside it.
@@ -65,6 +70,10 @@ export default async function AnalyticsOverviewPage({
   const monthProducts = await productReport(tenantId, monthRange);
   const monthOverview = await storeOverview(tenantId, monthRange);
 
+  // Presence is Redis-backed and allowed to be unavailable (P5-27); a count of 0 and an
+  // unreachable Redis are different claims, and the tile says which one it is.
+  const presence = await activeVisitors(tenantId);
+
   const insights = buildInsights({
     products,
     monthProducts,
@@ -78,6 +87,30 @@ export default async function AnalyticsOverviewPage({
   });
 
   const { totals, deltas, rates, trends } = overview;
+
+  // Nothing computed and nothing counted: the honest answer is not a grid of zeros (P5-25).
+  // Checked on lastComputedAt rather than on the totals, because a store that really did have a
+  // quiet week HAS been measured and should see its zeros as the fact they are.
+  const measured = overview.lastComputedAt !== null || totals.sessions > 0;
+  if (!measured) {
+    return (
+      <div className="grid gap-6">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <FreshnessNote lastComputedAt={null} />
+          <PeriodPicker
+            basePath="/admin/analytics"
+            current={current}
+            ariaLabel={t("results.period.label")}
+          />
+        </div>
+        <NotMeasuring
+          inRollout={rolloutIncludes(tenant)}
+          hasConsentReceipts={(await countConsentReceipts(tenantId)) > 0}
+        />
+        <LiveVisitors presence={presence} />
+      </div>
+    );
+  }
   const verdict = (key: "sessions" | "orders" | "whatsappClicks") => {
     const reading = trends[key];
     return reading.verdict === "insufficient"
@@ -126,6 +159,7 @@ export default async function AnalyticsOverviewPage({
             value={String(totals.searchSessions)}
             delta={deltas.searchSessions}
           />
+          <LiveVisitors presence={presence} />
         </div>
       </section>
 

@@ -1,13 +1,6 @@
 "use client";
 
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
+import { DataTable, type DataColumn } from "@/components/admin/analytics/data-table";
 import { formatPrice } from "@/lib/format";
 import { useT } from "@/lib/i18n/context";
 
@@ -55,56 +48,63 @@ export function ResultsTable({ rows }: { rows: ResultsRow[] }) {
   const unmeasured = rows.some(
     (r) => r.visitorDays === null || r.whatsappPotentialValueCents === null,
   );
+  const unknown = <span title={t("results.unmeasured")}>—</span>;
+
+  const columns: DataColumn<ResultsRow>[] = [
+    {
+      key: "campaign",
+      header: t("results.table.campaign"),
+      cell: (row) => (
+        <div className="grid gap-0.5">
+          <span className="font-medium">{row.label}</span>
+          <span className="text-xs text-muted-foreground">
+            <code>utm_campaign={row.campaign}</code>
+            {row.conversionRate !== null
+              ? ` · ${(row.conversionRate * 100).toFixed(1)}% ${t("results.table.conversion")}`
+              : ""}
+          </span>
+        </div>
+      ),
+    },
+    { key: "visits", header: t("results.table.visits"), numeric: true, cell: (r) => r.sessions },
+    {
+      key: "visitorDays",
+      header: t("results.table.visitorDays"),
+      numeric: true,
+      cell: (r) => r.visitorDays ?? unknown,
+    },
+    { key: "orders", header: t("results.table.orders"), numeric: true, cell: (r) => r.orders },
+    {
+      key: "orderValue",
+      header: t("results.table.orderValue"),
+      numeric: true,
+      cell: (r) => formatPrice(r.orderValueCents),
+    },
+    {
+      key: "whatsapp",
+      header: t("results.table.whatsappClicks"),
+      numeric: true,
+      cell: (r) => r.whatsappClickSessions,
+    },
+    {
+      key: "whatsappValue",
+      header: t("results.table.whatsappInterest"),
+      numeric: true,
+      cell: (r) =>
+        r.whatsappPotentialValueCents === null ? unknown : formatPrice(r.whatsappPotentialValueCents),
+    },
+  ];
 
   return (
     <div className="grid gap-2">
-      <Table>
-        <TableHeader>
-          <TableRow>
-            <TableHead>{t("results.table.campaign")}</TableHead>
-            <TableHead className="text-right">{t("results.table.visits")}</TableHead>
-            <TableHead className="text-right">{t("results.table.visitorDays")}</TableHead>
-            <TableHead className="text-right">{t("results.table.orders")}</TableHead>
-            <TableHead className="text-right">{t("results.table.orderValue")}</TableHead>
-            <TableHead className="text-right">{t("results.table.whatsappClicks")}</TableHead>
-            <TableHead className="text-right">{t("results.table.whatsappInterest")}</TableHead>
-          </TableRow>
-        </TableHeader>
-        <TableBody>
-          {rows.map((row) => (
-            <TableRow key={row.campaign} data-campaign={row.campaign}>
-              <TableCell>
-                <div className="grid gap-0.5">
-                  <span className="font-medium">{row.label}</span>
-                  <span className="text-xs text-muted-foreground">
-                    <code>utm_campaign={row.campaign}</code>
-                    {row.conversionRate !== null
-                      ? ` · ${(row.conversionRate * 100).toFixed(1)}% ${t("results.table.conversion")}`
-                      : ""}
-                  </span>
-                </div>
-              </TableCell>
-              <TableCell className="text-right tabular-nums">{row.sessions}</TableCell>
-              <TableCell className="text-right tabular-nums">
-                {row.visitorDays ?? <span title={t("results.unmeasured")}>—</span>}
-              </TableCell>
-              <TableCell className="text-right tabular-nums">{row.orders}</TableCell>
-              <TableCell className="text-right tabular-nums">
-                {formatPrice(row.orderValueCents)}
-              </TableCell>
-              <TableCell className="text-right tabular-nums">{row.whatsappClickSessions}</TableCell>
-              <TableCell className="text-right tabular-nums">
-                {row.whatsappPotentialValueCents === null ? (
-                  <span title={t("results.unmeasured")}>—</span>
-                ) : (
-                  formatPrice(row.whatsappPotentialValueCents)
-                )}
-              </TableCell>
-            </TableRow>
-          ))}
-        </TableBody>
-      </Table>
-      <p className="text-xs text-muted-foreground">{t("results.table.whatsappNote")}</p>
+      <DataTable
+        columns={columns}
+        rows={rows}
+        rowKey={(row) => row.campaign}
+        rowAttrs={(row) => ({ "data-campaign": row.campaign })}
+        caption={t("results.page.description")}
+        note={t("results.table.whatsappNote")}
+      />
       {unmeasured ? <p className="text-xs text-muted-foreground">{t("results.unmeasured")}</p> : null}
     </div>
   );

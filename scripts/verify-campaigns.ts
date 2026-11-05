@@ -346,12 +346,19 @@ function sectionChecks() {
   }
   // A null is unknown, not zero — the opposite rule from Campaigns, and for the opposite
   // reason: here the figure was never measured for part of the range (D48).
+  // The shared `unknown` element, and the two columns that may need it. Checked as "null maps
+  // to the unknown element" rather than as a particular spelling, so the table can be rewritten
+  // (it was, when the phone layout arrived) without the rule silently lapsing.
   assert.ok(
-    /visitorDays \?\? <span/.test(table) && table.includes("results.unmeasured"),
+    /const unknown = <span title=\{t\("results\.unmeasured"\)\}>/.test(table),
+    "the table must have one 'not measured' element, explained by results.unmeasured",
+  );
+  assert.ok(
+    /visitorDays \?\? unknown/.test(table),
     "an unmeasured visitor count must read as unknown with an explanation, never as 0",
   );
   assert.ok(
-    /whatsappPotentialValueCents === null/.test(table),
+    /whatsappPotentialValueCents === null \? unknown/.test(table),
     "and so must an unmeasured WhatsApp value",
   );
   ok("P5-19", "Results keeps visits, orders and WhatsApp apart, and unknown apart from zero");
