@@ -45,6 +45,7 @@ pnpm dev                              # http://localhost:3000
 | `pnpm verify:templates` | Test all templates × all sections (needs server running) |
 | `pnpm verify:permissions` | Test role-based access (needs server + login session) |
 | `pnpm verify:social-links` | Test tenant social-link fields (validation, storefront rendering) |
+| `pnpm verify:campaigns` | Test saved marketing campaigns (D39: names saved by the owner, numbers only ever from the data) |
 | `pnpm verify:e2e-policy` | Static check that every E2E suite has a custom-domain leg and no skip path (no server needed) |
 | `pnpm verify:reports` | Test the report read layer (aggregate-only rule, store-local date ranges across DST, null-not-zero rates, trend thresholds) |
 | `pnpm verify:insights` | Test §6's insight rules at, just below and just above every threshold (pure; no server or database) |
@@ -70,7 +71,7 @@ Three layers:
 
 2. **App-level WHERE clauses** (`lib/data/*.ts`): every function takes a `tenantId` and includes it in WHERE conditions. `ProductVariant` has no `tenantId` field, so variant queries go *through* products (`where: { id, product: { tenantId } }`).
 
-3. **Database Row-Level Security** (RLS, `prisma/migrations/*_row_level_security`): when `APP_DATABASE_URL` points to a restricted role, RLS policies on 19 tenant-scoped tables — the original 9 (`Category`, `Product`, `ProductVariant`, `ProductImage`, `TenantContent`, `Order`, `OrderItem`, `DiscountCampaign`, `DiscountProduct`), the coupon tables, `TenantLicense`, the consent receipt, the analytics collection tables and the analytics aggregates — automatically filter results. Enforced via `lib/prisma.ts`'s `withTenant()` (sets session context per transaction) and `withBypass()` (for cross-tenant platform-admin queries). **Dependencies:** the restricted role must be created with `scripts/sql/rls-role.sql`, and `APP_DATABASE_URL` must be set in every environment, or RLS silently doesn't run. `pnpm verify:aggregates`' P4-23a reads `pg_class`/`pg_policies` and fails when a table with a `tenantId` has no forced policy, so a migration cannot add one quietly.
+3. **Database Row-Level Security** (RLS, `prisma/migrations/*_row_level_security`): when `APP_DATABASE_URL` points to a restricted role, RLS policies on 20 tenant-scoped tables — the original 9 (`Category`, `Product`, `ProductVariant`, `ProductImage`, `TenantContent`, `Order`, `OrderItem`, `DiscountCampaign`, `DiscountProduct`), the coupon tables, `TenantLicense`, the consent receipt, the analytics collection tables, the analytics aggregates and `MarketingCampaign` — automatically filter results. Enforced via `lib/prisma.ts`'s `withTenant()` (sets session context per transaction) and `withBypass()` (for cross-tenant platform-admin queries). **Dependencies:** the restricted role must be created with `scripts/sql/rls-role.sql`, and `APP_DATABASE_URL` must be set in every environment, or RLS silently doesn't run. `pnpm verify:aggregates`' P4-23a reads `pg_class`/`pg_policies` and fails when a table with a `tenantId` has no forced policy, so a migration cannot add one quietly.
 
 **User and Tenant tables are intentionally NOT under RLS** (v1 scope): login looks up users by email before any tenant context exists, and the storefront resolves a Tenant by slug the same way — still guarded only by application code.
 
@@ -153,6 +154,11 @@ const allProducts = await withBypass(async (tx) => {
 - **TenantLicense** (one per tenant) holds encrypted license key/activation token ciphertext, `status`, `expiresAt`, `offlineGraceUntil`, and heartbeat bookkeeping (`checkAfter`, `lastCheckedAt`, `lastError`) for the self-hosted licensing system — see "Licensing & Store Availability" below.
 - **Categories** form a tree (`parentId`); a category page shows its products + everything in subcategories; can't be deleted if it has subcategories or products.
 - **Products** have a slug (never changes on rename, keeping old URLs valid), `isBestSeller` flag (manual, not sales-driven), and a `tenantId`.
+- **MarketingCampaigns** are campaigns a store owner saved while building a tracked link (one per
+  `utm_campaign` value, tenant-scoped, forced RLS). They hold a name, the normalized utm value, the
+  channel and destination the link used — and **no numbers**: every campaign figure comes from the
+  acquisition aggregates, so a report never depends on whether the owner saved the campaign, and
+  a campaign that was never saved still shows up with its real traffic.
 - **DiscountCampaigns** apply an automatic percentage or fixed per-unit discount to assigned products. Eligible campaigns never stack; the lowest final price wins. Campaign names are admin-only.
 - **ProductVariants** live under products (no direct `tenantId`); stock, optional price/image override, free-form attributes. One variant per product minimum.
 - **Orders** go Pending → Confirmed → Delivered (or can be Cancelled at any point); cancelling restores stock exactly once. Cancelled and Delivered are final. Orders snapshot `deliveryFeeCentsSnapshot`/`deliveryNoteSnapshot` from the tenant's settings at purchase time.

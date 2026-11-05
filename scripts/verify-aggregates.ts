@@ -668,7 +668,7 @@ async function rlsConfigurationCheck() {
     `RLS is forced but no policy exists on: ${policyless.join(", ")} — which denies everything, ` +
       "so this is a broken table rather than a safe one",
   );
-  assert.ok(protectedCount >= 19, `expected the tenant-scoped tables, found ${protectedCount}`);
+  assert.ok(protectedCount >= 20, `expected the tenant-scoped tables, found ${protectedCount}`);
 
   // And the platform-level tables must stay out, deliberately: putting the job's own run records
   // under a tenant policy would make them invisible to the job.

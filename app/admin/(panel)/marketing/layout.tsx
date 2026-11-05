@@ -16,14 +16,15 @@ import { requireOwner } from "@/lib/session";
  * beneath it, but a Server Action imported by one of those pages does not go through it. Every
  * action re-checks on its own.
  *
- * Only the tabs that exist are listed. Results and Campaigns join them in their own commits,
- * because a tab that leads to "coming soon" is worse than a tab that is not there yet.
+ * Only the tabs that exist are listed. Results joins them in its own commit, because a tab that
+ * leads to "coming soon" is worse than a tab that is not there yet.
  */
 export default async function MarketingLayout({ children }: { children: React.ReactNode }) {
   await requireOwner();
   const t = await getT();
 
   const tabs: SectionTab[] = [
+    { href: "/admin/marketing/campaigns", label: t("marketing.tab.campaigns") },
     { href: "/admin/marketing/links", label: t("marketing.tab.links") },
     { href: "/admin/marketing/integrations", label: t("marketing.tab.integrations") },
   ];

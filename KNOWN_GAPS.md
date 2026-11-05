@@ -8,7 +8,7 @@ Newest sections at the bottom; delete an item when it's fixed.
 - **Database-level isolation is now enforced** (see `prisma/migrations/*_row_level_security`).
   The Next.js runtime connects as a restricted, non-superuser role (`APP_DATABASE_URL`); every
   tenant-scoped query runs through `withTenant()` in `lib/prisma.ts`, which sets `app.tenant_id`
-  per transaction, and RLS policies filter on it. That is **19 tenant-scoped tables** with RLS
+  per transaction, and RLS policies filter on it. That is **20 tenant-scoped tables** with RLS
   both ENABLED and FORCED and a `tenant_isolation` policy each — the original 7, the discount
   tables, the coupon tables, `TenantLicense`, the consent receipt, the three collection tables,
   and Phase 4's five aggregates plus its cursor. `pnpm verify:aggregates`' **P4-23a** asserts that from the

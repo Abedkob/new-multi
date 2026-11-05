@@ -118,6 +118,36 @@ model Tenant {
   analyticsAcquisitionDaily AnalyticsAcquisitionDaily[]
   analyticsCursors          AnalyticsAggregationCursor[]
   analyticsAuditLogs        AnalyticsAuditLog[]
+  marketingCampaigns        MarketingCampaign[]
+}
+
+// A campaign the owner saved while building a tracked link (D39).
+//
+// Reports never read this table. A campaign is whatever `utm_campaign` value came back in the
+// data, so a report cannot depend on bookkeeping an owner forgot — and this row cannot disagree
+// with one, because it holds no numbers at all. What it buys is the first hour: a Campaigns tab
+// that shows the link you just built, with zeros, instead of an empty page that reads as broken.
+//
+// `utmCampaign` is the normalized value the link carries, and it is what joins a saved row to
+// the observed numbers. It is unique per tenant: two saved rows for one utm value would show the
+// same traffic twice under two names.
+model MarketingCampaign {
+  id              String    @id @default(cuid())
+  tenantId        String
+  tenant          Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  /** What the owner called it. Shown in the admin; never matched against the data. */
+  name            String
+  /** The normalized utm_campaign value — the join key, and the only field a report could see. */
+  utmCampaign     String
+  /** The builder's channel id ("instagram", "whatsapp", "custom", …), for the owner's recall. */
+  channel         String
+  /** Where the link pointed, relative to the store base ("" for home). */
+  destinationPath String    @default("")
+  createdAt       DateTime  @default(now())
+  archivedAt      DateTime?
+
+  @@unique([tenantId, utmCampaign])
+  @@index([tenantId, archivedAt, createdAt])
 }
 
 // One row per consent decision a storefront visitor makes. It records THAT a decision was made

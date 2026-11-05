@@ -13,6 +13,8 @@ import {
 import { encodeMessage } from "@/lib/i18n/types";
 // Pure Intl check, same reasoning as domain-format above: this file reaches a client bundle.
 import { isIanaTimeZone } from "@/lib/time-zones";
+// Pure, and shared with the link builder on purpose — see lib/utm.ts.
+import { slugifyUtm } from "@/lib/utm";
 import { variantSetIssues } from "@/lib/variants";
 
 export const loginSchema = z.object({
@@ -158,6 +160,35 @@ export const ownerIntegrationsSchema = analyticsSettingsSchema
     path: ["googleAdsId"],
     message: "Add the Google Ads tag ID too — the label alone can't be sent anywhere.",
   });
+
+/**
+ * "Save this campaign", from the link builder (D39).
+ *
+ * `utmCampaign` is normalized with the same function the builder uses to put it in the URL
+ * (lib/utm.ts), then required to be non-empty: a campaign name of "???" slugifies to nothing,
+ * and a row with an empty utm value would join to every untagged visit in the store.
+ *
+ * `channel` and `destinationPath` are the builder's own values, kept for the owner's recall
+ * only. They are held to a shape anyway — this is a write from a browser, and "kept for recall"
+ * is not a reason to store whatever arrives.
+ */
+export const saveCampaignSchema = z.object({
+  name: z.string().trim().min(2, "At least 2 characters").max(80, "Too long"),
+  utmCampaign: z
+    .string()
+    .transform(slugifyUtm)
+    .refine((v) => v.length > 0, "Give the campaign a name with some letters or numbers in it"),
+  channel: z
+    .string()
+    .trim()
+    .max(40, "Too long")
+    .regex(/^[a-z0-9-]*$/, "Unexpected channel"),
+  destinationPath: z
+    .string()
+    .trim()
+    .max(300, "Too long")
+    .regex(/^(\/[A-Za-z0-9/_-]*)?$/, "Unexpected destination"),
+});
 
 // bcrypt only uses the first 72 bytes, so cap the length instead of silently truncating.
 export const changePasswordSchema = z

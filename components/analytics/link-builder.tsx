@@ -10,10 +10,14 @@
  *   - no server action and no data loading — destinations arrive as props;
  *   - no layout assumptions beyond "I am given a width".
  *
- * It also writes nothing. There is no campaign table in version 1 (§5.5): a tracked link is a
- * URL the owner pastes into a post, and the report groups by what comes back in the URL. That
- * means a link built here can never disagree with a report, because there is no second record
- * of it to drift.
+ * It writes nothing of its own. Phase 5 (D39) adds one optional affordance — "save this
+ * campaign" — and it arrives as a PROP, not an import: a server action the route passes in. So
+ * the component still holds no data loading and no routing, which is the property P4-35 checks
+ * and P5-15 relies on, and the tab without a save handler simply does not show the button.
+ *
+ * What is saved is a name, not a number (D39). The report still groups by whatever comes back in
+ * the URL, so a saved campaign can never disagree with one: there is no second record of the
+ * traffic to drift.
  *
  * The one piece of real thinking here is that the UTM values this produces must be the values
  * the server's ladder will classify (lib/analytics/attribution.ts): a channel of "instagram"
@@ -22,6 +26,9 @@
  */
 
 import { useMemo, useState } from "react";
+// A pure helper, shared with the server so a saved campaign's utm value is byte-identical to the
+// one the link carries (see lib/utm.ts). Not data loading, not routing.
+import { slugifyUtm } from "@/lib/utm";
 
 export type LinkDestination = {
   /** Shown in the picker. */
@@ -47,22 +54,24 @@ const CHANNELS = [
 
 type ChannelId = (typeof CHANNELS)[number]["id"];
 
-/** utm values are compared as plain strings by the report, so they are normalized here once. */
-const slugifyUtm = (value: string) =>
-  value
-    .trim()
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-+|-+$/g, "")
-    .slice(0, 60);
+/** What the route's "save this campaign" action is handed, and what it may answer with. */
+export type SaveCampaign = (input: {
+  name: string;
+  utmCampaign: string;
+  channel: string;
+  destinationPath: string;
+}) => Promise<{ error?: string } | void>;
 
 export function LinkBuilder({
   /** The store's public origin plus its base path, with no trailing slash. */
   storeUrl,
   destinations,
+  /** Omitted -> no save button. The component never reaches for an action of its own. */
+  onSaveCampaign,
 }: {
   storeUrl: string;
   destinations: LinkDestination[];
+  onSaveCampaign?: SaveCampaign;
 }) {
   const [channel, setChannel] = useState<ChannelId>("instagram");
   const [customSource, setCustomSource] = useState("");
@@ -70,6 +79,8 @@ export function LinkBuilder({
   const [content, setContent] = useState("");
   const [destination, setDestination] = useState(destinations[0]?.path ?? "");
   const [copied, setCopied] = useState(false);
+  const [saveState, setSaveState] = useState<"idle" | "saving" | "saved">("idle");
+  const [saveError, setSaveError] = useState<string | null>(null);
 
   const picked = CHANNELS.find((c) => c.id === channel) ?? CHANNELS[0];
   const source = slugifyUtm(picked.id === "custom" ? customSource : picked.source);
@@ -85,6 +96,26 @@ export function LinkBuilder({
     if (utmContent) params.set("utm_content", utmContent);
     return `${storeUrl}${destination}?${params.toString()}`;
   }, [storeUrl, destination, source, picked.medium, utmCampaign, utmContent]);
+
+  // The campaign name the owner typed, not the slug, is what gets saved as the label; the slug
+  // is what joins it to the data. A link with no campaign name has nothing to save.
+  const save = async () => {
+    if (!onSaveCampaign || !utmCampaign) return;
+    setSaveState("saving");
+    setSaveError(null);
+    const result = await onSaveCampaign({
+      name: campaign.trim(),
+      utmCampaign,
+      channel: picked.id,
+      destinationPath: destination,
+    });
+    if (result && result.error) {
+      setSaveState("idle");
+      setSaveError(result.error);
+      return;
+    }
+    setSaveState("saved");
+  };
 
   const copy = async () => {
     try {
@@ -132,7 +163,12 @@ export function LinkBuilder({
           <span className="font-medium">Campaign name</span>
           <input
             value={campaign}
-            onChange={(e) => setCampaign(e.target.value)}
+            onChange={(e) => {
+              setCampaign(e.target.value);
+              // Editing the name makes an earlier "Saved" a lie about a different campaign.
+              setSaveState("idle");
+              setSaveError(null);
+            }}
             placeholder="eid-sale"
             data-testid="link-builder-campaign"
             className="h-10 rounded-md border border-input bg-transparent px-3 text-sm"
@@ -194,6 +230,21 @@ export function LinkBuilder({
               >
                 {copied ? "Copied" : "Copy link"}
               </button>
+              {onSaveCampaign && utmCampaign ? (
+                <button
+                  type="button"
+                  onClick={save}
+                  disabled={saveState !== "idle"}
+                  data-testid="link-builder-save-campaign"
+                  className="rounded-md border border-input px-4 py-2 text-sm font-medium disabled:opacity-60"
+                >
+                  {saveState === "saved"
+                    ? "Saved to Campaigns"
+                    : saveState === "saving"
+                      ? "Saving…"
+                      : "Save this campaign"}
+                </button>
+              ) : null}
               <span className="text-xs text-muted-foreground">
                 In your report this appears as{" "}
                 <strong>
@@ -203,6 +254,16 @@ export function LinkBuilder({
                 .
               </span>
             </div>
+            {saveError ? (
+              <p role="status" data-testid="link-builder-save-error" className="text-xs text-destructive">
+                {saveError}
+              </p>
+            ) : null}
+            {saveState === "saved" ? (
+              <p role="status" className="text-xs text-muted-foreground">
+                It is in Campaigns now, with no numbers yet — they appear as the visits arrive.
+              </p>
+            ) : null}
           </>
         ) : (
           <p className="text-sm text-muted-foreground" data-testid="link-builder-incomplete">

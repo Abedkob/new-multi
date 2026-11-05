@@ -605,7 +605,14 @@ async function phase4() {
     // ------------------------------------------------- the link builder, in the owner's hands
     // Structural movability is checked in verify:acquisition; what a browser adds is that the
     // thing actually builds a usable link for the store it is open on.
+    // The Phase 4 path on purpose, not the Marketing one: it redirects there now (P5-15), and a
+    // bookmark that lands on the real builder is the thing worth proving in a browser.
     await ownerPage.goto(`${BASE}/admin/analytics/links`, { waitUntil: "load" });
+    assert.equal(
+      new URL(ownerPage.url()).pathname,
+      "/admin/marketing/links",
+      "the Phase 4 tracked-links path must land on the Marketing tab",
+    );
     await ownerPage.locator('[data-testid="link-builder"]').waitFor();
     await ownerPage.selectOption('[data-testid="link-builder-channel"]', "instagram");
     await ownerPage.fill('[data-testid="link-builder-campaign"]', "Eid Sale 2026");

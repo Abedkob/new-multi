@@ -13,6 +13,7 @@ import { readdirSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
 import { prisma } from "../lib/prisma";
 import { createStoreWithOwner } from "../lib/data/tenants";
+import { saveCampaign } from "../lib/data/campaigns";
 import { generateTempPassword, hashPassword } from "../lib/passwords";
 
 const BASE = process.env.BASE_URL ?? "http://localhost:3000";
@@ -199,6 +200,24 @@ async function main() {
       `the old tracked-links path must redirect into Marketing, got ${moved.status} ${moved.location}`,
     );
     ok("the Phase 4 tracked-links path redirects into Marketing");
+    // Marketing -> Campaigns (D39, P5-13): the tab is there, and a campaign saved before any
+    // traffic is on it. Checked through a real session because the thing that would break it is
+    // a route guard or a layout, not the data layer verify:campaigns already covers.
+    const emptyCampaigns = await owner.get("/admin/marketing/campaigns");
+    assert.equal(emptyCampaigns.status, 200);
+    await saveCampaign(created.tenant.id, {
+      name: "Perm Eid sale",
+      utmCampaign: "perm-eid-sale",
+      channel: "instagram",
+      destinationPath: "/shop",
+    });
+    const campaigns = await owner.get("/admin/marketing/campaigns");
+    assert.equal(campaigns.status, 200);
+    assert.ok(
+      campaigns.body.includes("Perm Eid sale") && campaigns.body.includes("perm-eid-sale"),
+      "a saved campaign must be on the page before any traffic arrives",
+    );
+    ok("can open Marketing > Campaigns, which lists a campaign saved before any traffic");
     const ownerPreview = await owner.get("/admin/preview");
     assert.equal(ownerPreview.status, 200);
     assert.ok(ownerPreview.body.includes("Perm Test"), "owner preview should show the owner's own store");

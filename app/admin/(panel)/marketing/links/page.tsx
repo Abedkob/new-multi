@@ -1,4 +1,5 @@
 import { notFound } from "next/navigation";
+import { saveCampaignAction } from "../campaigns/actions";
 import { LinkBuilder, type LinkDestination } from "@/components/analytics/link-builder";
 import { listCategories } from "@/lib/data/categories";
 import { listProducts } from "@/lib/data/products";
@@ -47,7 +48,13 @@ export default async function TrackedLinksPage() {
       <p className="max-w-2xl text-sm text-muted-foreground">
         {t("trackedLinks.page.description")}
       </p>
-      <LinkBuilder storeUrl={getStoreUrl(tenant)} destinations={destinations} />
+      {/* The save handler is passed in, not imported by the component: the builder still holds
+          no action and no data loading of its own (D37, P5-15). */}
+      <LinkBuilder
+        storeUrl={getStoreUrl(tenant)}
+        destinations={destinations}
+        onSaveCampaign={saveCampaignAction}
+      />
     </div>
   );
 }

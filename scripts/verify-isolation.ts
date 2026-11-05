@@ -34,6 +34,11 @@ import {
 import { setSectionVisible } from "../lib/data/sections";
 import { parseSectionVisibility } from "../lib/sections";
 import { createCoupon, getCoupon, updateCoupon } from "../lib/data/coupons";
+import {
+  listSavedCampaigns,
+  saveCampaign,
+  setCampaignArchived,
+} from "../lib/data/campaigns";
 
 const input = {
   description: "d",
@@ -241,6 +246,47 @@ async function main() {
       );
       const live = await getTenantBySlug(a.tenant.slug);
       assert.equal(canServeTenant(live!), true);
+    });
+
+    await check("cannot read or write another store's saved campaign", async () => {
+      // MarketingCampaign (D39) holds no numbers, but it does hold what an owner called their
+      // campaign and where their links point — their marketing plan, in other words. Its
+      // policy is checked here, with the rest, rather than being taken on trust because the
+      // table looks harmless.
+      const saved = await saveCampaign(A, {
+        name: "A's Eid sale",
+        utmCampaign: "a-eid-sale",
+        channel: "instagram",
+        destinationPath: "/shop",
+      });
+      assert.deepEqual(await listSavedCampaigns(B), [], "B must see none of A's campaigns");
+
+      const touched = await withTenant(B, (db) =>
+        db.marketingCampaign.updateMany({ where: { tenantId: A }, data: { name: "renamed" } }),
+      );
+      assert.equal(touched.count, 0);
+      // The WITH CHECK half: inserting a row for another store is refused, not hidden.
+      await assert.rejects(
+        withTenant(A, (db) =>
+          db.marketingCampaign.create({
+            data: { tenantId: B, name: "planted", utmCampaign: "planted", channel: "custom" },
+          }),
+        ),
+        /row-level security|violates/i,
+      );
+      await assert.rejects(
+        setCampaignArchived(B, saved.id, true),
+        /no longer exists/i,
+        "archiving another store's campaign must not find it",
+      );
+      const after = await listSavedCampaigns(A);
+      assert.equal(after.length, 1);
+      assert.equal(after[0].name, "A's Eid sale");
+      assert.equal(after[0].archivedAt, null);
+      assert.equal(
+        await withBypass((db) => db.marketingCampaign.count({ where: { tenantId: B } })),
+        0,
+      );
     });
 
     console.log("Sanity: owners can manage their own data:");

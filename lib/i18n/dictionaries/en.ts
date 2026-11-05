@@ -644,6 +644,22 @@ export const en = {
   "marketing.tab.links": "Tracked links",
   "marketing.tab.integrations": "Integrations",
 
+  // Marketing -> Campaigns (D39)
+  "campaigns.page.description":
+    "Campaigns you saved while building a link, and any campaign your visitors arrived with. A campaign counts because the link carried its name — not because it is listed here.",
+  "campaigns.empty":
+    "No campaigns yet. Build a tracked link and save it, and it will appear here straight away — with zeros until the first visit arrives.",
+  "campaigns.table.campaign": "Campaign",
+  "campaigns.table.sessions": "Visits",
+  "campaigns.table.orders": "Orders",
+  "campaigns.table.revenue": "Order value",
+  "campaigns.table.note": "Last 28 days, in your store's time zone.",
+  "campaigns.badge.saved": "Saved by you",
+  "campaigns.badge.archived": "Archived — its visits still count",
+  "campaigns.badge.observed": "Seen in your traffic, never saved",
+  "campaigns.action.archive": "Archive",
+  "campaigns.action.restore": "Restore",
+
   // Marketing -> Integrations
   "integrations.page.title": "Your Google and Meta accounts",
   "integrations.page.description": "Connect your own advertising accounts. These are yours, not ours — change or remove any of them whenever you like.",

@@ -294,12 +294,21 @@ function linkBuilderChecks() {
   );
   ok("P4-35", `the builder depends on none of ${forbidden.length} things that would pin it to a page`);
 
-  // The route is where the coupling lives, which is the point.
-  const page = readFileSync("app/admin/(panel)/analytics/links/page.tsx", "utf8");
+  // The route is where the coupling lives, which is the point. Phase 5 moved the mount into
+  // Marketing, so the route checked here is the Marketing one and the Phase 4 path must be a
+  // redirect — which is P5-15, the property P4-35 existed to protect, now used.
+  const page = readFileSync("app/admin/(panel)/marketing/links/page.tsx", "utf8");
   assert.ok(page.includes("getStoreUrl"), "the route resolves the store's own URL");
   assert.ok(page.includes("requireOwner"), "and it is the owner's page");
   assert.ok(page.includes("<LinkBuilder"), "and it mounts the component");
   ok("P4-35", "the route holds the URL resolution and the data loading, the component holds none");
+
+  const old = readFileSync("app/admin/(panel)/analytics/links/page.tsx", "utf8");
+  assert.ok(
+    old.includes("permanentRedirect") && old.includes("/admin/marketing/links"),
+    "the Phase 4 path must redirect to the Marketing tab, not 404 on a bookmark",
+  );
+  ok("P5-15", "the builder is mounted in Marketing and the Phase 4 path redirects to it");
 
   // Every channel the builder offers must be a channel the ladder recognises, or a merchant's
   // own link splits from their organic traffic from the same place.

@@ -645,6 +645,22 @@ export const ar: Record<DictionaryKey, string> = {
   "marketing.tab.links": "روابط متتبَّعة",
   "marketing.tab.integrations": "الربط",
 
+  // التسويق ← الحملات
+  "campaigns.page.description":
+    "الحملات التي حفظتها عند بناء رابط، وأي حملة وصل زوارك عبرها. الحملة تُحسب لأن الرابط حمل اسمها — لا لأنها مدرجة هنا.",
+  "campaigns.empty":
+    "لا توجد حملات بعد. ابنِ رابطًا متتبعًا واحفظه، وسيظهر هنا فورًا — بأصفار حتى تصل أول زيارة.",
+  "campaigns.table.campaign": "الحملة",
+  "campaigns.table.sessions": "الزيارات",
+  "campaigns.table.orders": "الطلبات",
+  "campaigns.table.revenue": "قيمة الطلبات",
+  "campaigns.table.note": "آخر ٢٨ يومًا، بتوقيت متجرك.",
+  "campaigns.badge.saved": "حفظتها أنت",
+  "campaigns.badge.archived": "مؤرشفة — وزياراتها ما زالت تُحسب",
+  "campaigns.badge.observed": "ظهرت في زياراتك دون أن تُحفظ",
+  "campaigns.action.archive": "أرشفة",
+  "campaigns.action.restore": "استعادة",
+
   // التسويق ← الربط
   "integrations.page.title": "حساباتك في جوجل وميتا",
   "integrations.page.description": "اربط حساباتك الإعلانية الخاصة. هذه حساباتك أنت، لا حساباتنا — غيّرها أو احذفها وقت ما تشاء.",
