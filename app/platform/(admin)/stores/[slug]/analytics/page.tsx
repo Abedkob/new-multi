@@ -7,6 +7,7 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import { lastIntegrationChanges } from "@/lib/analytics/audit";
 import { storeIntegrations } from "@/lib/integrations";
 import { getStoreUrl } from "@/lib/store-url";
 import { loadStore } from "../load";
@@ -33,6 +34,16 @@ export default async function StoreAnalyticsPage({
   const { slug } = await params;
   const tenant = await loadStore(slug);
   const { analytics, metaDomainVerification } = storeIntegrations(tenant);
+  // Who last changed each id, owner or admin (D40b). The platform admin can read the whole log
+  // in principle; this is the same narrow view the owner gets, from the same accessor, so the
+  // two screens cannot tell different stories about who touched a tag.
+  const changes = await lastIntegrationChanges(tenant.id);
+  const lastChanged = Object.fromEntries(
+    Object.entries(changes).map(([field, change]) => [
+      field,
+      { actorLabel: change.actorLabel, actorRole: change.actorRole, at: change.at.toISOString() },
+    ]),
+  );
   const storeUrl = getStoreUrl(tenant);
 
   return (
@@ -49,6 +60,7 @@ export default async function StoreAnalyticsPage({
           <AnalyticsForm
             slug={tenant.slug}
             hasDomain={!!tenant.domain}
+            lastChanged={lastChanged}
             initial={{
               gaMeasurementId: analytics.gaId,
               googleAdsId: analytics.adsId,

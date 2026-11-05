@@ -1,4 +1,5 @@
 import { notFound } from "next/navigation";
+import { lastIntegrationChanges } from "@/lib/analytics/audit";
 import { getTenantById } from "@/lib/data/tenants";
 import { INTEGRATION_FORMATS, type IntegrationKey } from "@/lib/integrations";
 import { requireOwner } from "@/lib/session";
@@ -18,6 +19,11 @@ export default async function OwnerIntegrationsPage() {
   if (!tenant) notFound();
 
   const keys = Object.keys(INTEGRATION_FORMATS) as IntegrationKey[];
+  // Who last changed each field, and when (D40b). This is the only window onto the audit log
+  // the owner's panel has: an actor and a time, per field, newest only. The trail itself, the
+  // old values, and everything that is not an integration change stay out of reach — the log is
+  // evidence about this owner, including about them (P5-18a).
+  const lastChanged = await lastIntegrationChanges(tenantId);
   // The host the store is actually reached at, which is what Meta and Google verify — not the
   // platform's own hostname, and not a guess (D40a).
   const storeHost = (() => {
@@ -37,6 +43,19 @@ export default async function OwnerIntegrationsPage() {
         >
       }
       storeHost={tenant.domain ? storeHost : null}
+      lastChanged={Object.fromEntries(
+        keys
+          .filter((key) => lastChanged[key])
+          .map((key) => [
+            key,
+            {
+              actorLabel: lastChanged[key].actorLabel,
+              actorRole: lastChanged[key].actorRole,
+              // Serialized for the client component; formatted there in the reader's language.
+              at: lastChanged[key].at.toISOString(),
+            },
+          ]),
+      )}
     />
   );
 }

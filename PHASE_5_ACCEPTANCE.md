@@ -2,7 +2,7 @@
 
 Results for [PHASE_5_PLAN.md](PHASE_5_PLAN.md) §6, run on 2026-11-05.
 
-**All 34 items pass.** Phase 5 is not a release: §13 of the master plan holds the launch until
+**All 34 items pass, plus D40b, added after the phase closed.** Phase 5 is not a release: §13 of the master plan holds the launch until
 Phase 7, and `ANALYTICS_ROLLOUT_MODE` stays `off` in production
 ([ANALYTICS_DEPLOY_CHECKLIST.md](ANALYTICS_DEPLOY_CHECKLIST.md)).
 
@@ -90,7 +90,8 @@ serves route handlers as 404 while pages still render — it looks exactly like 
 | P5-16 | An owner sets their own ids, and they take effect only with consent (**D40**) | PASS | `verify:integrations` — a declining visitor's HTML contains no advertising id, a consenting one's does |
 | P5-17 | A malformed id is refused with the expected shape | PASS | `verify:integrations` |
 | P5-18 | A platform admin can see, edit and clear every store's ids, each write audited | PASS | `verify:integrations` |
-| P5-18a | Exactly one audit row per integration write, owner's included; unreadable by the owner | PASS | `verify:integrations` — and a no-op save leaves no row |
+| P5-18a | Exactly one audit row per integration write, owner's included; the trail unreadable by the owner | PASS | `verify:integrations` — a no-op save leaves no row; no route under `app/admin` reads the log; and the one narrow accessor (**D40b**) is checked to select nothing but an actor and a time, and to call no write |
+| D40b | Each integration id says who last changed it and when, in both screens that edit it | PASS | `verify:integrations` (per-field actor and role, newest write wins, untouched fields report nothing, and the `detail` format round-trips) and `verify:permissions` (the line rendered for an owner after a platform admin's change, and absent before any change) |
 | P5-18b | Integrations is owner-only, including every action | PASS | `verify:permissions` — the static guard now follows one level of same-file indirection and prints each case |
 | P5-18c | A pasted tag or snippet stores the id alone | PASS | `verify:integrations` — the column is read back and asserted free of `<`, `script` and `fbq` |
 | P5-18d | Verification tags render with consent declined, on the shared host **and** the store's own domain (**D40a**) | PASS | `verify:integrations` — the custom-domain leg uses `node:http` with a chosen Host header, because `fetch` drops that header silently |

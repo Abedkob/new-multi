@@ -856,6 +856,8 @@ export const en = {
   "integrations.status.off": "Not set",
   "integrations.save": "Save",
   "integrations.saved": "Saved. Check it with the tool below before you rely on it.",
+  "integrations.lastChanged": "Last changed by {0} on {1}.",
+  "integrations.lastChanged.byPlatform": "(platform support)",
   "integrations.clearHint": "Clear the field and save to turn it off.",
   "integrations.guide.heading": "How to set this up",
   "integrations.guide.check": "How to check it worked",

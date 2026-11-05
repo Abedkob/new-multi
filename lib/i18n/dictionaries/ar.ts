@@ -857,6 +857,8 @@ export const ar: Record<DictionaryKey, string> = {
   "integrations.status.off": "غير مُعدّ",
   "integrations.save": "حفظ",
   "integrations.saved": "تم الحفظ. تحقق منه بالأداة أدناه قبل أن تعتمد عليه.",
+  "integrations.lastChanged": "آخر تغيير بواسطة {0} في {1}.",
+  "integrations.lastChanged.byPlatform": "(دعم المنصة)",
   "integrations.clearHint": "امسح الحقل واحفظ لإيقافه.",
   "integrations.guide.heading": "كيف تضبط هذا",
   "integrations.guide.check": "كيف تتأكد أنه يعمل",

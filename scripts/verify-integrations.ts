@@ -23,7 +23,13 @@ import { readFileSync, readdirSync } from "node:fs";
 import { request as httpRequest } from "node:http";
 import { prisma } from "../lib/prisma";
 import { createStoreWithOwner, updateTenantIntegrations } from "../lib/data/tenants";
-import { diffIntegrations, recordIntegrationChange } from "../lib/analytics/audit";
+import {
+  diffIntegrations,
+  formatIntegrationDetail,
+  lastIntegrationChanges,
+  parseIntegrationFields,
+  recordIntegrationChange,
+} from "../lib/analytics/audit";
 import { grantedConfig } from "../lib/analytics";
 import { buildStoredConsent, consentCookieName, encodeConsent } from "../lib/consent/cookie";
 import { DENY_ALL, GRANT_ALL } from "../lib/consent/types";
@@ -248,20 +254,111 @@ async function auditChecks(tenantId: string) {
   );
   ok("P5-18a", "an integration write is logged with actor, field and before/after; a no-op is not");
 
-  // The owner must have no route to the log: it is evidence about them.
+  // D40b: "last changed by X on Y", per field, from the log — the question a merchant asks when
+  // a tag stops reporting. A platform admin changes a different field a moment later, so the
+  // check also proves the two fields keep their own actors rather than sharing the newest one.
+  await recordIntegrationChange({
+    tenantId,
+    actorUserId: null,
+    actorEmail: "admin@example.test",
+    actorRole: "platform-admin",
+    changes: diffIntegrations(after, { ...after, metaPixelId: "222222222222" }),
+  });
+  const provenanceRows = await lastIntegrationChanges(tenantId);
+  assert.equal(provenanceRows.gaMeasurementId?.actorLabel, "owner@example.test");
+  assert.equal(provenanceRows.gaMeasurementId?.actorRole, "owner");
+  assert.equal(provenanceRows.metaPixelId?.actorLabel, "admin@example.test");
+  assert.equal(provenanceRows.metaPixelId?.actorRole, "platform-admin");
+  assert.ok(provenanceRows.gaMeasurementId?.at instanceof Date, "and when it happened");
+  // A field nobody has ever changed has no line at all, rather than "never": five cards saying
+  // "never changed" is noise on every new store.
+  assert.equal(provenanceRows.googleAdsId, undefined, "an untouched field reports nothing");
+  // Changing the same field again moves its line to the newer actor.
+  await recordIntegrationChange({
+    tenantId,
+    actorUserId: null,
+    actorEmail: "owner@example.test",
+    actorRole: "owner",
+    changes: diffIntegrations({ ...after, metaPixelId: "222222222222" }, {
+      ...after,
+      metaPixelId: "333333333333",
+    }),
+  });
+  const moved = await lastIntegrationChanges(tenantId);
+  assert.equal(moved.metaPixelId?.actorLabel, "owner@example.test", "newest write wins");
+  ok("D40b", "each field reports its own last actor and time, and the newest write wins");
+
+  // The owner must have no route to the log itself: it is evidence about them, including about
+  // their own edits, so they must not be able to read the trail, change it or erase it.
+  //
+  // ONE narrow window is allowed (D40b): `lastIntegrationChanges`, which answers "who last
+  // changed this field, and when" for the screen that edits it. The rule below is therefore not
+  // "no audit import under app/admin" but "no BROAD audit read, and the narrow one stays
+  // narrow" — a rule that forbade the accessor outright would just be rewritten by the next
+  // person who needs the line, and a rule that allowed any import would let the trail in.
   const offenders: string[] = [];
   const walk = (dir: string) => {
     for (const entry of readdirSync(dir, { withFileTypes: true })) {
       const path = `${dir}/${entry.name}`;
       if (entry.isDirectory()) walk(path);
-      else if (/\.tsx?$/.test(path) && /analyticsAuditLog|listAnalyticsAudit|listPrivacyAudit/.test(readFileSync(path, "utf8"))) {
+      else if (
+        /\.tsx?$/.test(path) &&
+        /analyticsAuditLog|listAnalyticsAudit|listPrivacyAudit/.test(readFileSync(path, "utf8"))
+      ) {
         offenders.push(path);
       }
     }
   };
   walk("app/admin");
   assert.deepEqual(offenders, [], `the owner's own panel must not read the audit log: ${offenders}`);
-  ok("P5-18a", "no route under app/admin reads the audit log, so the owner cannot see or erase it");
+
+  // And the window stays a window. Checked on the accessor itself: what it selects, that it
+  // returns no values, and that it cannot write.
+  const audit = readFileSync("lib/analytics/audit.ts", "utf8");
+  const accessor = /export async function lastIntegrationChanges\([\s\S]*?\n}/.exec(audit)?.[0];
+  assert.ok(accessor, "lastIntegrationChanges must exist");
+  assert.ok(
+    accessor.includes('action: "INTEGRATION_CHANGE"'),
+    "it must read integration changes only, not privacy requests or console views",
+  );
+  assert.ok(accessor.includes("tenantId"), "and only for the store asking");
+  // Comments stripped first, and matched as CALLS. The bare words caught this check's own
+  // first run: the accessor explains that the log snapshots an email "so it survives the
+  // account being deleted", and "deleted" is not a write. A check that cannot tell code from a
+  // comment about code fails for the wrong reason, which is how a real rule gets deleted.
+  const accessorCode = accessor
+    .replace(/\/\*[\s\S]*?\*\//g, "")
+    .replace(/^\s*\/\/.*$/gm, "");
+  for (const write of [".create(", ".createMany(", ".update(", ".updateMany(", ".delete(", ".deleteMany(", ".upsert("]) {
+    assert.ok(!accessorCode.includes(write), `it must not call ${write} — it is a read`);
+  }
+  // The provenance type carries three fields and no value: `from`/`to` must stay in the log.
+  const provenance = /export type FieldProvenance = \{[\s\S]*?\n};/.exec(audit)?.[0] ?? "";
+  assert.ok(provenance, "FieldProvenance must be declared");
+  for (const forbidden of ["from", "to:", "value", "detail"]) {
+    assert.ok(
+      !provenance.includes(forbidden),
+      `FieldProvenance must not carry ${forbidden}: the owner sees who and when, not what it was`,
+    );
+  }
+  ok(
+    "P5-18a",
+    "the owner's panel reads no audit trail; its one window returns an actor and a time per field",
+  );
+
+  // The format the provenance depends on, round-tripped: the writer and the reader of `detail`
+  // are the same module, and this is what keeps them honest.
+  const sample = [
+    { field: "gaMeasurementId", from: null, to: "G-ABC123" },
+    { field: "metaPixelId", from: "111111111111", to: null },
+  ];
+  assert.deepEqual(
+    parseIntegrationFields(formatIntegrationDetail(sample)),
+    ["gaMeasurementId", "metaPixelId"],
+    "the detail format must round-trip to the fields it recorded",
+  );
+  assert.deepEqual(parseIntegrationFields(null), [], "no detail is no fields, not a crash");
+  ok("D40b", "the audit detail round-trips to its field names, so provenance cannot drift");
 }
 
 /**

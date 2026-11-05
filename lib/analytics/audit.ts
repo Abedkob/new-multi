@@ -75,10 +75,34 @@ export async function recordIntegrationChange(input: {
     actorEmail: input.actorEmail,
     action: "INTEGRATION_CHANGE",
     subject: input.actorRole,
-    detail: input.changes
-      .map((c) => `${c.field}: ${c.from ?? "(none)"} -> ${c.to ?? "(none)"}`)
-      .join("; "),
+    detail: formatIntegrationDetail(input.changes),
   });
+}
+
+/** The `detail` string's one and only format. `parseIntegrationFields` is its inverse. */
+export const NONE = "(none)";
+
+export function formatIntegrationDetail(changes: readonly IntegrationChange[]): string {
+  return changes.map((c) => `${c.field}: ${c.from ?? NONE} -> ${c.to ?? NONE}`).join("; ");
+}
+
+/**
+ * Which fields a logged write touched, read back out of `detail`.
+ *
+ * Parsing a string we wrote ourselves is not free of risk, so the writer and the reader sit next
+ * to each other and `verify:integrations` round-trips them. The alternative — a column holding
+ * the field list — would mean a migration and a second place for the same fact to live, and the
+ * log would still have to carry the before/after values in prose for a person to read.
+ *
+ * Only the field NAMES come back. The values stay in the log: the screen that uses this says who
+ * changed a field and when, not what it used to be.
+ */
+export function parseIntegrationFields(detail: string | null): string[] {
+  if (!detail) return [];
+  return detail
+    .split("; ")
+    .map((part) => part.split(":")[0]?.trim())
+    .filter((field): field is string => !!field);
 }
 
 /** Which fields actually changed between two integration snapshots. */
@@ -104,6 +128,70 @@ export function listAnalyticsAudit(tenantId: string, take = 20) {
       take,
     }),
   );
+}
+
+/** Who last changed one integration field, and when. Field names and an actor — never values. */
+export type FieldProvenance = {
+  /** The actor's name where we still have the account, otherwise the email we snapshotted. */
+  actorLabel: string;
+  /** "owner" or "platform-admin", as the write recorded it. */
+  actorRole: string;
+  at: Date;
+};
+
+/**
+ * The newest change to each integration field, for the screens that edit them.
+ *
+ * This is the one narrow window onto the audit log that the owner's own panel is allowed, and
+ * the shape is the reason it is allowed. P5-18a's rule is that the log is evidence *about* the
+ * owner: they must not be able to read the trail, edit it or erase it. What this returns is who
+ * last touched each field and when — three fields, newest only, for one store. There is no
+ * route to the rest of the log from here: no values, no earlier changes, no other actions, no
+ * other store, and nothing that writes or deletes.
+ *
+ * Added because "I did not change that" is the first thing said when a merchant's tag stops
+ * reporting, and until now the answer was in a table only a platform admin could query (D40b).
+ *
+ * `withBypass`, because `AnalyticsAuditLog` is deliberately outside RLS.
+ */
+export async function lastIntegrationChanges(
+  tenantId: string,
+): Promise<Record<string, FieldProvenance>> {
+  const rows = await withBypass((db) =>
+    db.analyticsAuditLog.findMany({
+      where: { tenantId, action: "INTEGRATION_CHANGE" },
+      orderBy: { at: "desc" },
+      // Enough to cover every field's most recent change many times over. A cap rather than
+      // every row ever written: this answers "who last", not "what happened".
+      take: 50,
+      select: { at: true, subject: true, actorEmail: true, actorUserId: true, detail: true },
+    }),
+  );
+  if (rows.length === 0) return {};
+
+  // One lookup for the names, because the log snapshots the email (so it survives the account
+  // being deleted) and a person reads their colleague's name.
+  const ids = [...new Set(rows.map((r) => r.actorUserId).filter((id): id is string => !!id))];
+  const names = new Map(
+    ids.length === 0
+      ? []
+      : (
+          await withBypass((db) =>
+            db.user.findMany({ where: { id: { in: ids } }, select: { id: true, name: true } }),
+          )
+        ).map((user) => [user.id, user.name]),
+  );
+
+  const latest: Record<string, FieldProvenance> = {};
+  // Newest first, so the first row to mention a field is that field's last change.
+  for (const row of rows) {
+    const label = (row.actorUserId ? names.get(row.actorUserId) : null) || row.actorEmail;
+    for (const field of parseIntegrationFields(row.detail)) {
+      if (latest[field]) continue;
+      latest[field] = { actorLabel: label, actorRole: row.subject ?? "", at: row.at };
+    }
+  }
+  return latest;
 }
 
 /**

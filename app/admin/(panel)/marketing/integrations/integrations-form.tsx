@@ -7,7 +7,7 @@ import { SubmitButton } from "@/components/submit-button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { resolveMessage, useT } from "@/lib/i18n/context";
+import { resolveMessage, useLocale, useT } from "@/lib/i18n/context";
 import { INTEGRATION_GUIDES } from "@/lib/integrations-guide";
 import type { IntegrationKey } from "@/lib/integrations";
 
@@ -25,13 +25,23 @@ import type { IntegrationKey } from "@/lib/integrations";
 export function IntegrationsForm({
   defaults,
   storeHost,
+  lastChanged,
 }: {
   defaults: Record<IntegrationKey, string>;
   /** The host the store actually serves on, for the per-domain verification warning. */
   storeHost: string | null;
+  /**
+   * Who last changed each field, and when (D40b). Only fields that have ever been changed
+   * appear; a never-touched field shows nothing rather than "never", which would be noise on
+   * five cards out of six for a new store.
+   */
+  lastChanged: Partial<Record<IntegrationKey, { actorLabel: string; actorRole: string; at: string }>>;
 }) {
   const [state, action] = useActionState(saveOwnerIntegrationsAction, {});
   const t = useT();
+  // The date is formatted in the reader's own language: an Arabic dashboard showing "5 November"
+  // is the sort of half-translated line that makes the rest look machine-made.
+  const { locale } = useLocale();
   const values = { ...defaults, ...state.values };
 
   return (
@@ -113,6 +123,29 @@ export function IntegrationsForm({
                   </p>
                 )}
               </div>
+
+              {/* Who touched this field last. The audit log is the source, and this is the only
+                  part of it the owner can see: an actor and a time, for this field, newest
+                  only (D40b). "I didn't change that" is the first thing said when a tag stops
+                  reporting, and until now the answer lived where only the platform could read
+                  it. */}
+              {lastChanged[guide.key] ? (
+                <p className="text-xs text-muted-foreground" data-last-changed={guide.key}>
+                  {resolveMessage(
+                    t,
+                    `integrations.lastChanged${lastChanged[guide.key]!.actorLabel}${new Date(
+                      lastChanged[guide.key]!.at,
+                    ).toLocaleDateString(locale === "ar" ? "ar" : "en-GB", {
+                      year: "numeric",
+                      month: "long",
+                      day: "numeric",
+                    })}`,
+                  )}
+                  {lastChanged[guide.key]!.actorRole === "platform-admin"
+                    ? ` ${t("integrations.lastChanged.byPlatform")}`
+                    : ""}
+                </p>
+              ) : null}
 
               <div className="grid gap-1.5 rounded-md bg-muted/50 p-3">
                 <p className="text-sm font-medium">{t("integrations.guide.check")}</p>

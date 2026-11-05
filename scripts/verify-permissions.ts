@@ -14,6 +14,7 @@ import { join } from "node:path";
 import { prisma } from "../lib/prisma";
 import { createStoreWithOwner } from "../lib/data/tenants";
 import { saveCampaign } from "../lib/data/campaigns";
+import { recordIntegrationChange } from "../lib/analytics/audit";
 import { generateTempPassword, hashPassword } from "../lib/passwords";
 
 const BASE = process.env.BASE_URL ?? "http://localhost:3000";
@@ -193,6 +194,35 @@ async function main() {
       "each integration must name the tool that checks it",
     );
     ok("can open Marketing > Integrations, with all six fields and a way to check them");
+    // D40b: "last changed by X on Y", under the field it belongs to. Recorded as a platform
+    // admin, because the case that matters is an owner seeing that somebody else touched their
+    // tag — and because it proves the owner reads the line without reading the log.
+    assert.ok(
+      !integrations.body.includes("data-last-changed"),
+      "a store whose ids have never been changed must show no provenance line at all",
+    );
+    await recordIntegrationChange({
+      tenantId: created.tenant.id,
+      actorUserId: null,
+      actorEmail: "support@example.test",
+      actorRole: "platform-admin",
+      changes: [{ field: "gaMeasurementId", from: null, to: "G-PERMCHECK1" }],
+    });
+    const withHistory = await owner.get("/admin/marketing/integrations");
+    assert.ok(
+      withHistory.body.includes('data-last-changed="gaMeasurementId"'),
+      "the changed field must carry its provenance line",
+    );
+    assert.ok(
+      withHistory.body.includes("support@example.test") && withHistory.body.includes("Last changed by"),
+      "naming who changed it",
+    );
+    assert.ok(
+      !withHistory.body.includes("G-PERMCHECK1") ||
+        !withHistory.body.includes("data-last-changed=\"metaPixelId\""),
+      "and only for the field that changed",
+    );
+    ok("Marketing > Integrations shows who last changed each ID, and only for changed fields");
     // The Phase 4 path still works for anyone who bookmarked it (P5-15).
     const moved = await owner.get("/admin/analytics/links");
     assert.ok(
