@@ -299,7 +299,12 @@ function linkBuilderChecks() {
   // redirect — which is P5-15, the property P4-35 existed to protect, now used.
   const page = readFileSync("app/admin/(panel)/marketing/links/page.tsx", "utf8");
   assert.ok(page.includes("getStoreUrl"), "the route resolves the store's own URL");
-  assert.ok(page.includes("requireOwner"), "and it is the owner's page");
+  // Phase 7: the guard is a named capability now. "marketing:read" is owner-only in
+  // lib/permissions.ts, so the claim is the same one.
+  assert.ok(
+    page.includes('requireCapability("marketing:read")'),
+    "and it is the owner's page",
+  );
   assert.ok(page.includes("<LinkBuilder"), "and it mounts the component");
   ok("P4-35", "the route holds the URL resolution and the data loading, the component holds none");
 

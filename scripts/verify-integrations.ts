@@ -176,7 +176,14 @@ function ownerOnlyChecks() {
   ];
   for (const file of files) {
     const source = readFileSync(file, "utf8");
-    assert.ok(source.includes("requireOwner"), `${file} must verify the role itself`);
+    // Phase 7 replaced requireOwner here with a named capability. The claim this check makes is
+    // unchanged and still worth making file by file: each of these three verifies the caller
+    // itself rather than inheriting a guard from whatever imported it. "integrations:write" is
+    // owner-only in lib/permissions.ts, which verify:permissions holds down separately.
+    assert.ok(
+      /requireCapability\(\s*"(marketing:read|integrations:write)"/.test(source),
+      `${file} must verify the caller itself, with an owner-only capability`,
+    );
     assert.ok(
       !/formData\.get\(["']tenantId|params.*tenantId/.test(source),
       `${file} must never take a tenant id from the request`,
