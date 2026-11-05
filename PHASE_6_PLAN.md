@@ -30,7 +30,9 @@ more care than everything else in this phase combined:
 
 | Commit | Content | State |
 |---|---|---|
-| 1–10 | §5's sequence below. | not started |
+| — | Plan approved with four changes, folded in: the order amount is an owner toggle, off by default (D50); non-owner accounts may receive new orders only (D60); the contract-rejection 400 signal joins the platform alerts (P6-25); and real-device delivery is a named human check (P6-32, P6-33). | done |
+| 1 | The notification data model and the ledger. | in progress |
+| 2–10 | §5's sequence below. | not started |
 
 ## 1. Scope
 
@@ -42,7 +44,7 @@ more care than everything else in this phase combined:
    audience that cannot cross.
 3. **Persisted admin language** (§9.5): `User.adminLocale`, so a scheduled notification can be
    written in the language the owner actually reads.
-4. **Typed notification preferences** (§9.7) for owners and platform admins, all defaulting on.
+4. **Typed notification preferences** (§9.7) for owners and platform admins, all defaulting on — plus *Show order amount in notifications*, the one preference that defaults **off** (**D50**), and the role gate that keeps analytics alerts away from non-owner accounts (**D60**).
 5. **Instant new-order push** (§11.4) through `after()`, after commit, with a hard timeout.
 6. **The notification ledger** (§9.8): `AdminNotification`, `AdminNotificationOrder`,
    `AdminNotificationDelivery`, `NotificationAlertState`.
@@ -78,7 +80,8 @@ more care than everything else in this phase combined:
 
 | # | Question | Decision |
 |---|---|---|
-| **D50** | What may a push payload contain? | **The fact, the count, and the destination. Never a person, never money.** "You have 3 new orders" and a link to `/admin/orders`. No customer name, phone, address, note or product list (§11.6); no order total either, which §11.6 does not forbid and which still turns a lock screen into a disclosure of what the shop takes in. The ledger stores the same body it sent, so what reached a device is auditable without storing a second, richer copy. A check asserts the payload builder cannot reach `Order.customerName`, `customerPhone`, `address`, `notes` or any money field. |
+| **D50** | What may a push payload contain? | **The fact, the count, and the destination. Never a person. Money only if the owner asks for it.** “You have 3 new orders” and a link to `/admin/orders`. No customer name, phone, address, note or product list (§11.6) — those are not a preference, they are a disclosure to whoever is holding the phone, and they are never sent. The **amount** is the one judgement call, and it is the owner's: a lock screen reading “new order — $340” tells a stranger what the shop takes in, so it is **off by default** behind one toggle, *Show order amount in notifications*, in `/admin/notifications`. Off, the body is identical to one from a store that never enabled it — no empty bracket, no hint that a number was withheld. The ledger stores the body it actually sent, so what reached a device is auditable without a second, richer copy. Checks: the payload builder cannot reach `customerName`, `customerPhone`, `address`, `notes` or an item list under any setting; and with the toggle off no money figure appears in the body or in the stored snapshot. |
+| **D60** | Which notifications may a non-owner staff account receive? | **New orders only. Never an analytics alert or a summary.** A shop floor needs to know an order arrived; it does not need — and should not have — the store's traffic, conversion or search intelligence pushed to it, and an alert saying “visits fell 40%” is commercially sensitive in a way “a new order” is not. **There is no staff role in this codebase today** (`Role` is `PLATFORM_ADMIN | STORE_OWNER`, and a tenant has exactly one owner), so Phase 6 does not invent one. What it builds is the gate, enforced in data rather than in the UI: `NOTIFIABLE_TYPES` maps a role to the types it may receive, the notification writer refuses a type outside that set regardless of any preference row, and `/admin/notifications` only renders the toggles a role is allowed. The day a staff role is added it is one entry in that table and nothing else — and until then the check proves the refusal with a recipient whose role allows only `newOrders`. Introducing the role itself (invitations, per-screen permissions, session claims) is its own piece of work, outside this phase. |
 | **D51** | What happens to the checkout if push fails? | **Nothing.** The push work is scheduled with `after()` **after** the transaction commits, never inside it, and the callback owns a hard ~2.5s timeout and swallows everything (§11.4). The order is already the shopper's; the notification is a convenience for the merchant. A check places an order against a push endpoint that hangs, and asserts the checkout response time is unchanged and the order is complete — and a second check asserts a rolled-back order produces no notification, because the only thing worse than a missed notification is one for an order that does not exist. |
 | **D52** | Instant and catch-up both exist. How is one notification guaranteed? | **A logical notification keyed on `recipientUserId + NEW_ORDER + orderId`, and a lease on each delivery** (§11.5). The logical row is created inside a short transaction with a unique constraint, so the instant path and the catch-up stage race to insert and exactly one wins; the loser finds the row and stops. Each device's delivery is then claimed with a lease, so a retry after a crash cannot double-send. On the device, the payload's `tag` (`owner-order:<ownerId>:<orderId>`) plus a small seen-id store in the service worker collapses what the push service itself may deliver twice. Three layers, because each one fails differently: the constraint handles two senders, the lease handles a crash mid-send, the tag handles the push service. |
 | **D53** | How long is the batching window, and who waits? | **~4 seconds, and nobody waits.** The first post-commit callback takes an owner-scoped lock, waits out the window, claims every unnotified recent order, and sends one notification (§11.6). A second order arriving inside the window finds the lock, sees its order will be claimed, and exits. The window is spent inside `after()`, so no response is delayed by it. Four seconds is chosen to be shorter than the time it takes a merchant to pick up a phone and long enough to collapse the burst a shared post produces. |
@@ -94,7 +97,7 @@ more care than everything else in this phase combined:
 | Table | Purpose |
 |---|---|
 | `PushSubscription` | **D56.** `userId`, optional `tenantId`, `audience` (OWNER/PLATFORM), encrypted `endpoint`/`p256dh`/`auth`, device label and class, `createdAt`, `lastSuccessAt`, `lastFailureAt`, `revokedAt`/`expiredAt`. Tenant-scoped rows carry `tenantId` and therefore forced RLS, like every other store-owned table (P4-23a will count it). |
-| `OwnerNotificationPreference` | **§9.7.** One row per user: `newOrders`, `weeklySummary`, `productAlerts`, `funnelAlerts`, `searchAlerts`, `trafficAlerts`, all `@default(true)`. |
+| `OwnerNotificationPreference` | **§9.7, D50, D60.** One row per user: `newOrders`, `weeklySummary`, `productAlerts`, `funnelAlerts`, `searchAlerts`, `trafficAlerts`, all `@default(true)` — plus `showOrderAmount` at `@default(false)`, the only one that starts off. A row exists per user, not per tenant, so the gate in **D60** is a property of who the recipient is rather than of which store they belong to. |
 | `PlatformNotificationPreference` | **§9.7.** `inactiveStoreAlerts`, `storeDeclineAlerts`, `ingestionHealthAlerts`, `aggregationHealthAlerts`, `redisFallbackAlerts`, `pushDeliveryAlerts`, `weeklyPlatformSummary`. |
 | `AdminNotification` | **§9.8.** The logical notification: recipient, audience, type, the localized title/body **as sent**, destination path, `dedupeKey` (unique), `cooldownKey`, `createdAt`. |
 | `AdminNotificationOrder` | **D52.** Links a notification to the orders it covered, unique on (recipient, order) so one order is never announced twice to one person. |
@@ -207,10 +210,17 @@ prove the refusal instead. A leg that cannot run is a failure, not a skip.
 |---|---|
 | P6-23 | Every owner alert fires at Phase 5's threshold for its rule and not one session below it (**D54**), and carries the same evidence sentence the report shows. |
 | P6-24 | A per-type/entity cooldown suppresses the repeat and the reset re-arms it. |
-| P6-25 | Platform alerts fire under simulated ingestion failure, aggregation lag over 20 minutes, an expired run lease, Redis fallback and push-delivery failure (**D55**). |
+| P6-25 | Platform alerts fire under simulated ingestion failure, **contract rejections (the 400 signal)**, aggregation lag over 20 minutes, an expired run lease, Redis fallback and push-delivery failure (**D55**). The contract signal has its own much lower threshold and its own alert text: a 400 is our own code sending what the endpoint refuses, so it is never load-dependent and never the shopper's fault — a single-digit count in a window is already a bug, and it must not be averaged into the operational drop percentage. Phase 3 lost every batch off localhost while the operational rate read zero throughout; that is the failure this alert exists for. |
 | P6-26 | An inactive store alerts once on entry, not per run, and again only after activity resumes and stops. |
 | P6-27 | A failed scheduled run surfaces on the next evaluation rather than being lost with the process. |
 | P6-28 | The weekly summaries resolve 09:00 in the store's zone and the platform admin's zone respectively, across a DST boundary (**D45**'s rule, now in a schedule). |
+
+### Checked by a person, not a script
+
+| # | Item |
+|---|---|
+| P6-32 | **A real iPhone and a real Android phone each receive a new-order notification, and tapping it opens the right screen.** Done by the operator at the pilot, not automated, and the plan says so rather than pretending otherwise: Web Push on iOS exists only for a PWA added to the Home Screen, permission can only be granted by a human tap, and no headless check can prove a notification was drawn on a lock screen. Record, per device: install state, the permission prompt, delivery within seconds, the Arabic body rendered right-to-left, and where the tap landed. A failure here is a Phase 6 failure, not a pilot note. |
+| P6-33 | The same two devices receive one notification for several orders placed within a few seconds, and do **not** receive a second copy of one already seen (**D52**, **D53** in the only place they can be fully observed). |
 
 ### Regression
 
