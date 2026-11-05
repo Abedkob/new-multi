@@ -415,11 +415,39 @@ comments. Delete this section once it's no longer useful.
 - **A Redis fallback that starts and ends between two scheduled runs is never alerted.** The
   platform alert reads the client's current fallback state; recording a start and end would mean
   writing to the database on a path whose premise is that Redis is unavailable.
-- **The PWA manifests point at the platform favicon.** A real icon set is a design task, and a
-  manifest naming icons that do not exist fails to install on Android.
+- ~~**The PWA manifests point at the platform favicon.**~~ Fixed in Phase 7 (D76): two source
+  marks in `assets/`, a generated and committed set under `public/icons/`, one declaration
+  (`lib/push/icons.ts`) that the generator, both manifests and `pnpm verify:icons` all read.
+  Installing on a real device is still P7-33/P7-34.
 - **No in-app notification inbox.** The ledger is written and readable, but a merchant-facing
   list of past notifications is post-launch.
-- **There is no staff role.** D60's gate is built and enforced — a role maps to the types it may
-  receive, and the writer refuses the rest — but `Role` is still `PLATFORM_ADMIN | STORE_OWNER`.
-  Adding a staff role is one entry in `NOTIFIABLE_TYPES` plus the role itself (invitations,
-  per-screen permissions, session claims), which is its own piece of work.
+- ~~**There is no staff role.**~~ Added in Phase 7 (D70–D73): `Role.STAFF`, a CHECK constraint
+  tying it to one store, the capability table in `lib/permissions.ts`, and
+  `NOTIFIABLE_TYPES.STAFF = ["NEW_ORDER"]` — new orders and no analytics alert, enforced in the
+  writer before a row exists.
+
+## Phase 7 (staff, the edge, launch) — what is not covered
+
+- **No Content-Security-Policy on any page.** Each storefront injects its owner's own GA4 and
+  Meta snippets (`lib/analytics.tsx`) and the 13 templates ship inline styles, so a useful
+  policy needs per-request nonces threaded through all of them. `lib/edge.ts`'s
+  `securityHeaders()` therefore ships `nosniff`, `Referrer-Policy` and `Permissions-Policy` and
+  no CSP; the `/uploads/*` sandbox policy in `next.config.ts` remains the one place one is
+  enforced. A half-written policy that breaks one template's storefront is worse than none.
+- **No `X-Frame-Options` either.** The platform theme editor and the content editor both render
+  a store in an iframe. A correct allowance is per-path work rather than a blanket header.
+- **The origin lock is documented, not applied or asserted.** `EDGE_HARDENING.md` §4c carries the
+  Traefik middleware for restricting the HTTP origin to Cloudflare's ranges and stripping the
+  edge headers, written from Traefik's documentation and **not** yet applied to a live Dokploy
+  install. Dokploy's Traefik is shared with every other deployment on the box, which is why it
+  is a runbook step rather than a committed config file. `pnpm verify:edge` covers the
+  application's half only, and says so.
+- **A Cloudflare-proxied domain cannot be connected or re-saved (D84).** `checkDomainResolves`
+  requires the A record to equal `SERVER_PUBLIC_IP`, and an orange-clouded domain resolves to
+  Cloudflare. The workaround is ordering: connect while DNS-only, then proxy. Accepting
+  "resolves into Cloudflare's ranges" would weaken the one gate behind `Tenant.domain`'s
+  "verified and live" contract, and would need the range list that §4c argues against
+  committing.
+- **HSTS is not enabled.** `EDGE_HSTS_MAX_AGE` is 0 everywhere committed, by design (D74): it is
+  the one setting that cannot be withdrawn quickly, so it goes on by hand after the pilot store
+  has served a week of traffic.

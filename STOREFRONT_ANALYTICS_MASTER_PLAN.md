@@ -249,6 +249,8 @@ Store only:
 
 Country comes from trusted proxy metadata. IP is used transiently for rate limiting and then discarded.
 
+As of Phase 7 commit 8, "trusted" is enforced rather than assumed: `lib/edge.ts` believes that metadata only from a request the declared edge signed, and an untrusted request has no country at all (null, not a guess) — see D75/D83 and [EDGE_HARDENING.md](EDGE_HARDENING.md).
+
 ### 4.6 Small-store reporting
 
 - Merchant tables and charts always show actual measured counts, including one.
@@ -995,12 +997,12 @@ Verify:
 
 ### Phase 7 — Hardening, complete pilot, and full launch
 
-**Planned** — [PHASE_7_PLAN.md](PHASE_7_PLAN.md), twelve commits with decisions D70–D82.
+**Planned** — [PHASE_7_PLAN.md](PHASE_7_PLAN.md), twelve commits with decisions D70–D84.
 It adds one thing this section does not list: **staff accounts**, decided on 2026-11-05 to be
 needed before launch rather than after, so a third role joins an isolation model that has had
 two principals since Phase 1. They are commits 1–3 and gate the rest.
 
-- **Force HTTPS on every custom domain via Cloudflare** (Always Use HTTPS + an edge certificate per store domain, HTTP→HTTPS redirect at the edge, HSTS once verified). Not cosmetic: a plaintext custom domain cannot carry a `Secure` cookie, so consent and identity cookies are refused by the browser, and it is not a secure context, so `crypto.randomUUID` and other secure-context APIs are unavailable — the two defects Phase 3 found. HTTPS everywhere is what makes the shared host and a store's own domain behave identically.
+- **Force HTTPS on every custom domain via Cloudflare** (Always Use HTTPS + an edge certificate per store domain, HTTP→HTTPS redirect at the edge, HSTS once verified). **The code, configuration and runbook are done 2026-11-05** (Phase 7 commit 8): [EDGE_HARDENING.md](EDGE_HARDENING.md) is the ordered procedure with its break-glass path, `lib/edge.ts` is the application's half (`EDGE_FORCE_HTTPS`, HSTS off in every committed configuration by design, and a trust gate so `cf-ipcountry` is believed only from the edge), and `pnpm verify:edge` holds 25 of those properties statically. Turning it on is yours — it needs the real domain, and D84 says the domain must be connected *before* the orange cloud goes on. Not cosmetic: a plaintext custom domain cannot carry a `Secure` cookie, so consent and identity cookies are refused by the browser, and it is not a secure context, so `crypto.randomUUID` and other secure-context APIs are unavailable — the two defects Phase 3 found. HTTPS everywhere is what makes the shared host and a store's own domain behave identically.
 - ~~**Every E2E suite has its custom-domain leg**~~ **Done 2026-11-05** (Phase 7 commits 4–6): the nine suites in `scripts/verify-e2e-policy.ts`'s `PENDING_LEG` all have one, the set is empty, and `verify:e2e-policy` passes with 44 checks and no gaps. A silent pilot runs on a real store's own domain, so a suite that had never run against one had not been exercised against what is being piloted. Three things turned up on the way: the admin category tree had been asserting nothing (it indents with `paddingInlineStart`, for Arabic), `robots.txt`/`sitemap.xml` at a domain's root were already being rewritten by `proxy.ts` while both route docstrings called it future work, and two suites were reading client-resolved values the instant their selector appeared.
 - Security and privacy/legal review
 - Cross-tenant penetration testing

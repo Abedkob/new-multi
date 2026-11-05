@@ -20,8 +20,14 @@ const COUNTRY_HEADERS = ["cf-ipcountry", "x-vercel-ip-country", "x-geo-country"]
 const NON_COUNTRIES = new Set(["XX", "T1"]);
 
 /**
- * Country from trusted proxy metadata only. Never derived from an IP here: the IP is used for
- * rate limiting while the request is in flight and is not carried any further.
+ * Country out of proxy metadata. Never derived from an IP here: the IP is used for rate limiting
+ * while the request is in flight and is not carried any further.
+ *
+ * **Do not call this directly — use `countryFromTrusted` from `lib/edge.ts`.** Every header
+ * below is forgeable by anyone who can reach the origin without going through the edge, so the
+ * value is only meaningful once that question has been answered, and `pnpm verify:edge` fails if
+ * any file other than `lib/edge.ts` calls this. It stays here, and stays pure, because this
+ * module is imported by client components and the gate needs env and node:crypto.
  */
 export function countryFrom(headers: Headers): string | null {
   for (const name of COUNTRY_HEADERS) {

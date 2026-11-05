@@ -18,7 +18,8 @@ import {
   VISITOR_COOKIE_MAX_AGE_SECONDS,
 } from "@/lib/analytics/identity";
 import { markActive } from "@/lib/analytics/presence";
-import { countryFrom, deviceClassFrom } from "@/lib/analytics/request";
+import { deviceClassFrom } from "@/lib/analytics/request";
+import { countryFromTrusted } from "@/lib/edge";
 import { rolloutIncludes } from "@/lib/analytics/rollout";
 import { verifyBootstrapToken } from "@/lib/analytics/token";
 import { consentCookieName, decodeConsent } from "@/lib/consent/cookie";
@@ -137,7 +138,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ slu
   }
 
   const facts = {
-    country: countryFrom(req.headers),
+    country: countryFromTrusted(req.headers),
     deviceClass: deviceClassFrom(req.headers),
     visitorId: decodeIdentity("visitor", req.cookies.get(visitorCookieName(tenant.id))?.value),
     sessionId: decodeIdentity("session", req.cookies.get(sessionCookieName(tenant.id))?.value),

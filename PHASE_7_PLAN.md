@@ -35,8 +35,8 @@ a laptop. Phase 7 can produce:
 | 5 | **Legs: `discounts.ts`, `social-links.ts`, `storefront-pages.ts`.** discounts does not read the sale price, it buys the thing and checks the order snapshot (8000). social-links separates the footer's absolute social links from its root-relative own links. storefront-pages adds the one nothing covered: `robots.txt` and `sitemap.xml` at the **host root**, which proxy.ts has always rewritten — both route docstrings called it future work and are now correct. Hardened two flakes that read a value the instant its selector appeared. | done |
 | 6 | **Legs: `kinetic.ts`, `mirage.ts`, `prism.ts`. `PENDING_LEG` is empty**, and the set stays rather than being deleted so a new suite without a leg still fails. A template is almost all client code, so each leg's own assertion is that the code ran on a non-localhost host (a `.pin-spacer`, an inline style GSAP wrote); `assertStorefrontDomainBasics` holds the three things every template owes a store with a domain. | done |
 | 7 | **The icon set, and the two bugs it uncovered.** Two source SVGs → eight committed PNGs via `pnpm icons:build` (Chrome, no new dependency), one declaration in `lib/push/icons.ts` that the generator, both manifests and `verify:icons` all read. The icons were the easy half: **both manifests were 307ing to `/login`**, so neither app could be installed by anyone — a browser fetches a manifest with no cookies — and a store's own domain was serving the admin manifest, because `.webmanifest` has a dot in it and the custom-domain branch checked for static files before refusing platform paths. `verify:icons` 16, `verify:permissions` 25. | done |
-| 8 | Edge hardening: forced HTTPS, HSTS, and the trusted-proxy guard that makes `cf-ipcountry` safe to believe. | not started |
-| 9 | Production keys, `PHASE_7_DEPLOY_CHECKLIST.md`, and the `pilot` runbook. | not started |
+| 8 | **Edge hardening, and the half of it that is not in this repository.** `lib/edge.ts`: four variables all defaulting to the pre-Phase-7 behaviour, a trust gate that checks a secret Cloudflare adds (not an IP range — the socket's peer address never reaches Next), one chokepoint in front of `countryFrom` with `verify:edge` failing on a second caller, the forgeable headers dropped from an untrusted request, an https upgrade that fires only on an explicit `x-forwarded-proto: http`, and three response headers on every reply `proxy.ts` produces. `clientIp` now prefers the address the edge reported over counting hops. HSTS is absent from every committed config and `verify:edge` fails if that changes. The origin lock itself is `EDGE_HARDENING.md` §4c, with the break-glass path, because Dokploy's Traefik is shared with every other deployment on the box. Found D84 on the way: a Cloudflare-proxied domain cannot be connected in the platform admin at all. `verify:edge` 25. | done |
+| 9 | Production keys, `PHASE_7_DEPLOY_CHECKLIST.md`, and the `pilot` runbook. **Carries one thing found in commit 8:** `docker-compose.yml` passes none of the `ANALYTICS_*` or `PUSH_*` variables through to the container, and `lib/env.ts` requires `ANALYTICS_SIGNING_SECRET` in production — so a deploy from that file as it stands fails to boot. The checklist is where that gets fixed and named. | not started |
 | 10 | Load test, backup/restore drill, cross-tenant penetration script. | not started |
 | 10 -> merge | After commit 10: `analytics/phase-1` into `codex/new-brand-migration`, deployed with `ANALYTICS_ROLLOUT_MODE=off`, following `PHASE_7_DEPLOY_CHECKLIST.md`. | not started |
 | 11 | The pilot. **Postponed until you say so.** Carries the five edge checks that need a live domain (P7-12 to P7-16). | postponed |
@@ -211,6 +211,49 @@ from `main`, that is a decision for you to make explicitly at commit 9.
 happen before you have sign-off on the joint-controller privacy content, the consent wording,
 and the retention periods. It is the one item on the human checklist that can block commit 12.
 
+**D83 — The origin verifies a secret, because it cannot verify an IP (commit 8).**
+D75 says the fix is at the reverse proxy, and it is: Cloudflare's ranges only, edge headers
+stripped from everything else. But that is a proxy configuration somebody will reasonably change
+one day, and it is not something a script in this repository can hold down. So the application
+keeps a half of its own, and the question is what it can actually check. **Not an IP range** —
+inside Next every request's peer address is the local reverse proxy, so there is nothing to
+compare. What it can check is a shared secret that a Cloudflare Transform Rule adds to every
+request (`x-edge-token`) and a client reaching the origin directly cannot guess.
+
+Three consequences worth writing down:
+
+- `EDGE_TRUST_MODE=off` is the shipped default and means "nothing has been declared in front of
+  this origin, so proxy metadata is believed" — the pre-Phase-7 behaviour, correct for `pnpm dev`
+  and an explicit statement rather than an oversight.
+- `lib/env.ts` refuses to boot in `cloudflare` mode with no secret. Trusting *nothing* would drop
+  every visitor's country and silently fall back to hop counting, which looks exactly like a
+  correctly guarded origin.
+- `countryFromTrusted` is the only legitimate caller of `countryFrom`, and `verify:edge` fails if
+  anything else calls it. Three readers and a comment asking everyone to remember is how the
+  fourth one gets written.
+
+Each function takes its configuration as an optional argument defaulting to the environment.
+Nothing in the app passes one; `lib/env.ts` parses once per process, so behaviour that reads it
+directly can only be verified by spawning a process per case, and `verify:edge` exercises all
+four modes in one pass instead.
+
+**D84 — The orange cloud and custom-domain verification conflict, and the conflict is documented
+rather than resolved (commit 8).**
+`lib/domain-check.ts`'s `checkDomainResolves` requires a domain's A record to equal
+`SERVER_PUBLIC_IP` before `Tenant.domain` is saved. That gate is the whole of what makes the
+field's "verified and live" contract true, and the proxy's rewrite, sitemaps, canonicals and
+redirects all rely on it. A Cloudflare-proxied domain resolves to **Cloudflare**, so while the
+orange cloud is on (D74's own instruction), that domain cannot be connected or re-saved in the
+platform admin: the save is refused with `wrong-ip`.
+
+The workaround is an ordering step — connect while DNS-only, then turn the proxy on; to change
+it later, turn the proxy off, save, turn it back on. Written into `EDGE_HARDENING.md` §3 and §7
+rather than fixed, because accepting "resolves into Cloudflare's ranges" would weaken the one
+gate behind that contract, and would need exactly the range list that §4c argues against
+committing. Found by reading `.env.example`'s own comment while adding the edge variables next
+to it, not by trying it — so the first person to connect the pilot domain is the one who
+confirms it.
+
 ## 3. The nine custom-domain legs
 
 They are not nine equal pieces of work. Grouped by what each one is actually at risk of:
@@ -287,7 +330,9 @@ exists before the matrix does can only be refused, which is the correct directio
 | `app/admin/(panel)/staff/{page,actions}.tsx` | Owner-only. Invite, set first password, revoke, list. |
 | `assets/icon-{admin,platform}.svg` + `scripts/build-icons.ts` | D76. |
 | `public/icons/*.png` | The committed generated set. |
-| `scripts/verify-edge.ts` | D75: forced HTTPS, HSTS header, forged-country header refused, both manifests' icons resolve. |
+| `lib/edge.ts` | D75/D83: the trust gate, the forgeable-header strip, the https upgrade, the response security headers. |
+| `scripts/verify-edge.ts` | The 25 static checks over the above, and an explicit statement of which checks it leaves to the pilot. |
+| `EDGE_HARDENING.md` | The Cloudflare and reverse-proxy runbook, in order, with the break-glass path (§8) and the line that records the date HSTS was enabled. |
 | `scripts/verify-staff.ts` | The matrix exercised as a real staff session against every admin route, deny-by-default asserted. |
 | `scripts/pentest-cross-tenant.ts` | §13's cross-tenant penetration test, as a script rather than an afternoon. |
 | `scripts/load-test.ts` | §12.3's budgets against `next build && next start`, per CLAUDE.md. |
@@ -355,14 +400,34 @@ exists before the matrix does can only be refused, which is the correct directio
 
 ### The edge
 
-- P7-12 HTTP to a custom domain redirects to HTTPS at the edge.
+All five need the real domain and therefore run at the pilot, as the 2026-11-05 amendment says.
+**Commit 8 landed the code, the configuration and the runbook they will be checked against**, and
+`pnpm verify:edge` (25 checks, static) proves the application's half without pretending to prove
+the edge's. `EDGE_HARDENING.md` §6 has the curl commands for each.
+
+- P7-12 HTTP to a custom domain redirects to HTTPS at the edge. **Ready:** Cloudflare's *Always
+  Use HTTPS* is §4a of the runbook, and `EDGE_FORCE_HTTPS` makes the origin refuse a plaintext
+  request it somehow receives. `verify:edge` holds the behaviour that is easy to get wrong — it
+  fires on an explicit `x-forwarded-proto: http` and **not** on an absent one, which is what the
+  container's own healthcheck sends and what a redirect loop is made of.
 - P7-13 A `Secure` cookie set on a custom domain is returned by the browser on the next request.
+  **Needs TLS on the domain**, so it is a pilot check. `e2e:checkout`'s leg already proves the
+  non-`Secure` half of it (the consent cookie at the domain root, read back after a reload) on
+  `checkout-e2e.test`.
 - P7-14 A direct-to-origin request carrying a forged `cf-ipcountry` is refused or has the header
-  stripped — asserted against the live host.
+  stripped — asserted against the live host. **The application half is done and checked:** in
+  `cloudflare` mode a request with no `x-edge-token` gets `null` for its country and cannot
+  rotate its rate-limit bucket with `cf-connecting-ip`, and the proxy drops both headers on the
+  way in. The refusal itself is the Traefik middleware in §4c, which has not been applied to a
+  live install — when it is, `curl -sI https://<origin-ip>/ -H "Host: <domain>"` is the check.
 - P7-15 The tracker produces accepted batches on a custom domain (the Phase 3 regression, pinned
-  for good).
+  for good). Still a pilot check on the real domain; `e2e:consent` and `e2e:checkout` pin it on
+  a `.test` host, which is where the UUID regression would have been caught.
 - P7-16 HSTS is present only after it is deliberately enabled, and its presence is recorded with
-  a date.
+  a date. **Half done, and the half that can go wrong by accident:** `EDGE_HSTS_MAX_AGE` is 0 in
+  `.env.example` and `docker-compose.yml`, `verify:edge` fails if either ever ships a non-zero
+  value, and `lib/env.ts` refuses a max-age without `EDGE_FORCE_HTTPS`. The date line lives at
+  the end of `EDGE_HARDENING.md` and currently reads "not yet enabled".
 
 ### The PWA
 
@@ -429,7 +494,7 @@ exists before the matrix does can only be refused, which is the correct directio
 The things I cannot do, with what each one needs to produce. This becomes
 `HUMAN_CHECKLIST.md` in commit 9 so you can tick it somewhere durable.
 
-**Before commit 8 (the edge checks need a real domain):**
+**The edge (commit 8 is done; these turn it on):**
 
 Amended 2026-11-05: this used to say "before commit 4". It was wrong — the legs needed no domain
 of yours at all. Each suite drives its own `*.test` hostname that Chrome resolves to 127.0.0.1
@@ -437,10 +502,27 @@ via `--host-resolver-rules`, so commits 4–6 are done and none of them waited o
 domain is actually for is the edge: HTTPS, HSTS, a `Secure` cookie surviving a round trip, and a
 `cf-ipcountry` header that can be believed — P7-12 to P7-16, which is commit 8 and the pilot.
 
+Amended again 2026-11-05, after commit 8: the code and the runbook are in, so nothing below
+blocks me any more — these are the steps only you can take, and `EDGE_HARDENING.md` is the
+ordered version of them.
+
 - [ ] **Buy the test domain** and tell me the name, so `allowedDevOrigins` and the edge checks can
       use it. A throwaway `.com` is fine; it does not need to be the real brand.
-- [ ] **Put it on Cloudflare**: nameservers moved, orange-cloud on, Always Use HTTPS on, origin
-      certificate installed, Full (strict). Tell me when the padlock is real.
+- [ ] **Connect it in the platform admin while it is still DNS-only (grey cloud).** This is an
+      ordering constraint, not a preference: a proxied domain resolves to Cloudflare, and the
+      save-time DNS check requires the A record to be this server's own IP, so the connection
+      must happen before the orange cloud goes on (D84, `EDGE_HARDENING.md` §7).
+- [ ] **Put it on Cloudflare**: nameservers moved, Always Use HTTPS on, origin certificate
+      installed, Full (strict), the `x-edge-token` Transform Rule created — **then** orange-cloud
+      on. Tell me when the padlock is real.
+- [ ] **Generate `EDGE_SHARED_SECRET`** (`openssl rand -hex 32`) into the Transform Rule and
+      Dockploy's environment, in that order, and nowhere else. Then `EDGE_TRUST_MODE=cloudflare`
+      and `TRUSTED_PROXY_COUNT=2`.
+- [ ] **Apply the origin lock** (`EDGE_HARDENING.md` §4c) and confirm it with the two curls in
+      §6 — the labels there were written from Traefik's documentation and have never been
+      applied to a live Dokploy install, so correct that section with what actually worked.
+      Read §8 first: SSH and the Dokploy dashboard stay outside the lock, and that is the way
+      back out.
 - [ ] **Decide D73's table.** The one decision in this plan that is about your business rather
       than about code. Specifically: may staff cancel an order, and may staff see a customer's
       phone number?

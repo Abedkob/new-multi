@@ -83,6 +83,36 @@ export const envSchema = z
     // (1 = nginx/Caddy alone; 2 = e.g. Cloudflare -> nginx). The rate limiter takes the client
     // IP from that many entries from the right — see lib/rate-limit.ts's clientIp().
     TRUSTED_PROXY_COUNT: z.coerce.number().int().min(1).max(10).default(1),
+    // --- Phase 7: the edge (§D75, D83) ------------------------------------------------------
+    // Whether an edge sits in front of this origin, and therefore whether the proxy metadata
+    // that arrives with a request may be believed. See lib/edge.ts and EDGE_HARDENING.md.
+    //
+    //   off        (default) No edge, or you accept that `cf-ipcountry` and friends are
+    //              whatever the client said. This is the behaviour the app had before Phase 7:
+    //              correct for `pnpm dev` and for an origin that is not publicly reachable.
+    //   cloudflare Requests are believed only when they carry EDGE_SHARED_SECRET. Cloudflare
+    //              adds it with a Transform Rule; a client reaching the origin directly cannot.
+    EDGE_TRUST_MODE: z.enum(["off", "cloudflare"]).default("off"),
+    // The shared secret above. Long and random (`openssl rand -hex 32`), rotated by setting it
+    // in both places at once — Cloudflare's rule first, then here, since an origin that is
+    // briefly stricter than the edge loses geo, while the reverse loses the guard.
+    EDGE_SHARED_SECRET: z
+      .string()
+      .trim()
+      .min(32, "EDGE_SHARED_SECRET must be at least 32 characters (openssl rand -hex 32)")
+      .optional(),
+    // Redirect a request that arrived over plain HTTP to https. Only ever fires on an explicit
+    // `x-forwarded-proto: http` — never on an absent header, which is what the container's own
+    // healthcheck sends and what a redirect loop is made of.
+    EDGE_FORCE_HTTPS: z
+      .enum(["true", "false"])
+      .default("false")
+      .transform((v) => v === "true"),
+    // Strict-Transport-Security max-age in seconds. 0 (the default) means the header is absent.
+    // This is deliberately off in every committed configuration: HSTS is the one setting that
+    // cannot be withdrawn quickly, so D74 turns it on by hand after the pilot has served a week
+    // of real traffic, and P7-16 records the date it was enabled.
+    EDGE_HSTS_MAX_AGE: z.coerce.number().int().min(0).max(63_072_000).default(0),
     // Cloudflare R2 bucket for owner-uploaded images (lib/storage.ts). All five or none: when
     // unset, uploads fall back to local disk (public/uploads/), which is development-only.
     R2_ACCOUNT_ID: z.string().trim().regex(/^[0-9a-f]{32}$/, "Must be the 32-character hex Cloudflare account ID").optional(),
@@ -213,6 +243,22 @@ export const envSchema = z
     message: "SERVER_PUBLIC_IP is required in production (custom-domain DNS verification checks against it)",
     path: ["SERVER_PUBLIC_IP"],
   })
+  // A trust mode with nothing to check with is the worst of both worlds: lib/edge.ts would
+  // believe no request, so every visitor's country would be dropped and the rate limiter would
+  // fall back to X-Forwarded-For — silently, and looking exactly like a correctly guarded
+  // origin. Refuse to boot instead, the same way `pilot` with no pilot store does (D79).
+  .refine((v) => v.EDGE_TRUST_MODE === "off" || !!v.EDGE_SHARED_SECRET, {
+    message:
+      "EDGE_SHARED_SECRET is required when EDGE_TRUST_MODE=cloudflare (otherwise no request can ever be trusted). Generate with: openssl rand -hex 32",
+    path: ["EDGE_SHARED_SECRET"],
+  })
+  // Promising a browser "only ever reach me over https, for the next N seconds" while still
+  // answering http yourself is a promise about someone else's behaviour.
+  .refine((v) => v.EDGE_HSTS_MAX_AGE === 0 || v.EDGE_FORCE_HTTPS, {
+    message:
+      "EDGE_HSTS_MAX_AGE needs EDGE_FORCE_HTTPS=true: do not advertise HSTS from an origin that still serves plain HTTP",
+    path: ["EDGE_HSTS_MAX_AGE"],
+  })
   .refine((v) => R2_KEYS.every((k) => v[k]) || R2_KEYS.every((k) => !v[k]), {
     message: `Set all of ${R2_KEYS.join(", ")} or none of them`,
     path: ["R2_BUCKET"],
@@ -279,6 +325,10 @@ function load() {
       PLATFORM_BASE_URL: raw.PLATFORM_BASE_URL || undefined,
       SERVER_PUBLIC_IP: raw.SERVER_PUBLIC_IP || undefined,
       TRUSTED_PROXY_COUNT: Number(raw.TRUSTED_PROXY_COUNT) || 1,
+      EDGE_TRUST_MODE: (raw.EDGE_TRUST_MODE as "off" | "cloudflare") || "off",
+      EDGE_SHARED_SECRET: raw.EDGE_SHARED_SECRET || undefined,
+      EDGE_FORCE_HTTPS: raw.EDGE_FORCE_HTTPS === "true",
+      EDGE_HSTS_MAX_AGE: Number(raw.EDGE_HSTS_MAX_AGE) || 0,
       REDIS_URL: raw.REDIS_URL || undefined,
       R2_ACCOUNT_ID: raw.R2_ACCOUNT_ID || undefined,
       R2_ACCESS_KEY_ID: raw.R2_ACCESS_KEY_ID || undefined,
@@ -341,6 +391,10 @@ function load() {
         "PLATFORM_BASE_URL",
         "SERVER_PUBLIC_IP",
         "TRUSTED_PROXY_COUNT",
+        "EDGE_TRUST_MODE",
+        "EDGE_SHARED_SECRET",
+        "EDGE_FORCE_HTTPS",
+        "EDGE_HSTS_MAX_AGE",
         "REDIS_URL",
         ...R2_KEYS,
         "LICENSE_API_BASE_URL",

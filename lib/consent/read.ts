@@ -15,7 +15,8 @@ import {
   consentState,
   isConsentLocale,
 } from "@/lib/consent/types";
-import { countryFrom, deviceClassFrom } from "@/lib/analytics/request";
+import { deviceClassFrom } from "@/lib/analytics/request";
+import { countryFromTrusted } from "@/lib/edge";
 import { getStoreBasePath } from "@/lib/store-url";
 
 /** The tenant fields consent needs; a structural type so a `select`ed row fits. */
@@ -64,7 +65,7 @@ export async function requestIsHttps(): Promise<boolean> {
  * current request's headers for a Server Component or Server Action.
  */
 export async function requestCountry(): Promise<string | null> {
-  return countryFrom(await headers());
+  return countryFromTrusted(await headers());
 }
 
 export type { DeviceClass } from "@/lib/analytics/request";

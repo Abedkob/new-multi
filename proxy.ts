@@ -2,6 +2,7 @@ import NextAuth from "next-auth";
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 import { authConfig } from "@/auth.config";
+import { httpsRedirectUrl, sanitizeEdgeHeaders, securityHeaders } from "@/lib/edge";
 import { homeForRole, isAdminRole } from "@/lib/roles";
 import { env } from "@/lib/env";
 import { prisma } from "@/lib/prisma";
@@ -101,7 +102,9 @@ function redirectToStore(tenant: { slug: string; domain: string }, pathname: str
  * client entirely, so it can't be recovered from the pathname the way it can for a path-based URL.
  */
 function withStoreSlugHeader(req: NextRequest, slug: string, url?: URL) {
-  const headers = new Headers(req.headers);
+  // Built on the sanitized copy, not the raw headers: this is the rewrite every storefront
+  // request goes through, the analytics ingestion route included.
+  const headers = sanitizeEdgeHeaders(req.headers);
   headers.set("x-store-slug", slug);
   return url ? NextResponse.rewrite(url, { request: { headers } }) : NextResponse.next({ request: { headers } });
 }
@@ -202,53 +205,84 @@ async function maybeRedirectToDomain(pathname: string, search: string) {
   return redirectToStore({ slug, domain }, rest ?? "", search);
 }
 
+/** Applied to every response this file produces, redirects and 404s included. See lib/edge.ts
+ * for what is in that set and, more usefully, what is deliberately not. */
+function withSecurityHeaders(res: NextResponse): NextResponse {
+  for (const [name, value] of Object.entries(securityHeaders())) res.headers.set(name, value);
+  return res;
+}
+
 export default auth(async (req) => {
-  const { pathname } = req.nextUrl;
-  const hostname = normalizeHostname(req.headers.get("host") ?? "");
-  const platformHost = platformHostKind(hostname);
+  /**
+   * The routing decision, unchanged by Phase 7. Wrapped so there is one place that answers a
+   * plaintext request and one place that sets the response headers — the alternative is
+   * remembering to do both on each of the nine exits below, and a security header that is
+   * present on eight of nine responses is worse than none, because it reads as present.
+   */
+  const route = async (): Promise<NextResponse | undefined> => {
+    const { pathname } = req.nextUrl;
+    const hostname = normalizeHostname(req.headers.get("host") ?? "");
+    const platformHost = platformHostKind(hostname);
 
-  if (platformHost === "twin") return redirectToPlatform(req);
+    if (platformHost === "twin") return redirectToPlatform(req);
 
-  if (!platformHost) {
-    return handleCustomDomainHost(req, pathname, hostname);
-  }
-
-  if (PUBLIC_CONSOLE_PATHS.has(pathname)) return;
-
-  const user = req.auth?.user;
-  const redirectTo = (path: string) =>
-    NextResponse.redirect(new URL(path, req.nextUrl));
-
-  if (pathname === "/login") {
-    return user ? redirectTo(homeForRole(user.role)) : undefined;
-  }
-
-  if (pathname === "/platform" || pathname.startsWith("/platform/")) {
-    if (user?.role !== "PLATFORM_ADMIN") return redirectTo("/login");
-    return;
-  }
-
-  if (pathname === "/admin" || pathname.startsWith("/admin/")) {
-    // Both roles that belong to a store are admitted here, and this gate deliberately does not
-    // know which of them may see what. That is lib/permissions.ts's capability table, checked
-    // inside each page and action, where the tenant scope and the database are. The proxy stays
-    // what its own header comment says it is: optimistic, and not a security boundary.
-    if (!isAdminRole(user?.role)) return redirectTo("/login");
-    if (
-      user.mustChangePassword &&
-      pathname !== "/admin/change-password"
-    ) {
-      return redirectTo("/admin/change-password");
+    if (!platformHost) {
+      return handleCustomDomainHost(req, pathname, hostname);
     }
-    return;
-  }
 
-  if (pathname === "/store" || pathname.startsWith("/store/")) {
-    const redirect = await maybeRedirectToDomain(pathname, req.nextUrl.search);
-    if (redirect) return redirect;
-    const match = pathname.match(/^\/store\/([^/]+)/);
-    return match ? withStoreSlugHeader(req, match[1]) : undefined;
-  }
+    if (PUBLIC_CONSOLE_PATHS.has(pathname)) return undefined;
+
+    const user = req.auth?.user;
+    const redirectTo = (path: string) =>
+      NextResponse.redirect(new URL(path, req.nextUrl));
+
+    if (pathname === "/login") {
+      return user ? redirectTo(homeForRole(user.role)) : undefined;
+    }
+
+    if (pathname === "/platform" || pathname.startsWith("/platform/")) {
+      if (user?.role !== "PLATFORM_ADMIN") return redirectTo("/login");
+      return undefined;
+    }
+
+    if (pathname === "/admin" || pathname.startsWith("/admin/")) {
+      // Both roles that belong to a store are admitted here, and this gate deliberately does not
+      // know which of them may see what. That is lib/permissions.ts's capability table, checked
+      // inside each page and action, where the tenant scope and the database are. The proxy stays
+      // what its own header comment says it is: optimistic, and not a security boundary.
+      if (!isAdminRole(user?.role)) return redirectTo("/login");
+      if (
+        user.mustChangePassword &&
+        pathname !== "/admin/change-password"
+      ) {
+        return redirectTo("/admin/change-password");
+      }
+      return undefined;
+    }
+
+    if (pathname === "/store" || pathname.startsWith("/store/")) {
+      const redirect = await maybeRedirectToDomain(pathname, req.nextUrl.search);
+      if (redirect) return redirect;
+      const match = pathname.match(/^\/store\/([^/]+)/);
+      return match ? withStoreSlugHeader(req, match[1]) : undefined;
+    }
+
+    return undefined;
+  };
+
+  // Before the host is resolved and before the session is read: a request that arrived over
+  // plain HTTP has already crossed the network, and the only useful thing left to do with it is
+  // to stop answering it. Off by default (EDGE_FORCE_HTTPS) — /api and /_next/static are outside
+  // this file's matcher, so the edge's own "Always Use HTTPS" is what covers them.
+  const https = httpsRedirectUrl(new URL(req.url), req.headers);
+  if (https) return withSecurityHeaders(NextResponse.redirect(https, 308));
+
+  const response = await route();
+  return withSecurityHeaders(
+    // An exit that previously meant "carry on" now says so explicitly, which is also where the
+    // forgeable edge headers get dropped from an untrusted request on their way in.
+    response ?? NextResponse.next({ request: { headers: sanitizeEdgeHeaders(req.headers) } }),
+  );
 });
 
 export const config = {

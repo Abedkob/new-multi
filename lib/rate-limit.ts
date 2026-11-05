@@ -7,6 +7,7 @@
  * Callers don't need to know which backend is active.
  */
 
+import { edgeConfigFromEnv, trustedClientIp, type EdgeConfig } from "@/lib/edge";
 import { env } from "@/lib/env";
 import { redisRateLimit } from "@/lib/redis";
 
@@ -141,8 +142,19 @@ export const RATE_LIMITS = {
  * address it received the request from, so the real client is the entry TRUSTED_PROXY_COUNT
  * places from the right (1 = a single reverse proxy in front of Next; 2 = e.g. Cloudflare ->
  * nginx -> Next). Anything further left is client-controlled and ignored.
+ *
+ * Behind a declared edge (EDGE_TRUST_MODE), the address that edge reported is used instead and
+ * the hop counting is not consulted at all — see `trustedClientIp`. The count is one number that
+ * has to match the deployment's shape, and getting it wrong by one puts either every visitor or
+ * the whole internet into a single bucket, quietly.
+ *
+ * `edge` is for `verify:edge`, which exercises both paths in one process; nothing in the app
+ * passes it. See lib/edge.ts's docstring for why that argument exists at all.
  */
-export function clientIp(headers: Headers): string {
+export function clientIp(headers: Headers, edge?: EdgeConfig): string {
+  const fromEdge = trustedClientIp(headers, edge ?? edgeConfigFromEnv());
+  if (fromEdge) return fromEdge;
+
   const forwarded = headers.get("x-forwarded-for");
   if (forwarded) {
     const hops = forwarded.split(",").map((s) => s.trim()).filter(Boolean);

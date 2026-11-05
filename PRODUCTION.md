@@ -26,7 +26,17 @@ AUTH_SECRET="$(openssl rand -base64 32)"
 # Platform Configuration
 PLATFORM_BASE_URL="https://shops.example.com"
 SERVER_PUBLIC_IP="YOUR_SERVER_PUBLIC_IP"
+# 1 = one reverse proxy of your own; 2 = Cloudflare -> that proxy. See EDGE_HARDENING.md §5.
 TRUSTED_PROXY_COUNT="1"
+
+# The edge (Phase 7). Defaults below are the pre-Phase-7 behaviour: proxy metadata such as
+# cf-ipcountry is believed, which is only safe while nothing can reach this origin directly.
+# EDGE_HARDENING.md is the runbook, in the order these are turned on, with the break-glass path.
+EDGE_TRUST_MODE="off"            # "cloudflare" once the Transform Rule below exists
+# EDGE_SHARED_SECRET=""          # openssl rand -hex 32; same value in Cloudflare's Transform
+                                 # Rule (header x-edge-token). Required by "cloudflare" mode.
+EDGE_FORCE_HTTPS="false"         # "true" once the edge terminates TLS
+EDGE_HSTS_MAX_AGE="0"            # by hand, LAST, after a week of pilot traffic (D74)
 
 # Redis
 REDIS_PASSWORD="STRONG_REDIS_PASSWORD"

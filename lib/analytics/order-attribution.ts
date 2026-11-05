@@ -22,7 +22,8 @@ import {
   sessionCookieName,
   visitorCookieName,
 } from "@/lib/analytics/identity";
-import { countryFrom, deviceClassFrom } from "@/lib/analytics/request";
+import { deviceClassFrom } from "@/lib/analytics/request";
+import { countryFromTrusted } from "@/lib/edge";
 import { consentCookieName, decodeConsent } from "@/lib/consent/cookie";
 import type { OrderAttributionSnapshot } from "@/lib/data/orders";
 import { withAnalyticsTenant } from "@/lib/prisma-analytics";
@@ -113,7 +114,7 @@ export async function resolveOrderAttribution(
       firstTouchCampaign: visitor?.firstCampaign ?? null,
       // Prefer what analytics already recorded for this visit; fall back to this request's own
       // headers so an order still carries a country when the session row predates them.
-      analyticsCountry: session?.country ?? countryFrom(requestHeaders),
+      analyticsCountry: session?.country ?? countryFromTrusted(requestHeaders),
       analyticsDeviceClass: session?.deviceClass ?? deviceClassFrom(requestHeaders),
     };
   } catch (error) {

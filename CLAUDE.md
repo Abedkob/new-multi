@@ -53,6 +53,7 @@ pnpm dev                              # http://localhost:3000
 | `pnpm verify:notifications` | Test admin push end to end: the ledger under concurrent senders, delivery leases, the payload rules (no customer data, money opt-in), the endpoint allowlist, owner alerts at §6’s thresholds, platform alerts on transition, and both languages |
 | `pnpm verify:report-states` | Test the report screens' states (nothing measured yet, traffic without orders, Redis down, Arabic/RTL, phone cards, admin paths refused on a custom domain) |
 | `pnpm verify:e2e-policy` | Static check that every E2E suite has a custom-domain leg and no skip path (no server needed) |
+| `pnpm verify:edge` | Static check of the edge trust gate (D75): the four modes, the strip list, the single `countryFrom` caller, the https upgrade, and that no committed config enables HSTS (no server needed) |
 | `pnpm verify:icons` | Static check of the installable apps' icons: every manifest `src` resolves to a real PNG of the size it claims, both apps' marks differ, no orphans (no server needed) |
 | `pnpm icons:build` | Re-render `public/icons/*.png` from `assets/icon-{admin,platform}.svg` (needs Chrome). Commit what it writes |
 | `pnpm verify:reports` | Test the report read layer (aggregate-only rule, store-local date ranges across DST, null-not-zero rates, trend thresholds) |
@@ -94,6 +95,7 @@ Three layers:
 | `lib/permissions.ts` | **The capability table** — what each in-store role may do, plus `can()` and `requireCapability()`. Default deny |
 | `lib/data/staff.ts` | Staff accounts: create/list/revoke/reset. Writes the audit row itself, so a caller cannot omit it |
 | `lib/env.ts` | Environment validation (fails fast at startup if anything's missing/invalid) |
+| `lib/edge.ts` | What may be believed about where a request came from (D75): the trust gate, the forgeable-header strip, the https upgrade, the response security headers |
 | `app/actions/auth.ts` | Login, logout, password change |
 | `proxy.ts` | Custom-domain host routing, path-based → domain redirect, auth role gates |
 | `templates/meta.ts` | Canonical `TEMPLATE_IDS` registry (13 templates: minimal, classic, tonkic, fashion, luxury, atelier, atlas, pearl, drop, kinetic, mirage, muse, prism) + per-template default colors; `normalizeTemplateId` falls back unknown/legacy ids to `minimal` |
@@ -305,6 +307,46 @@ Added in Phase 7 (D70-D73). A third principal in an isolation model that had two
 - **Session revocation:** `User.sessionVersion` is stamped into the JWT at login. An admin password reset or the owner changing their own password bumps it. Any token with a stale version is sent to `/force-logout`, which clears the session cookie and redirects to `/login` (not straight to `/login`, because the JWT would just bounce an already-"authenticated" owner back to `/admin`).
 - **RLS & delayed logout:** `requireOwner` and `requirePlatformAdmin` re-check the user in the DB on every render/action (deduped per request with React's `cache()`), so a deleted tenant or a password reset takes effect on the very next request, not just the next login.
 
+## The Edge (Phase 7)
+
+Where a request came from, and what the app is allowed to believe because of it. The runbook is
+[EDGE_HARDENING.md](EDGE_HARDENING.md); the code is `lib/edge.ts`. All four variables default to
+the pre-Phase-7 behaviour, so a deployment that sets none of them behaves exactly as it did.
+
+- **The problem.** `cf-ipcountry` and `cf-connecting-ip` are right behind an edge and forgeable
+  without one: anyone who can reach the origin directly can write a country of their choosing
+  into the analytics tables and rotate their rate-limit bucket per request. The real fix is at
+  the reverse proxy (origin accepts only Cloudflare's ranges, edge headers stripped from
+  everything else) — documented, not in this repository, because Dokploy's Traefik is shared
+  with every other deployment on the box.
+- **What the app enforces.** `EDGE_TRUST_MODE=cloudflare` believes a request only when it carries
+  `EDGE_SHARED_SECRET` in `x-edge-token` (a Cloudflare Transform Rule adds it; a direct client
+  cannot guess it). A shared secret, not an IP range, because the socket's peer address never
+  reaches Next — every request's peer is the local proxy. `lib/env.ts` refuses to boot in
+  `cloudflare` mode with no secret: trusting nothing looks exactly like a correctly guarded
+  origin.
+- **One gate, not one per reader.** `countryFromTrusted` (in `lib/edge.ts`) is the only
+  legitimate caller of `countryFrom`, and `verify:edge` fails if anything else calls it. An
+  untrusted request yields `null` — unknown, never a guess.
+- **`TRUSTED_PROXY_COUNT` is 2 behind Cloudflare**, not the shipped default of 1. In
+  `cloudflare` mode a trusted request does not use it at all (`cf-connecting-ip` is the client),
+  which is the point: one number that must match the deployment's shape, where off-by-one puts
+  either every visitor or the whole internet into one rate-limit bucket, silently.
+- **Response headers** (`securityHeaders()`, applied by `proxy.ts` to every response it
+  produces, redirects and 404s included): `nosniff`, `Referrer-Policy`,
+  `Permissions-Policy`. Deliberately **not** `X-Frame-Options` (the theme and content editors
+  render a store in an iframe) and **not** a CSP (storefronts inject each owner's own GA4/Meta
+  snippets; a useful policy needs per-request nonces through 13 templates — see KNOWN_GAPS.md).
+- **HSTS is off in every committed configuration** and is turned on by hand, last, after the
+  pilot has served a week (D74). `EDGE_HSTS_MAX_AGE` needs `EDGE_FORCE_HTTPS=true`, and
+  `verify:edge` fails if `.env.example` or `docker-compose.yml` ever ships a non-zero value.
+- **The orange cloud and custom domains conflict (D84).** `checkDomainResolves` requires a
+  domain's A record to equal `SERVER_PUBLIC_IP`, and a Cloudflare-proxied domain resolves to
+  Cloudflare. So a domain must be **connected while DNS-only (grey cloud)** and proxied
+  afterwards; changing it later means turning the proxy off, saving, and turning it back on.
+  Written down rather than fixed: widening that gate would weaken the one check behind
+  `Tenant.domain`'s "verified and live" contract.
+
 ## Licensing & Store Availability
 
 - The app is self-hosted/sold with a per-tenant license (see `LICENSE_SETUP.md`). `lib/license/provider.ts` calls an external license API (`LICENSE_API_BASE_URL`, `LICENSE_PRODUCT_CODE`); `lib/license/crypto.ts` encrypts license keys/activation tokens at rest with `LICENSE_ENCRYPTION_KEY` (the browser never sees the raw key or token).
@@ -366,6 +408,10 @@ leg was added — and that leg's first run skipped itself with a plausible excus
   hosts file and no elevation.
 - Add each `*.test` hostname to `allowedDevOrigins` in `next.config.ts`, or `next dev` serves
   the page and withholds its JavaScript.
+- `pnpm verify:edge`: the trust gate at each mode, that every header the country reader looks
+  at is stripped from an untrusted request, that nothing but `lib/edge.ts` calls `countryFrom`,
+  and that HSTS is absent from every committed configuration. Static on purpose — the live
+  checks (P7-12 to P7-16) need the real domain and run at the pilot.
 - `pnpm verify:e2e-policy` enforces all of this statically. Every suite now has its leg — the
   nine that predated the policy were paid off in Phase 7 — so its `PENDING_LEG` set is empty and
   stays that way: a suite added without a leg fails the check, and the fix is to write the leg.
@@ -396,6 +442,7 @@ The app is deployed to production via Dockploy (Docker Compose: Next.js + Postgr
 - [DOCKPLOY_SETUP.md](DOCKPLOY_SETUP.md): step-by-step first-time deployment.
 - [PRODUCTION.md](PRODUCTION.md): environment variables and service configuration reference.
 - [DEPLOYMENT_CHECKLIST.md](DEPLOYMENT_CHECKLIST.md): pre-launch checklist.
+- [EDGE_HARDENING.md](EDGE_HARDENING.md): Cloudflare and reverse-proxy hardening, in the order it is turned on, with the break-glass path (see "The edge" below).
 - [LICENSE_SETUP.md](LICENSE_SETUP.md): licensing env vars and heartbeat cron setup (see "Licensing & Store Availability" above).
 
 ---

@@ -42,6 +42,13 @@ services:
       PLATFORM_BASE_URL: ${PLATFORM_BASE_URL:-http://localhost:3000}
       SERVER_PUBLIC_IP: ${SERVER_PUBLIC_IP}
       TRUSTED_PROXY_COUNT: ${TRUSTED_PROXY_COUNT:-1}
+      # The edge (Phase 7, D75). Defaults keep the pre-Phase-7 behaviour, so a deploy that
+      # sets none of them behaves as it did. EDGE_HARDENING.md is the order to turn them on in.
+      EDGE_TRUST_MODE: ${EDGE_TRUST_MODE:-off}
+      EDGE_SHARED_SECRET: ${EDGE_SHARED_SECRET}
+      EDGE_FORCE_HTTPS: ${EDGE_FORCE_HTTPS:-false}
+      # Deliberately 0 here: HSTS is enabled by hand, last, and only in the environment (D74).
+      EDGE_HSTS_MAX_AGE: ${EDGE_HSTS_MAX_AGE:-0}
       REDIS_URL: redis://:${REDIS_PASSWORD:-redis}@redis:6379
       PLATFORM_ADMIN_EMAIL: ${PLATFORM_ADMIN_EMAIL}
       PLATFORM_ADMIN_PASSWORD: ${PLATFORM_ADMIN_PASSWORD}
