@@ -18,8 +18,10 @@ const providerResponseSchema = z.object({
 
 export type LicenseProviderSnapshot = z.infer<typeof providerResponseSchema>;
 
+// LICENSE_API_BASE_URL already carries the API version (".../api/license/v1/"). Appending
+// another "/v1" hit a 404 HTML page, which surfaced as PROVIDER_UNAVAILABLE.
 function endpoint(path: "activate" | "heartbeat") {
-  return `${env.LICENSE_API_BASE_URL.replace(/\/+$/, "")}/v1/licenses/${path}`;
+  return `${env.LICENSE_API_BASE_URL.replace(/\/+$/, "")}/licenses/${path}`;
 }
 
 async function post(

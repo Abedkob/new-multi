@@ -11,6 +11,12 @@ import {
 const ACTIVE_CODE = "LICENSE_ACTIVE";
 const MIN_TOKEN_LENGTH = 20;
 
+// The provider stores product codes lowercased and echoes them that way ("abedz" for "Abedz"),
+// so a case-sensitive comparison would reject its own successful activations.
+function productCodeMatches(returned: string | null | undefined) {
+  return !returned || returned.toLowerCase() === env.LICENSE_PRODUCT_CODE.toLowerCase();
+}
+
 export async function activateTenantLicense(tenantId: string, licenseKey: string) {
   const key = licenseKey.trim();
   const row = await savePendingTenantLicense({
@@ -22,7 +28,7 @@ export async function activateTenantLicense(tenantId: string, licenseKey: string
 
   try {
     const snapshot = await activateLicense({ licenseKey: key, installationId: row.installationId });
-    if (snapshot.product_code && snapshot.product_code !== env.LICENSE_PRODUCT_CODE) {
+    if (!productCodeMatches(snapshot.product_code)) {
       await saveProviderSnapshot({
         id: row.id,
         snapshot: { ...snapshot, ok: false, code: "PRODUCT_CODE_MISMATCH" },
@@ -49,7 +55,8 @@ export async function activateTenantLicense(tenantId: string, licenseKey: string
 
     await saveProviderSnapshot({ id: row.id, snapshot, error: snapshot.code });
     return { ok: false as const, message: `The license provider returned ${snapshot.code}.` };
-  } catch {
+  } catch (error) {
+    console.error("[license] activation call failed", error);
     await saveProviderSnapshot({
       id: row.id,
       snapshot: { ok: false, code: "PROVIDER_UNAVAILABLE" },
@@ -73,7 +80,7 @@ export async function heartbeatDueTenantLicenses() {
           installationId: license.installationId,
           activationToken: token,
         });
-        if (snapshot.product_code && snapshot.product_code !== env.LICENSE_PRODUCT_CODE) {
+        if (!productCodeMatches(snapshot.product_code)) {
           await saveProviderSnapshot({
             id: license.id,
             snapshot: { ...snapshot, ok: false, code: "PRODUCT_CODE_MISMATCH" },
@@ -94,7 +101,8 @@ export async function heartbeatDueTenantLicenses() {
           activationTokenCiphertext: tokenCiphertext,
         });
         return snapshot.ok && snapshot.code === ACTIVE_CODE ? "active" as const : "rejected" as const;
-      } catch {
+      } catch (error) {
+        console.error("[license] heartbeat call failed", error);
         await recordHeartbeatFailure(license.id, new Date(Date.now() + 10 * 60_000));
         return "unavailable" as const;
       }
