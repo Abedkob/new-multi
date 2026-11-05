@@ -27,9 +27,10 @@ a laptop. Phase 7 can produce:
 | Commit | Content | State |
 |---|---|---|
 | — | Plan written. Staff accounts confirmed **needed before launch**, so they are commits 1–3 and gate everything else. | done |
-| 1 | Staff role in the schema, the RLS review that follows from it, `proxy.ts` and session gates. | not started |
-| 2 | The permission matrix as one table, deny-by-default, and `verify:permissions` grown to cover a third principal. | not started |
-| 3 | `/admin/staff`: the owner invites, sets a first password, and revokes. Audited. | not started |
+| - | Scope amended 2026-11-05: commits 11-12 **postponed until you say so**, and the five edge checks needing a live domain (P7-12 to P7-16) move with them; the merge into `codex/new-brand-migration` happens after commit 10 with `ANALYTICS_ROLLOUT_MODE=off`; **D73 answered** - staff see phone numbers, cancelling is owner-only; SSH and the Dokploy dashboard stay outside the Cloudflare lock (D75). | done |
+| 1 | **`Role.STAFF`, the constraint and the gates - granting nothing.** A new enum value, `User.staffTenantId` with a CHECK constraint ("STAFF implies exactly one store, anything else implies none"), `requireTenantMember` beside `requireOwner`, the proxy admitting both store roles, and `/admin/no-access` - because a refusal to `/login` would loop. RLS needed no change: every policy keys on the tenant. `verify:isolation` 18. | done |
+| 2 | **The capability table** (`lib/permissions.ts`): 18 capabilities, default deny, every admin page/layout/action naming one, and `verify:permissions` failing statically on one that names none. Stock got its own narrow write because the product form replaces the whole product. The nav filters from the same table the pages enforce. `verify:permissions` 24. | done |
+| 3 | **`/admin/staff`**: add, reset, remove; the first password shown once; the scope stated above the form. The audit row is written in `lib/data/staff.ts`, not the action, so it cannot be omitted. `verify:staff` 17. | done |
 | 4 | Custom-domain legs: `checkout.ts`, `categories.ts`, `variants.ts`. | not started |
 | 5 | Custom-domain legs: `discounts.ts`, `social-links.ts`, `storefront-pages.ts`. | not started |
 | 6 | Custom-domain legs: `kinetic.ts`, `mirage.ts`, `prism.ts`. `PENDING_LEG` is empty. | not started |
@@ -37,8 +38,9 @@ a laptop. Phase 7 can produce:
 | 8 | Edge hardening: forced HTTPS, HSTS, and the trusted-proxy guard that makes `cf-ipcountry` safe to believe. | not started |
 | 9 | Production keys, `PHASE_7_DEPLOY_CHECKLIST.md`, and the `pilot` runbook. | not started |
 | 10 | Load test, backup/restore drill, cross-tenant penetration script. | not started |
-| 11 | The pilot: run it, compare analytics against authoritative orders, fix findings. | not started |
-| 12 | `ANALYTICS_ROLLOUT_MODE=all`, launch-week monitoring, `PHASE_7_ACCEPTANCE.md`. | not started |
+| 10 -> merge | After commit 10: `analytics/phase-1` into `codex/new-brand-migration`, deployed with `ANALYTICS_ROLLOUT_MODE=off`, following `PHASE_7_DEPLOY_CHECKLIST.md`. | not started |
+| 11 | The pilot. **Postponed until you say so.** Carries the five edge checks that need a live domain (P7-12 to P7-16). | postponed |
+| 12 | `ANALYTICS_ROLLOUT_MODE=all`, launch-week monitoring, `PHASE_7_ACCEPTANCE.md`. **Postponed.** | postponed |
 
 ## 1. Scope
 
@@ -134,6 +136,12 @@ If you want a staff member who *can* cancel, or who *cannot* see a phone number,
 both are one row in that table, but the second needs a redaction path through
 `app/admin/(panel)/orders/[id]`, which is work.
 
+**D73 is answered (2026-11-05).** Staff **do** see a customer's phone number - you cannot pack
+a box without it - and cancelling is **owner-only**. Both are in the shipped table, and
+`verify:staff` exercises each: the order-detail check asserts the phone number is on the page,
+and `updateOrderStatusAction` picks "orders:cancel" for a cancellation and "orders:advance"
+for anything else, choosing only after the status has been validated.
+
 **D74 — One real test domain, Cloudflare proxied, Full (strict).**
 One domain, bought for this, pointed at the Dockploy server, orange-cloud on. *Always Use HTTPS*
 and *Automatic HTTPS Rewrites* on. Origin certificate installed so the edge-to-origin leg is
@@ -151,6 +159,12 @@ connections only from Cloudflare's published ranges**, enforced at the reverse p
 `CF-Connecting-IP`/`cf-ipcountry` stripped from any request that arrives another way. A new
 `pnpm verify:edge` asserts, against the live host, that a direct-to-origin request with a forged
 country header is refused.
+
+**SSH and the Dokploy dashboard stay outside that lock** (your instruction, 2026-11-05). The
+restriction covers the HTTP origin only; port 22 and Dokploy's own port keep their existing
+access. That is also the break-glass path this decision needed — the forgeable header arrives
+over HTTP, and losing access to the box that serves it would be a worse failure than the one
+being prevented.
 
 **D76 — Icons: one source SVG, a generated set, two marks.**
 `assets/icon-admin.svg` and `assets/icon-platform.svg` (different marks — a merchant and an
@@ -428,7 +442,7 @@ The things I cannot do, with what each one needs to produce. This becomes
       joint-controller language. **This is a gate** (D82): `ANALYTICS_ROLLOUT_MODE=all` waits
       for it.
 - [ ] **Decide whether `main` gets this** (D81), and say so.
-- [ ] **Turn on HSTS**, after the pilot store has served a week of traffic (D74).
+- [ ] **Turn on HSTS**, after the pilot store has served a week of traffic (D74). Part of the postponed pilot stage.
 
 ## 9. Risks
 

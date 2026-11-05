@@ -8,9 +8,10 @@ Multi-tenant e-commerce platform built with **Next.js 16 (App Router)** + **Post
 
 **Core concept:** Platform admin creates stores and owner accounts (no self-signup). Store owners manage their storefront independently. The system enforces strict tenant isolation at the app and database levels.
 
-Three user roles:
+Four user roles:
 - **Platform Admin** (`/platform/*`): manages stores, chooses templates/colors for each, resets owner passwords
 - **Store Owner** (`/admin/*`): edits content, products, categories, processes orders, and connects their own Google/Meta accounts under Marketing
+- **Staff** (`/admin/*`, a subset): one store's employees. Orders and stock only — see "Staff Accounts & Capabilities" below
 - **Public shoppers** (`/store/[slug]/*`): browse and purchase (no accounts, cash-on-delivery only)
 
 ## Quick Setup
@@ -43,7 +44,8 @@ pnpm dev                              # http://localhost:3000
 | `pnpm verify:isolation` | Test tenant isolation (DB-level access attempts must fail) |
 | `pnpm verify:commerce` | Test catalog/order/stock logic (category trees, variant rules, concurrent stock deduction) |
 | `pnpm verify:templates` | Test all templates × all sections (needs server running) |
-| `pnpm verify:permissions` | Test role-based access (needs server + login session) |
+| `pnpm verify:permissions` | Test role-based access + the static rule that every admin route names a capability (needs server + login session) |
+| `pnpm verify:staff` | Test staff accounts through a real staff session: every row of the D73 table, the refusal page, revocation, the audit row (needs server) |
 | `pnpm verify:social-links` | Test tenant social-link fields (validation, storefront rendering) |
 | `pnpm verify:campaigns` | Test saved marketing campaigns (D39: names saved by the owner, numbers only ever from the data) |
 | `pnpm verify:report-ui` | Test the report screens through a real owner session (exact small numbers, the two money figures never summed, empty funnel steps, deleted products, redacted searches) |
@@ -86,7 +88,9 @@ Three layers:
 | `lib/session.ts` | `requireOwner` / `requirePlatformAdmin` — re-checks DB on every render/action to catch password resets + deleted tenants immediately |
 | `lib/prisma.ts` | Prisma client setup, `withTenant()` / `withBypass()` transaction wrappers for RLS |
 | `lib/data/*.ts` | All queries scoped by `tenantId`; exports wrapped-query variants for use inside `withTenant` |
-| `lib/roles.ts` | Role enum, `homeForRole` helper |
+| `lib/roles.ts` | Role union (`PLATFORM_ADMIN`/`STORE_OWNER`/`STAFF`), `AdminRole`, `homeForRole` |
+| `lib/permissions.ts` | **The capability table** — what each in-store role may do, plus `can()` and `requireCapability()`. Default deny |
+| `lib/data/staff.ts` | Staff accounts: create/list/revoke/reset. Writes the audit row itself, so a caller cannot omit it |
 | `lib/env.ts` | Environment validation (fails fast at startup if anything's missing/invalid) |
 | `app/actions/auth.ts` | Login, logout, password change |
 | `proxy.ts` | Custom-domain host routing, path-based → domain redirect, auth role gates |
@@ -101,13 +105,27 @@ Three layers:
 #### Protecting Server Actions & Pages
 
 ```typescript
-import { requireOwner, requirePlatformAdmin } from "@/lib/session";
+import { requireCapability } from "@/lib/permissions";
+import { requirePlatformAdmin, requireTenantMember } from "@/lib/session";
 
-// In a Server Action or Server Component:
-const user = await requireOwner();     // throws if not logged in or not a store owner
+// Every page and action under app/admin names ONE capability. This is enforced statically by
+// pnpm verify:permissions: a route that names none fails the check.
+const { tenantId, role } = await requireCapability("orders:read");
+
+// Platform console:
 const admin = await requirePlatformAdmin();
-// user.tenantId is always from the session, never from form data
+
+// Only for surfaces that grant nothing beyond "you work here" (the panel shell, the language
+// switch, change-password). Listed by name in verify:permissions' SELF set.
+const member = await requireTenantMember();
+
+// tenantId is always from the session, never from form data
 ```
+
+`requireOwner` still exists and still means *owner*; nothing under `app/admin` calls it any
+more. It was deliberately **not** widened to admit staff — a guard that refuses too much fails
+in the safe direction, and renaming it across every call site two weeks before a pilot was the
+larger risk.
 
 #### Querying Tenant Data
 
@@ -142,6 +160,7 @@ const allProducts = await withBypass(async (tx) => {
 - Variants share attribute *names* but differ in *values*; typos in attribute names create new attributes.
 - Stock lives on `ProductVariant` — stock deduction is a conditional UPDATE in the order transaction (`UPDATE ... WHERE stock >= qty`), failing cleanly if another buyer took the last unit.
 - Variant queries go through products: `where: { id, product: { tenantId } }`.
+- **Stock has its own narrow write**: `setVariantStock` + `setVariantStockAction` + `/admin/products/[id]/stock`, because the product form replaces the whole product. That separation is what makes `products:stock` grantable to staff without also granting name, price and images.
 
 #### Images & Uploads
 
@@ -232,6 +251,39 @@ const allProducts = await withBypass(async (tx) => {
 - `User.adminLocale` persists the dashboard language, because a scheduled job has no cookie
   (D58). Notification wording lives in `lib/notifications/templates.ts`, not the dictionaries.
 
+## Staff Accounts & Capabilities
+
+Added in Phase 7 (D70-D73). A third principal in an isolation model that had two since Phase 1.
+
+- **`Role.STAFF`, not a flag.** A new enum value makes every exhaustive `switch` a compile error
+  until considered; `User.isStaff` would have left every existing `role === "STORE_OWNER"` check
+  silently true for staff.
+- **One store, enforced by the database.** `User.staffTenantId` plus a CHECK constraint
+  (`User_staff_tenant_required`): STAFF implies exactly one store, anything else implies none. A
+  staff account with no tenant would be a principal with no isolation scope.
+- **RLS needed no change.** Every policy keys on the tenant, not the user, so it already covers
+  a principal that did not exist when it was written. Staff go through the same `withTenant()`.
+- **One capability table** (`lib/permissions.ts`), default deny. `verify:permissions` fails on an
+  admin route that names no capability, so a new screen is refused to staff until somebody writes
+  down what it is for.
+- **What staff may do** (D73): open Orders and an order's detail *including the customer's phone
+  and address* (you cannot deliver without them), advance Pending -> Confirmed -> Delivered, read
+  products and categories, edit variant stock, and manage their own notification devices. They
+  may **not** cancel an order (it restores stock and is final), write a product, see any report
+  or marketing screen, touch settings, or manage staff.
+- **Refusals land on `/admin/no-access`**, never `/login` (the cookie is valid and the proxy
+  admits both store roles to `/admin`, so `/login` would loop) and never a 404 (the page exists,
+  it is just not theirs).
+- **The nav is filtered from the same table the pages enforce**, so a link can never offer
+  something the page behind it would refuse.
+- **Notifications**: `NOTIFIABLE_TYPES.STAFF = ["NEW_ORDER"]` (D60), enforced in the writer before
+  a row exists. Staff never receive an analytics alert.
+- **Every grant, reset and removal leaves an audit row** (`STAFF_CHANGE` in `AnalyticsAuditLog`),
+  written in `lib/data/staff.ts` rather than in the action so it cannot be omitted. Removal is a
+  delete; the live session dies on the next request because `lib/session.ts` re-reads the user.
+- **No invitation email.** The platform has never had outbound mail. The owner sets a first
+  password, shown once, with `mustChangePassword` set.
+
 ## Authentication & Sessions
 
 - **Login:** rate-limited per IP (8 attempts / 5 min). No CAPTCHA or account lockout yet.
@@ -274,7 +326,8 @@ No automated test suite yet. Manual verification scripts + browser E2E tests:
 - `pnpm verify:isolation`: app-level tenant isolation (DB access attempts must fail).
 - `pnpm verify:commerce`: category trees, variant rules, stock deduction (concurrent), order snapshots, cancellation.
 - `pnpm verify:templates`: all 13 templates × 10 sections, switches, live preview in admin/platform.
-- `pnpm verify:permissions`: role-based access via real login sessions + static check that every server action verifies role.
+- `pnpm verify:permissions`: role-based access via real login sessions + the static rule that every admin page, layout and action names a capability from `lib/permissions.ts` (and that staff hold exactly six of them).
+- `pnpm verify:staff`: a real staff session walked across every row of D73 — what opens, what refuses (each to `/admin/no-access`), the sidebar, notifications, revocation, cross-store isolation, and the audit row.
 - `pnpm verify:social-links`: tenant social-link field validation and rendering.
 - `pnpm verify:reports`: the report read layer — that it reads aggregates only (by walking its own imports), that a date range means store-local days across a 23- and a 25-hour day, that a rate with no denominator is null rather than 0, and that a trend is withheld below its sample floor.
 - `pnpm verify:insights`: every §6 threshold exercised at the line, one below it and one above, plus the rules that a redacted search phrase never becomes a suggestion, that an unmeasured figure is treated as unknown rather than low, and that no insight asserts a cause.
