@@ -37,14 +37,7 @@ const INFRASTRUCTURE = new Set(["browser.ts", "custom-domain.ts"]);
  * real store is a custom domain, so a suite that has never run against one has not been
  * exercised against the thing being piloted.
  */
-const PENDING_LEG = new Set([
-  "discounts.ts",
-  "kinetic.ts",
-  "mirage.ts",
-  "prism.ts",
-  "social-links.ts",
-  "storefront-pages.ts",
-]);
+const PENDING_LEG = new Set(["kinetic.ts", "mirage.ts", "prism.ts"]);
 
 let failures = 0;
 let checks = 0;

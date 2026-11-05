@@ -6,10 +6,14 @@ import { canServeTenant } from "@/lib/license/status";
 export const dynamic = "force-dynamic";
 
 /**
- * This store's own robots.txt. Has no effect today (crawlers only read robots.txt at the host
- * root, and today's host root is the platform's own app/robots.txt), but is reachable at
- * /store/[slug]/robots.txt and is exactly where a future acme.com/robots.txt rewrite should
- * point — see app/store/[slug]/sitemap.xml/route.ts for the same reasoning.
+ * This store's own robots.txt.
+ *
+ * On the shared host it sits at /store/[slug]/robots.txt, where no crawler will ever look —
+ * crawlers read robots.txt at the host root, and that root is the platform's own
+ * app/robots.txt. For a store with its own domain it IS the host root: proxy.ts excludes
+ * robots.txt and sitemap.xml from its static-file passthrough so acme.com/robots.txt lands
+ * here. pnpm e2e:pages' custom-domain leg holds that down — it reads this file from a store's
+ * domain and checks the Disallow paths and the Sitemap line are the domain's, not /store/<slug>'s.
  */
 export async function GET(_req: Request, { params }: { params: Promise<{ slug: string }> }) {
   const { slug } = await params;

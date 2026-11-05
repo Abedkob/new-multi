@@ -14,6 +14,9 @@ const nextConfig: NextConfig = {
     "checkout-e2e.test",
     "categories-e2e.test",
     "variants-e2e.test",
+    "discounts-e2e.test",
+    "social-e2e.test",
+    "pages-e2e.test",
   ],
   experimental: {
     serverActions: {

@@ -2,6 +2,7 @@
 import "dotenv/config";
 import "../_owner";
 import assert from "node:assert/strict";
+import type { Page } from "playwright-core";
 import { prisma } from "../../lib/prisma";
 import { createCategory } from "../../lib/data/categories";
 import { saveContent } from "../../lib/data/content";
@@ -10,6 +11,7 @@ import { createDiscount, setDiscountAssignmentsForProducts } from "../../lib/dat
 import { setTenantTemplate } from "../../lib/data/theme";
 import { TEMPLATE_IDS } from "../../templates/meta";
 import { BASE, launch, makeStore } from "./browser";
+import { assertDevOriginAllowed, onCustomDomain } from "./custom-domain";
 
 const variant = (stock = 5) => [{ attributes: {}, stock, priceCentsOverride: null, imageUrl: null }];
 const mk = (tenantId: string, name: string, categoryId: string | null, description = "") =>
@@ -59,8 +61,10 @@ async function main() {
   const page = await context.newPage();
   let n = 0;
   const ok = (m: string) => console.log(`  ok  ${++n} ${m}`);
-  const productLinks = async () =>
-    (await page.locator('[data-testid="catalog-page"] a[href*="/products/"]').evaluateAll((as) => [...new Set(as.map((a) => (a as HTMLAnchorElement).getAttribute("href")!.split("/products/")[1]))])).sort();
+  /** The product slugs a catalogue page links to, on whichever page object is passed. */
+  const productLinksOn = async (p: Page) =>
+    (await p.locator('[data-testid="catalog-page"] a[href*="/products/"]').evaluateAll((as) => [...new Set(as.map((a) => (a as HTMLAnchorElement).getAttribute("href")!.split("/products/")[1]))])).sort();
+  const productLinks = () => productLinksOn(page);
   const go = (path: string) => page.goto(`${BASE}/store/${slug}${path}`);
 
   try {
@@ -224,6 +228,120 @@ async function main() {
       await Promise.all([page.waitForURL(/category\/men/), tile.click()]);
     }
     ok("every template: navbar search works, cart link shows (0), category links go to real category pages");
+
+    // ---------- every one of those pages, on the store's own domain
+    // Mandatory since 2026-11-04 (scripts/e2e/custom-domain.ts): a leg that cannot run FAILS.
+    //
+    // This suite is the storefront's whole surface, and the surface is where the host decides
+    // what a URL means: catalogue paging, breadcrumbs, search, the content pages' nav links,
+    // and the two files a crawler asks the HOST ROOT for. Those last two are the reason this
+    // leg earns its keep — proxy.ts carves robots.txt and sitemap.xml out of its static-file
+    // passthrough precisely so a domain visitor gets this store's copy instead of the
+    // platform's, and until now nothing exercised that at all.
+    const domain = "pages-e2e.test";
+    assertDevOriginAllowed(domain);
+    await setTenantTemplate(T, "minimal");
+    await prisma.tenant.update({ where: { id: T }, data: { domain } });
+    try {
+      await onCustomDomain(domain, async ({ context: domainContext, origin }) => {
+        const d = await domainContext.newPage();
+        const host = new URL(origin).host;
+        const hrefs = (selector: string) =>
+          d.locator(selector).evaluateAll((as) =>
+            (as as HTMLAnchorElement[]).map((a) => a.getAttribute("href")!),
+          );
+
+        // The catalogue: paging and filters are URL state, and the URL has no slug in it here.
+        await d.goto(`${origin}/shop`, { waitUntil: "load" });
+        assert.equal(await d.locator('[data-testid="result-count"]').innerText(), "13 products");
+        const pageLinks = await hrefs('[data-testid="pagination"] a');
+        assert.ok(pageLinks.length > 0, "13 products over 12 per page must paginate");
+        for (const href of pageLinks) {
+          assert.ok(
+            !href.includes("/store/"),
+            `a pagination link must be root-relative on a domain, got ${href}`,
+          );
+        }
+        await Promise.all([
+          d.waitForURL(/page=2/),
+          d.locator('[data-testid="pagination"] a[rel="next"]').click(),
+        ]);
+        assert.equal(new URL(d.url()).host, host);
+
+        // The tree, from the deepest category up: breadcrumbs are the links most likely to be
+        // built from the slug rather than the base path.
+        await d.goto(`${origin}/category/nike`, { waitUntil: "load" });
+        assert.deepEqual(await productLinksOn(d), ["nike-runner", "nike-trainer"]);
+        const crumbHrefs = await hrefs('nav[aria-label="Breadcrumb"] a');
+        assert.ok(crumbHrefs.length > 0, "a third-level category must have breadcrumbs");
+        for (const href of crumbHrefs) {
+          assert.ok(
+            !href.includes("/store/"),
+            `a breadcrumb must be root-relative on a domain, got ${href}`,
+          );
+        }
+
+        // Search, including the part that matters most: another store's product with the same
+        // word in it must not appear just because the host changed.
+        await d.goto(`${origin}/search?q=NIKE`, { waitUntil: "load" });
+        assert.deepEqual(await productLinksOn(d), ["nike-runner", "nike-trainer"]);
+        await d.goto(`${origin}/search?q=other%20store`, { waitUntil: "load" });
+        assert.equal((await productLinksOn(d)).length, 0, "another store's product leaked");
+        ok(`on ${domain} shop paging, the category tree and search work with root-relative links`);
+
+        // The content pages, linked from the navbar and footer with no slug in front.
+        await d.goto(origin, { waitUntil: "load" });
+        const navPages = await hrefs('header a[href*="/about"], header a[href*="/faq"]');
+        assert.ok(navPages.length > 0, "About and FAQ have text, so they must be linked");
+        assert.deepEqual(
+          [...new Set(navPages)].sort(),
+          ["/about", "/faq"],
+          "on a domain a content-page link is the bare path",
+        );
+        assert.equal((await d.goto(`${origin}/about`))?.status(), 200);
+        assert.equal(await d.locator('[data-testid="content-page"] h1').innerText(), "About us");
+        ok(`on ${domain} About and FAQ are linked as bare paths and render`);
+
+        // And the two files a crawler asks the host root for. On the shared host these live
+        // under /store/<slug>/ and no crawler will ever see them; here they are the real thing.
+        const robotsResponse = await d.goto(`${origin}/robots.txt`);
+        assert.equal(robotsResponse?.status(), 200, "a domain must serve this store's robots.txt");
+        const robots = await robotsResponse!.text();
+        assert.match(robots, /^Disallow: \/cart$/m, `robots.txt must disallow /cart, got:\n${robots}`);
+        assert.ok(
+          !robots.includes("/store/"),
+          `robots.txt on a domain must not mention /store/<slug>, got:\n${robots}`,
+        );
+        assert.match(
+          robots,
+          new RegExp(`^Sitemap: https?://${domain}(:\\d+)?/sitemap\\.xml$`, "m"),
+          `robots.txt must point at this domain's sitemap, got:\n${robots}`,
+        );
+
+        const sitemapResponse = await d.goto(`${origin}/sitemap.xml`);
+        assert.equal(sitemapResponse?.status(), 200, "a domain must serve this store's sitemap");
+        const sitemap = await sitemapResponse!.text();
+        assert.ok(
+          sitemap.includes(`//${domain}`),
+          `the sitemap's URLs must be on this domain, got:\n${sitemap.slice(0, 400)}`,
+        );
+        assert.ok(
+          !sitemap.includes("/store/"),
+          `the sitemap must not list path-based URLs, got:\n${sitemap.slice(0, 400)}`,
+        );
+        assert.ok(
+          sitemap.includes("/products/cotton-shirt"),
+          "the sitemap must list this store's products",
+        );
+        assert.ok(
+          !sitemap.includes("nike-runner-other-store"),
+          "the sitemap must not list another store's products",
+        );
+        ok(`on ${domain} robots.txt and sitemap.xml are this store's own, at the host root`);
+      });
+    } finally {
+      await prisma.tenant.update({ where: { id: T }, data: { domain: null } });
+    }
   } finally {
     await browser.close();
     await store.remove();

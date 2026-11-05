@@ -6,10 +6,11 @@ import { canServeTenant } from "@/lib/license/status";
 export const dynamic = "force-dynamic";
 
 /**
- * This store's own sitemap. Reachable today at /store/[slug]/sitemap.xml; once custom-domain
- * routing rewrites acme.com/sitemap.xml to this same route, crawlers hitting acme.com find it
- * without any change here — see lib/store-url.ts for how the URLs inside it already resolve to
- * the right domain.
+ * This store's own sitemap. Reachable at /store/[slug]/sitemap.xml, and at the root of a
+ * store's own domain: proxy.ts rewrites acme.com/sitemap.xml to this same route, and the URLs
+ * inside it resolve to that domain on their own (lib/store-url.ts). pnpm e2e:pages' custom-
+ * domain leg reads it from a domain and checks both — the URLs are the domain's, and another
+ * store's products are not in it.
  */
 export async function GET(_req: Request, { params }: { params: Promise<{ slug: string }> }) {
   const { slug } = await params;

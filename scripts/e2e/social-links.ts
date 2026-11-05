@@ -10,6 +10,7 @@ import { updateTenantSocialLinks } from "../../lib/data/tenants";
 import { saveThemeOverrides, setTenantTemplate } from "../../lib/data/theme";
 import { TEMPLATE_IDS } from "../../templates/meta";
 import { BASE, launch, login, makeStore } from "./browser";
+import { assertDevOriginAllowed, onCustomDomain } from "./custom-domain";
 
 async function main() {
   const store = await makeStore("Social Links UI");
@@ -103,6 +104,59 @@ async function main() {
     await mobileFooter.screenshot({ path: join(shots, "footer-mobile.png") });
     await mobile.close();
     ok("mobile footer keeps every link visible without horizontal overflow");
+
+    // -------------------------------------------- the footer on the store's own domain
+    // Mandatory since 2026-11-04 (scripts/e2e/custom-domain.ts): a leg that cannot run FAILS.
+    //
+    // The footer is where the two kinds of link sit side by side, and the host decides which is
+    // which. The owner's social links are absolute and must survive untouched; everything else
+    // in the footer is store-relative and must lose its /store/<slug> prefix, because on a
+    // domain the store IS the root. Getting that backwards is invisible on the shared host and
+    // breaks every footer link, or every social link, on every store that has a domain.
+    const domain = "social-e2e.test";
+    assertDevOriginAllowed(domain);
+    await setTenantTemplate(store.tenant.id, "minimal");
+    await prisma.tenant.update({ where: { id: store.tenant.id }, data: { domain } });
+    try {
+      await onCustomDomain(domain, async ({ context: domainContext, origin }) => {
+        const d = await domainContext.newPage();
+        await d.goto(origin, { waitUntil: "load" });
+        const footer = d.locator("footer");
+        await footer.waitFor();
+
+        // Absolute, owner-supplied, and unchanged by the host.
+        const whatsapp = d.getByTestId("whatsapp-contact-button");
+        await whatsapp.waitFor();
+        assert.equal(await whatsapp.getAttribute("href"), "https://wa.me/96170123456");
+        const social = footer.locator('nav[aria-label="Social links"] a');
+        assert.equal(await social.count(), 4);
+        for (const link of await social.all()) {
+          const href = await link.getAttribute("href");
+          assert.ok(
+            href?.startsWith("https://"),
+            `a social link must stay absolute on a domain, got ${href}`,
+          );
+          assert.equal(await link.getAttribute("rel"), "noopener noreferrer");
+        }
+
+        // Store-relative, and root-relative here. Checked by where they point AND by one of
+        // them actually resolving — a link can be shaped correctly and still 404.
+        const internal = await footer.locator('a[href^="/"]').evaluateAll((as) =>
+          (as as HTMLAnchorElement[]).map((a) => a.getAttribute("href")!),
+        );
+        assert.ok(internal.length > 0, "the footer must link into the store");
+        for (const href of internal) {
+          assert.ok(
+            !href.startsWith("/store/"),
+            `on a domain a storefront link must not carry /store/<slug>, got ${href}`,
+          );
+        }
+        assert.equal((await d.goto(`${origin}/privacy`))?.status(), 200);
+        ok(`on ${domain} social links stay absolute and the footer's own links are root-relative`);
+      });
+    } finally {
+      await prisma.tenant.update({ where: { id: store.tenant.id }, data: { domain: null } });
+    }
 
     console.log(`\nAll ${checks} social-link browser checks passed.`);
     console.log(`Screenshots: ${shots}`);

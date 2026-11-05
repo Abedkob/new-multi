@@ -5,6 +5,7 @@ import assert from "node:assert/strict";
 import { prisma } from "../../lib/prisma";
 import { createProduct } from "../../lib/data/products";
 import { BASE, launch, login, makeStore } from "./browser";
+import { assertDevOriginAllowed, onCustomDomain } from "./custom-domain";
 
 const variant = (priceCentsOverride: number | null = null) => [{
   attributes: {},
@@ -70,6 +71,10 @@ async function main() {
 
     await page.goto(`${BASE}/admin/products`);
     const adminRow = page.locator("tbody tr", { hasText: "Sale Tee" });
+    // Wait for the badge rather than reading the row the moment it exists: saving the
+    // assignment revalidates this page, and sampling it mid-revalidation showed the plain
+    // price once — a flake that would have been read as "discounts are broken".
+    await adminRow.getByText("Discounted").waitFor();
     assert.match((await adminRow.innerText()).replace(/\s+/g, " "), /\$100\.00\s*\$80\.00\s*Discounted/);
     ok("the product list shows regular and discounted prices");
 
@@ -85,6 +90,71 @@ async function main() {
       await page.screenshot({ path: process.env.DISCOUNT_STOREFRONT_SCREENSHOT, fullPage: true });
     }
     ok("product detail and cart consistently show and total the sale price");
+
+    // ------------------------------------------------- the sale price, on the store's own domain
+    // Mandatory since 2026-11-04 (scripts/e2e/custom-domain.ts): a leg that cannot run FAILS.
+    //
+    // A discount is resolved on the server from the tenant, and on a custom domain the tenant
+    // comes from proxy.ts's host rewrite rather than from a slug in the path. Everything below
+    // the price therefore depends on that rewrite having found the right store — which is why
+    // this leg does not stop at reading the price off the page, but buys the thing and checks
+    // what the order wrote down. A discount that shows and does not charge, or charges and does
+    // not show, is money either way.
+    const domain = "discounts-e2e.test";
+    assertDevOriginAllowed(domain);
+    await prisma.tenant.update({ where: { id: store.tenant.id }, data: { domain } });
+    try {
+      await onCustomDomain(domain, async ({ context: domainContext, origin }) => {
+        const d = await domainContext.newPage();
+        await d.goto(`${origin}/products/${product.slug}`, { waitUntil: "load" });
+        const onDomain = (await d.locator('[data-testid="product-price"]').first().innerText()).replace(/\s+/g, " ");
+        assert.match(onDomain, /\$100\.00\s*\$80\.00\s*Sale/, `price on ${domain}: ${onDomain}`);
+
+        await d.locator('[data-testid="add-to-cart-button"]').click();
+        await d.locator('[data-testid="cart-link"]').first().click();
+        // Cart lines are resolved by a Server Action, so the subtotal is $0.00 until it
+        // answers: wait for the resolved line price instead of reading the total the instant a
+        // line appears. A line can also be withdrawn again (useCartDetails drops anything out
+        // of stock), so the notice is checked too — that way a withdrawal fails as a
+        // withdrawal rather than as a wrong subtotal.
+        const dLine = d.locator('[data-testid="cart-line"]');
+        await dLine.getByText("$80.00").first().waitFor();
+        assert.equal(await d.locator('[data-testid="cart-removed-notice"]').count(), 0);
+        assert.equal(await d.locator('[data-testid="cart-subtotal"]').innerText(), "$80.00");
+
+        await Promise.all([d.waitForURL(/\/checkout$/), d.click('[data-testid="go-to-checkout"]')]);
+        await d.waitForSelector("#co-customerName");
+        await d.fill("#co-customerName", "Sale Buyer");
+        await d.fill("#co-customerPhone", "+1 555 010 0177");
+        await d.fill("#co-customerAddress", "9 Discount Road");
+        await d.fill("#co-deliveryLocation", "https://maps.example.com/?q=discount");
+        assert.equal(await d.locator('[data-testid="checkout-total"]').innerText(), "$80.00");
+        await Promise.all([
+          d.waitForURL(/order-confirmation\//),
+          d.click('[data-testid="place-order"]'),
+        ]);
+        await d.locator('[data-testid="confirmation-page"]').waitFor();
+        const order = await prisma.order.findFirstOrThrow({
+          where: { tenantId: store.tenant.id, customerName: "Sale Buyer" },
+          include: { items: true },
+        });
+        assert.equal(
+          order.items[0].priceCentsSnapshot,
+          8000,
+          "the order must be charged the sale price the shopper was shown, not the base price",
+        );
+        ok(`on ${domain} the sale price is shown, totalled and charged (order snapshot $80.00)`);
+
+        // The product that is not in the campaign must be untouched here too — a host rewrite
+        // that resolved the wrong tenant would show a sale on everything or on nothing.
+        await d.goto(`${origin}/products/regular-hat`, { waitUntil: "load" });
+        const plain = (await d.locator('[data-testid="product-price"]').first().innerText()).replace(/\s+/g, " ");
+        assert.equal(plain, "$25.00", `an unassigned product must have no sale price, got ${plain}`);
+        ok(`on ${domain} a product outside the campaign keeps its plain price`);
+      });
+    } finally {
+      await prisma.tenant.update({ where: { id: store.tenant.id }, data: { domain: null } });
+    }
 
     const mobile = await browser.newContext({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true });
     const mobilePage = await mobile.newPage();
