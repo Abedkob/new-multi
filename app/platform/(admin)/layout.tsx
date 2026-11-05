@@ -17,6 +17,7 @@ export default async function PlatformLayout({
         links={[
           { href: "/platform", label: "Home" },
           { href: "/platform/stores", label: "Stores" },
+          { href: "/platform/analytics", label: "Analytics" },
           { href: "/platform/stores/new", label: "New store" },
         ]}
       />

@@ -16,7 +16,9 @@ export type AuditAction =
   | "PRIVACY_SUMMARY"
   | "PRIVACY_EXPORT"
   | "PRIVACY_ERASE"
-  | "INTEGRATION_CHANGE";
+  | "INTEGRATION_CHANGE"
+  /** A platform admin opened the cross-store console (D43). One row per view, not per query. */
+  | "PLATFORM_CONSOLE_VIEW";
 
 export type AuditEntry = {
   tenantId: string | null;
@@ -102,4 +104,32 @@ export function listAnalyticsAudit(tenantId: string, take = 20) {
       take,
     }),
   );
+}
+
+/**
+ * A platform admin opened the cross-store console (D43, P5-23).
+ *
+ * `tenantId` is null: the view is about every store at once, and attributing it to one of them
+ * would be false. The period is recorded, because "who looked at what" without "when they were
+ * looking at" answers half the question.
+ *
+ * Logged on the page's own render rather than in a middleware: the console is a server
+ * component that reads the numbers, so the row is written exactly where the data is read and
+ * cannot be bypassed by reaching the route another way.
+ */
+export async function recordPlatformConsoleView(input: {
+  actorUserId: string | null;
+  actorEmail: string;
+  from: string;
+  to: string;
+  timeZone: string;
+}): Promise<void> {
+  await recordAnalyticsAudit({
+    tenantId: null,
+    actorUserId: input.actorUserId,
+    actorEmail: input.actorEmail,
+    action: "PLATFORM_CONSOLE_VIEW",
+    subject: "platform-admin",
+    detail: `period ${input.from}..${input.to} (${input.timeZone})`,
+  });
 }
