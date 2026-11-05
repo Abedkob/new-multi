@@ -27,6 +27,7 @@
     "verify:e2e-policy": "tsx scripts/verify-e2e-policy.ts",
     "verify:icons": "tsx scripts/verify-icons.ts",
     "verify:edge": "tsx scripts/verify-edge.ts",
+    "verify:config": "tsx scripts/verify-config.ts",
     "verify:scheduled": "tsx scripts/verify-scheduled.ts",
     "verify:aggregates": "tsx scripts/verify-aggregates.ts",
     "verify:search": "tsx scripts/verify-search.ts",

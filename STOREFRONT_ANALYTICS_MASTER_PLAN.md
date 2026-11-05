@@ -1044,11 +1044,12 @@ PLATFORM_TIMEZONE=Asia/Beirut
 ANALYTICS_RAW_RETENTION_DAYS=90
 ANALYTICS_AGGREGATE_RETENTION_MONTHS=24
 ANALYTICS_VISITOR_RETENTION_MONTHS=13
+ANALYTICS_RECEIPT_RETENTION_MONTHS=24
 ANALYTICS_SESSION_TIMEOUT_MINUTES=30
 ANALYTICS_ACTIVE_WINDOW_MINUTES=5
 ANALYTICS_MAX_BATCH_SIZE=20
+ANALYTICS_MAX_IN_FLIGHT
 
-APP_DATABASE_POOL_MAX=20
 ANALYTICS_DATABASE_POOL_MAX=5
 ANALYTICS_JOB_DATABASE_POOL_MAX=2
 
@@ -1059,11 +1060,34 @@ PUSH_ENCRYPTION_KEY
 PUSH_TIMEOUT_MS=2500
 
 ANALYTICS_INGESTION_FAILURE_PERCENT=5
-ANALYTICS_AGGREGATION_LAG_MINUTES=20
-PUSH_DELIVERY_FAILURE_PERCENT=20
+ANALYTICS_INGESTION_MIN_BATCHES=20
+ANALYTICS_CONTRACT_REJECTION_ALERT=5
+ANALYTICS_HEALTH_FLUSH_MINUTES=5
 ~~~
 
-No secret becomes NEXT_PUBLIC. Return the VAPID public key from an authenticated admin endpoint.
+Corrected 2026-11-06 (Phase 7 commit 9, D78). This block is now exactly the variables
+`lib/env.ts` reads, and `pnpm verify:config` fails if it names one the code does not — in either
+direction. Three entries were removed because nothing read them, and a variable that is
+documented, set and never read is the failure this correction is about:
+
+- `APP_DATABASE_POOL_MAX=20` — the runtime pool is `max: 30`, hardcoded in `lib/prisma.ts`. The
+  load-tested number in CLAUDE.md is that 30, not this 20.
+- `ANALYTICS_AGGREGATION_LAG_MINUTES=20` and `PUSH_DELIVERY_FAILURE_PERCENT=20` — both are real
+  thresholds with those exact values, but they live in code as `PLATFORM_THRESHOLDS`
+  (`lib/notifications/platform-alerts.ts`), not in the environment. Deliberately: a platform
+  alert threshold that each deploy can set is a threshold nobody can reason about across
+  deployments.
+
+D78's original claim was that this block named `WEB_PUSH_*` and `PUSH_SUBSCRIPTION_ENCRYPTION_KEY`
+while the code read the four `PUSH_*` names. By the time commit 9 checked, the push names here
+already matched; the mismatch that survived was these three phantom entries, pointing the other
+way. `verify:config` also refuses the old names anywhere in the documents, so neither direction
+can come back.
+
+No secret becomes NEXT_PUBLIC — nothing in the repository does, and `verify:config` keeps it that
+way. The VAPID public key reaches the browser only as a prop of `/admin/notifications` and
+`/platform/notifications`, each behind its own capability or role gate; that is the
+"authenticated admin endpoint" this line asks for.
 
 Dokploy:
 

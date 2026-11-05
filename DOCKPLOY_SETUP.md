@@ -194,6 +194,59 @@ R2_BUCKET=your-bucket-name
 R2_PUBLIC_URL=https://your-r2-url.r2.dev
 ```
 
+
+**Storefront analytics, consent and privacy (Phase 1–5 — the first three are REQUIRED in
+production; `lib/env.ts` refuses to boot without them):**
+```
+ANALYTICS_SIGNING_SECRET=<openssl rand -base64 32>
+PLATFORM_PRIVACY_NAME=Your Company
+PLATFORM_PRIVACY_EMAIL=privacy@yourdomain.com
+PLATFORM_PRIVACY_URL=https://yourdomain.com/privacy
+ANALYTICS_SIGNING_KEY_VERSION=1
+ANALYTICS_ROLLOUT_MODE=off
+PLATFORM_DEFAULT_LOCALE=en
+PLATFORM_TIMEZONE=Asia/Beirut
+```
+Everything else analytics has a working default and only needs setting to override it:
+`ANALYTICS_PILOT_TENANT_SLUG` (with `ANALYTICS_ROLLOUT_MODE=pilot` only — the app refuses to
+boot with the mode and no slug), `ANALYTICS_DATABASE_POOL_MAX`,
+`ANALYTICS_JOB_DATABASE_POOL_MAX`, `ANALYTICS_MAX_BATCH_SIZE`, `ANALYTICS_MAX_IN_FLIGHT`,
+`ANALYTICS_INGESTION_FAILURE_PERCENT`, `ANALYTICS_INGESTION_MIN_BATCHES`,
+`ANALYTICS_CONTRACT_REJECTION_ALERT`, `ANALYTICS_HEALTH_FLUSH_MINUTES`,
+`ANALYTICS_RAW_RETENTION_DAYS`, `ANALYTICS_VISITOR_RETENTION_MONTHS`,
+`ANALYTICS_AGGREGATE_RETENTION_MONTHS`, `ANALYTICS_RECEIPT_RETENTION_MONTHS`,
+`ANALYTICS_SESSION_TIMEOUT_MINUTES`, `ANALYTICS_ACTIVE_WINDOW_MINUTES`, `PLATFORM_GA_ID`,
+`ORDER_PENDING_TTL_HOURS`.
+
+**Admin push (Phase 6 — optional, but all four together or none):**
+```
+PUSH_VAPID_PUBLIC_KEY=<npx web-push generate-vapid-keys>
+PUSH_VAPID_PRIVATE_KEY=<the private half; NEVER rotated, see D77>
+PUSH_VAPID_SUBJECT=mailto:you@yourdomain.com
+PUSH_ENCRYPTION_KEY=<openssl rand -base64 32>
+PUSH_TIMEOUT_MS=2500
+```
+These four names are the ones `lib/env.ts` reads. They are optional by design, so a misspelling
+gives you a working app with push silently off and no error anywhere — which is exactly what
+D78 was written about.
+
+**Licensing (Phase 4 — the last two are REQUIRED in production):**
+```
+LICENSE_ENCRYPTION_KEY=<base64 32 bytes>
+LICENSE_HEARTBEAT_SECRET=<32+ chars>
+```
+`LICENSE_API_BASE_URL`, `LICENSE_PRODUCT_CODE`, `LICENSE_APPLICATION_VERSION`,
+`LICENSE_PLATFORM` and `LICENSE_API_TIMEOUT_MS` all have defaults — see `LICENSE_SETUP.md`.
+
+**The edge (Phase 7 — all optional; defaults are the pre-Phase-7 behaviour):**
+```
+EDGE_TRUST_MODE=off
+EDGE_FORCE_HTTPS=false
+EDGE_HSTS_MAX_AGE=0
+```
+Plus `EDGE_SHARED_SECRET` once `EDGE_TRUST_MODE=cloudflare`. Turn these on in the order in
+`EDGE_HARDENING.md`, after the deploy is healthy — not with it.
+
 **Dependencies:**
 - Add `postgres` (wait for PostgreSQL to be healthy)
 - Add `redis` (wait for Redis to be healthy)
@@ -419,12 +472,63 @@ TRUSTED_PROXY_COUNT=1
 REDIS_URL=redis://:PASSWORD@redis:6379
 PLATFORM_ADMIN_EMAIL=admin@yourdomain.com
 PLATFORM_ADMIN_PASSWORD=<strong password>
-R2_ACCOUNT_ID=<optional>
-R2_ACCESS_KEY_ID=<optional>
-R2_SECRET_ACCESS_KEY=<optional>
-R2_BUCKET=<optional>
-R2_PUBLIC_URL=<optional>
+R2_ACCOUNT_ID=<required in production>
+R2_ACCESS_KEY_ID=<required in production>
+R2_SECRET_ACCESS_KEY=<required in production>
+R2_BUCKET=<required in production>
+R2_PUBLIC_URL=<required in production>
+ANALYTICS_SIGNING_SECRET=<required in production>
+PLATFORM_PRIVACY_NAME=<required in production>
+PLATFORM_PRIVACY_EMAIL=<required in production>
+PLATFORM_PRIVACY_URL=<optional>
+LICENSE_ENCRYPTION_KEY=<required in production>
+LICENSE_HEARTBEAT_SECRET=<required in production>
+ANALYTICS_SIGNING_KEY_VERSION=1
+ANALYTICS_ROLLOUT_MODE=off
+ANALYTICS_PILOT_TENANT_SLUG=<only with ANALYTICS_ROLLOUT_MODE=pilot>
+PLATFORM_DEFAULT_LOCALE=en
+PLATFORM_TIMEZONE=Asia/Beirut
+PLATFORM_GA_ID=<optional>
+ORDER_PENDING_TTL_HOURS=24
+ANALYTICS_DATABASE_POOL_MAX=5
+ANALYTICS_JOB_DATABASE_POOL_MAX=2
+ANALYTICS_MAX_BATCH_SIZE=20
+ANALYTICS_MAX_IN_FLIGHT=<optional>
+ANALYTICS_INGESTION_FAILURE_PERCENT=5
+ANALYTICS_INGESTION_MIN_BATCHES=20
+ANALYTICS_CONTRACT_REJECTION_ALERT=5
+ANALYTICS_HEALTH_FLUSH_MINUTES=5
+ANALYTICS_RAW_RETENTION_DAYS=90
+ANALYTICS_VISITOR_RETENTION_MONTHS=13
+ANALYTICS_AGGREGATE_RETENTION_MONTHS=24
+ANALYTICS_RECEIPT_RETENTION_MONTHS=24
+ANALYTICS_SESSION_TIMEOUT_MINUTES=30
+ANALYTICS_ACTIVE_WINDOW_MINUTES=5
+PUSH_VAPID_PUBLIC_KEY=<optional, all four together>
+PUSH_VAPID_PRIVATE_KEY=<optional, NEVER rotated>
+PUSH_VAPID_SUBJECT=mailto:you@yourdomain.com
+PUSH_ENCRYPTION_KEY=<optional, required once push is on>
+PUSH_TIMEOUT_MS=2500
+LICENSE_API_BASE_URL=<has a default>
+LICENSE_PRODUCT_CODE=<has a default>
+LICENSE_APPLICATION_VERSION=<has a default>
+LICENSE_PLATFORM=linux
+LICENSE_API_TIMEOUT_MS=10000
+EDGE_TRUST_MODE=off
+EDGE_SHARED_SECRET=<only with EDGE_TRUST_MODE=cloudflare>
+EDGE_FORCE_HTTPS=false
+EDGE_HSTS_MAX_AGE=0
 ```
+
+This list is every variable `lib/env.ts` reads, and `pnpm verify:config` fails if it ever stops
+being — it compares this section against the code and against `.env.example`. It was 8 of 49
+until Phase 7 commit 9, which would have left a fresh deploy refusing to boot on
+`ANALYTICS_SIGNING_SECRET` with no hint of why.
+
+**This is the production path, not `docker-compose.yml`.** The app is deployed from the
+Dockerfile with its environment set in Dockploy's UI; the compose file is reference only (and
+also complete now, for `docker compose up` and for the load test, where `environment:` is a
+whitelist and a variable not listed there never reaches the container).
 
 ---
 

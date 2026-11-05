@@ -36,7 +36,7 @@ a laptop. Phase 7 can produce:
 | 6 | **Legs: `kinetic.ts`, `mirage.ts`, `prism.ts`. `PENDING_LEG` is empty**, and the set stays rather than being deleted so a new suite without a leg still fails. A template is almost all client code, so each leg's own assertion is that the code ran on a non-localhost host (a `.pin-spacer`, an inline style GSAP wrote); `assertStorefrontDomainBasics` holds the three things every template owes a store with a domain. | done |
 | 7 | **The icon set, and the two bugs it uncovered.** Two source SVGs → eight committed PNGs via `pnpm icons:build` (Chrome, no new dependency), one declaration in `lib/push/icons.ts` that the generator, both manifests and `verify:icons` all read. The icons were the easy half: **both manifests were 307ing to `/login`**, so neither app could be installed by anyone — a browser fetches a manifest with no cookies — and a store's own domain was serving the admin manifest, because `.webmanifest` has a dot in it and the custom-domain branch checked for static files before refusing platform paths. `verify:icons` 16, `verify:permissions` 25. | done |
 | 8 | **Edge hardening, and the half of it that is not in this repository.** `lib/edge.ts`: four variables all defaulting to the pre-Phase-7 behaviour, a trust gate that checks a secret Cloudflare adds (not an IP range — the socket's peer address never reaches Next), one chokepoint in front of `countryFrom` with `verify:edge` failing on a second caller, the forgeable headers dropped from an untrusted request, an https upgrade that fires only on an explicit `x-forwarded-proto: http`, and three response headers on every reply `proxy.ts` produces. `clientIp` now prefers the address the edge reported over counting hops. HSTS is absent from every committed config and `verify:edge` fails if that changes. The origin lock itself is `EDGE_HARDENING.md` §4c, with the break-glass path, because Dokploy's Traefik is shared with every other deployment on the box. Found D84 on the way: a Cloudflare-proxied domain cannot be connected in the platform admin at all. `verify:edge` 25. | done |
-| 9 | Production keys, `PHASE_7_DEPLOY_CHECKLIST.md`, and the `pilot` runbook. **Carries one thing found in commit 8:** `docker-compose.yml` passes none of the `ANALYTICS_*` or `PUSH_*` variables through to the container, and `lib/env.ts` requires `ANALYTICS_SIGNING_SECRET` in production — so a deploy from that file as it stands fails to boot. The checklist is where that gets fixed and named. | not started |
+| 9 | **The runbook, and the configuration gap it was written to close.** `PHASE_7_DEPLOY_CHECKLIST.md` (off → verify → pilot → all, with a rollback table), `HUMAN_CHECKLIST.md`, D80's numbers above, and D78's §14 correction. The gap commit 8 reported was real but mis-attributed: `docker-compose.yml` is "reference only" per `DOCKPLOY_SETUP.md`, and **that** document — the actual production path, where environment is set in Dockploy's UI — listed 8 of the 49 variables `lib/env.ts` reads, missing all three that production refuses to boot without. Both are complete now, and `pnpm verify:config` (15 checks) compares every document against the code rather than trusting any of them. §14 itself named three variables nothing reads. | done |
 | 10 | Load test, backup/restore drill, cross-tenant penetration script. | not started |
 | 10 -> merge | After commit 10: `analytics/phase-1` into `codex/new-brand-migration`, deployed with `ANALYTICS_ROLLOUT_MODE=off`, following `PHASE_7_DEPLOY_CHECKLIST.md`. | not started |
 | 11 | The pilot. **Postponed until you say so.** Carries the five edge checks that need a live domain (P7-12 to P7-16). | postponed |
@@ -201,7 +201,24 @@ deploy of everything; and if something is wrong with the merge, "is it the merge
 collection?" should not be a question.
 
 **D80 — Pilot exit criteria are numeric and committed before the pilot starts.**
-Written in commit 9, in the checklist, before any data exists. §8 below has my proposal.
+Written in commit 9, in `PHASE_7_DEPLOY_CHECKLIST.md` §8, before any data exists. The window is
+**7 days** and at least **20 orders** — a quieter week is a dry run, not a pilot. Then:
+
+| # | Criterion | Threshold |
+|---|---|---|
+| P7-27 | Analytics order count vs the authoritative `Order` table | exactly equal, **0** discrepancy |
+| P7-27 | Analytics revenue vs the same | exactly equal, **0** cents |
+| P7-28 | Contract rejections over the window | **0** |
+| P7-29 | Operational drop rate | under **5%** |
+| P7-30 | Aggregation lag without an alert firing | never above **20 minutes** |
+| P7-31 | Push delivery failure rate to real devices | under **20%**, recorded either way |
+
+The three percentages and the 20 minutes are not new numbers: they are the thresholds the code
+already acts on (`ANALYTICS_INGESTION_FAILURE_PERCENT`, and `PLATFORM_THRESHOLDS` in
+`lib/notifications/platform-alerts.ts`), so the pilot is held to the same line that decides
+whether an alert fires. The two zeros are definitions rather than thresholds: a rejected batch
+means the contract and the producer disagree, and a revenue figure that is *close* is a revenue
+figure that is wrong.
 
 **D81 — `main` is still not touched.** Phase 7 lands on `analytics/phase-1` and merges into
 `codex/new-brand-migration`. Nothing in this plan pushes `main`. If the pilot is meant to run

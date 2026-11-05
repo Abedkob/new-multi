@@ -64,6 +64,48 @@ services:
       LICENSE_API_TIMEOUT_MS: ${LICENSE_API_TIMEOUT_MS:-10000}
       LICENSE_ENCRYPTION_KEY: ${LICENSE_ENCRYPTION_KEY}
       LICENSE_HEARTBEAT_SECRET: ${LICENSE_HEARTBEAT_SECRET}
+      ORDER_PENDING_TTL_HOURS: ${ORDER_PENDING_TTL_HOURS:-24}
+      # --- Storefront analytics, consent and push -------------------------------------------
+      # Every one of these was missing until Phase 7 commit 9, and `environment:` is a
+      # whitelist: a variable set in Dokploy that is not listed here never reaches the
+      # container. So a production deploy from this file either failed to boot
+      # (ANALYTICS_SIGNING_SECRET and the two PLATFORM_PRIVACY_* values are required in
+      # production by lib/env.ts) or came up with push and analytics silently unconfigured —
+      # which is the exact failure D78 was written about, one layer further out.
+      # `pnpm verify:config` now fails when a variable lib/env.ts reads is not passed here.
+      # Empty is safe: lib/env.ts treats an empty string as unset, so an unset variable gets
+      # its documented default rather than a parse error.
+      ANALYTICS_ROLLOUT_MODE: ${ANALYTICS_ROLLOUT_MODE}
+      ANALYTICS_PILOT_TENANT_SLUG: ${ANALYTICS_PILOT_TENANT_SLUG}
+      ANALYTICS_SIGNING_SECRET: ${ANALYTICS_SIGNING_SECRET}
+      ANALYTICS_SIGNING_KEY_VERSION: ${ANALYTICS_SIGNING_KEY_VERSION:-1}
+      PLATFORM_PRIVACY_NAME: ${PLATFORM_PRIVACY_NAME}
+      PLATFORM_PRIVACY_EMAIL: ${PLATFORM_PRIVACY_EMAIL}
+      PLATFORM_PRIVACY_URL: ${PLATFORM_PRIVACY_URL}
+      PLATFORM_DEFAULT_LOCALE: ${PLATFORM_DEFAULT_LOCALE:-en}
+      PLATFORM_TIMEZONE: ${PLATFORM_TIMEZONE:-Asia/Beirut}
+      PLATFORM_GA_ID: ${PLATFORM_GA_ID}
+      ANALYTICS_DATABASE_POOL_MAX: ${ANALYTICS_DATABASE_POOL_MAX:-5}
+      ANALYTICS_JOB_DATABASE_POOL_MAX: ${ANALYTICS_JOB_DATABASE_POOL_MAX:-2}
+      ANALYTICS_MAX_BATCH_SIZE: ${ANALYTICS_MAX_BATCH_SIZE:-20}
+      ANALYTICS_MAX_IN_FLIGHT: ${ANALYTICS_MAX_IN_FLIGHT}
+      ANALYTICS_INGESTION_FAILURE_PERCENT: ${ANALYTICS_INGESTION_FAILURE_PERCENT:-5}
+      ANALYTICS_INGESTION_MIN_BATCHES: ${ANALYTICS_INGESTION_MIN_BATCHES:-20}
+      ANALYTICS_CONTRACT_REJECTION_ALERT: ${ANALYTICS_CONTRACT_REJECTION_ALERT:-5}
+      ANALYTICS_HEALTH_FLUSH_MINUTES: ${ANALYTICS_HEALTH_FLUSH_MINUTES:-5}
+      ANALYTICS_RAW_RETENTION_DAYS: ${ANALYTICS_RAW_RETENTION_DAYS:-90}
+      ANALYTICS_VISITOR_RETENTION_MONTHS: ${ANALYTICS_VISITOR_RETENTION_MONTHS:-13}
+      ANALYTICS_AGGREGATE_RETENTION_MONTHS: ${ANALYTICS_AGGREGATE_RETENTION_MONTHS:-24}
+      ANALYTICS_RECEIPT_RETENTION_MONTHS: ${ANALYTICS_RECEIPT_RETENTION_MONTHS:-24}
+      ANALYTICS_SESSION_TIMEOUT_MINUTES: ${ANALYTICS_SESSION_TIMEOUT_MINUTES:-30}
+      ANALYTICS_ACTIVE_WINDOW_MINUTES: ${ANALYTICS_ACTIVE_WINDOW_MINUTES:-5}
+      # The four names lib/env.ts actually reads (D78). Generated once and never rotated:
+      # the VAPID pair is the identity every installed device subscribed to (D77).
+      PUSH_VAPID_PUBLIC_KEY: ${PUSH_VAPID_PUBLIC_KEY}
+      PUSH_VAPID_PRIVATE_KEY: ${PUSH_VAPID_PRIVATE_KEY}
+      PUSH_VAPID_SUBJECT: ${PUSH_VAPID_SUBJECT}
+      PUSH_ENCRYPTION_KEY: ${PUSH_ENCRYPTION_KEY}
+      PUSH_TIMEOUT_MS: ${PUSH_TIMEOUT_MS:-2500}
     # Dokploy/Traefik reaches the app over Docker's internal network. Publishing 3000 on the
     # VPS would collide with every other deployment that also runs a Next.js container.
     expose:
