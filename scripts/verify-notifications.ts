@@ -74,7 +74,14 @@ import {
   pushCleanup,
 } from "../lib/notifications/stages";
 import { ANALYTICS_STAGES } from "../lib/analytics/stages";
-import { newOrderText } from "../lib/notifications/templates";
+import {
+  newOrderText,
+  ownerAlertText,
+  platformAlertText,
+  platformWeeklyText,
+  weeklySummaryText,
+} from "../lib/notifications/templates";
+import { savePreferredAdminLocale } from "../lib/data/users";
 import { saveOwnerPreferences as setPreferences } from "../lib/data/notification-preferences";
 import { createServer, type Socket } from "node:net";
 import { createECDH, randomBytes } from "node:crypto";
@@ -928,12 +935,124 @@ async function stageChecks(tenantId: string, ownerId: string, place: () => Promi
   ok("D52", `cleanup removes a device dead over ${NOTIFICATION_RETENTION.deadDeviceDays}d and keeps one removed today`);
 }
 
+/**
+ * P6-11 and P6-12: every type has both languages, and an Arabic body is marked right to left.
+ *
+ * The templates are plain functions rather than dictionary lookups, because the reader with no
+ * cookie — the scheduled job — cannot call `getT()`. So "both languages exist" is checked by
+ * calling them rather than by grepping a dictionary.
+ */
+function templateChecks() {
+  const arabic = /[\u0600-\u06FF]/;
+
+  for (const count of [1, 3]) {
+    const en = newOrderText("en", { count, totalCents: null });
+    const ar = newOrderText("ar", { count, totalCents: null });
+    assert.ok(en.title && en.body, "English new-order text must exist");
+    assert.ok(arabic.test(ar.title) && arabic.test(ar.body), "and Arabic, in Arabic script");
+    assert.ok(!arabic.test(en.body), "the English body must not contain Arabic");
+    // Arabic-Indic digits: "لديك 3 طلبات" with a Western 3 reads as half-translated.
+    if (count === 3) {
+      assert.ok(ar.body.includes("٣"), `the Arabic body must use Arabic digits, got "${ar.body}"`);
+      assert.ok(en.body.includes("3"));
+    }
+    assert.ok(!/[$]/.test(ar.body) && !/[$]/.test(en.body), "no money without the toggle (D50)");
+  }
+  // With the amount on, exactly one figure, in both languages.
+  for (const locale of ["en", "ar"] as const) {
+    const withAmount = newOrderText(locale, { count: 1, totalCents: 34_000 });
+    assert.ok(/[$]340/.test(withAmount.body), `the amount must appear in ${locale}`);
+  }
+
+  const summaryEn = weeklySummaryText("en", { topProduct: "Linen Shirt", problem: null, unmetSearch: null });
+  const summaryAr = weeklySummaryText("ar", { topProduct: "قميص", problem: null, unmetSearch: null });
+  assert.ok(summaryEn.body.includes("No clear problem"), "an empty week says so rather than nothing");
+  assert.ok(arabic.test(summaryAr.body));
+
+  for (const kind of ["product", "funnel", "search", "traffic"] as const) {
+    const en = ownerAlertText("en", kind, { subject: "Linen Shirt", current: 25, reference: 1 });
+    const ar = ownerAlertText("ar", kind, { subject: "قميص", current: 25, reference: 1 });
+    assert.ok(en.title && en.body && ar.title && ar.body, `${kind} needs both languages`);
+    assert.ok(arabic.test(ar.body), `${kind}'s Arabic body must be in Arabic`);
+    // §6's register, on a lock screen: no causal claim and no instruction.
+    for (const forbidden of [" because ", "too expensive", "you should", "fix ", "increase "]) {
+      assert.ok(
+        !en.body.toLowerCase().includes(forbidden.trim()),
+        `${kind}'s copy asserts a cause or gives an instruction: "${en.body}"`,
+      );
+    }
+  }
+  ok("P6-11", "new orders, the weekly summary and 4 owner alerts each have both languages");
+
+  // P6-12: the payload carries lang and dir, which is what makes an Arabic body readable on a
+  // lock screen rather than drawn left to right.
+  const payload = buildNewOrderPayload({
+    facts: { count: 1, totalCents: null },
+    text: newOrderText("ar", { count: 1, totalCents: null }),
+    recipientUserId: "u",
+    triggerOrderId: "o",
+    locale: "ar",
+  });
+  assert.equal(payload.lang, "ar");
+  assert.equal(payload.dir, "rtl");
+  // Platform messages are English only and name no customer.
+  const platform = platformAlertText("contract-rejection", { subject: "shop", detail: "12 in 10m" });
+  assert.ok(!arabic.test(platform.body), "platform alerts are for this platform's own operators");
+  assert.ok(platformWeeklyText({ stores: 3, active: 2, growing: 1, declining: 0, inactive: 1 }).body);
+  ok("P6-12", "an Arabic notification is marked rtl; platform alerts stay English");
+}
+
+/** P6-13: the language a scheduled job writes in, with no cookie to read. */
+async function localeChecks(tenantId: string, ownerId: string, place: () => Promise<string>) {
+  // The switch persists the choice, which is the only reason a job can know it (D58).
+  const action = readFileSync("app/admin/actions.ts", "utf8");
+  assert.ok(
+    action.includes("savePreferredAdminLocale"),
+    "the language switch must persist the choice, not only set a cookie",
+  );
+
+  await savePreferredAdminLocale(ownerId, "ar");
+  const order = await place();
+  const sent = await announceNewOrder(tenantId, order, { waitMs: 0 });
+  assert.equal(sent.kind, "sent");
+  if (sent.kind !== "sent") throw new Error("unreachable");
+  const stored = await notificationWithDeliveries(sent.notificationId);
+  assert.equal(stored?.locale, "ar", "the notification must be written in the owner's language");
+  assert.ok(
+    /[\u0600-\u06FF]/.test(stored?.body ?? ""),
+    `the body must actually be Arabic, got "${stored?.body}"`,
+  );
+
+  // Cleared: the store's default locale is next, then English.
+  await prisma.user.update({ where: { id: ownerId }, data: { adminLocale: null } });
+  await prisma.tenant.update({ where: { id: tenantId }, data: { defaultLocale: "ar" } });
+  const next = await announceNewOrder(tenantId, await place(), { waitMs: 0 });
+  assert.equal(next.kind, "sent");
+  if (next.kind !== "sent") throw new Error("unreachable");
+  assert.equal(
+    (await notificationWithDeliveries(next.notificationId))?.locale,
+    "ar",
+    "with no saved choice the store's default locale is used",
+  );
+  await prisma.tenant.update({ where: { id: tenantId }, data: { defaultLocale: "en" } });
+  const fallback = await announceNewOrder(tenantId, await place(), { waitMs: 0 });
+  assert.equal(fallback.kind, "sent");
+  if (fallback.kind !== "sent") throw new Error("unreachable");
+  assert.equal(
+    (await notificationWithDeliveries(fallback.notificationId))?.locale,
+    "en",
+    "and English last",
+  );
+  ok("P6-13", "a notification is written in the saved language, then the store's, then English");
+}
+
 async function main() {
   matrixChecks();
   serviceWorkerChecks();
   permissionChecks();
   endpointChecks();
   checkoutCouplingChecks();
+  templateChecks();
   payloadChecks();
   cryptoChecks();
   await senderChecks();
@@ -991,6 +1110,7 @@ async function main() {
 
     await instantPathChecks(T, ownerId, place);
     await stageChecks(T, ownerId, place);
+    await localeChecks(T, ownerId, place);
 
     // ---------------------------------------------------------------------------------------
     // D52: one order, one notification, however many senders try.

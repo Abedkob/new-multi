@@ -37,7 +37,8 @@ more care than everything else in this phase combined:
 | 4 | **Subscriptions, preferences and device management.** `lib/data/push-subscriptions.ts` (upsert on the endpoint hash, revoke rather than delete), `lib/data/notification-preferences.ts` (defaults from the schema, so there is no second list to disagree), and `/admin/notifications` with its three sections, the amount toggle under its own warning, and the iPhone steps. Permission is asked once, from a click. `verify:notifications` 23, `verify:permissions` 21. | done |
 | 5 | **Instant new-order push** (D51, D52, D53). `lib/notifications/new-order.ts` is one function for both paths: an owner-scoped `pg_try_advisory_xact_lock`, a ~4s window inside `after()`, claim, then the body. Checkout schedules it with `after()` after the commit and never reaches the sender itself. `verify:notifications` is 31. | done |
 | 6 | **Catch-up, lease recovery and cleanup** as stages of `pnpm analytics:scheduled`. Driven from the orders rather than a queue, so there is no second list to fall out of step; the lease is what makes recovery safe to run beside a live sender; all three honour `dryRun` (D35). `verify:notifications` is 35. | done |
-| 7 | Persisted admin language and the EN/AR templates everywhere. | next |
+| 7 | **Persisted admin language and the templates** (D58). The language switch now writes `User.adminLocale` as well as the cookie, because the reader with no cookie is the 09:00 Monday job. Templates are plain functions of a locale, Arabic in Arabic sentences with Arabic-Indic digits, and the payload carries `lang`/`dir`. `verify:notifications` is 38. | done |
+| 8 | Owner weekly summary and important alerts, reading insights.ts. | next |
 | 2–10 | §5's sequence below. | not started |
 
 ## 1. Scope
