@@ -155,6 +155,42 @@ export async function claimOrdersForNotification(
   });
 }
 
+/**
+ * Create a notification that is not about orders, once.
+ *
+ * The unique `dedupeKey` is the whole mechanism: an alert keyed on
+ * `<type>:<recipient>:<entity>:<local day>` can be evaluated by every run of the scheduled
+ * command and written once. `null` means it already exists, which is a normal answer and not an
+ * error — most runs of the alert stage produce nothing but nulls.
+ */
+export async function claimNotification(draft: NotificationDraft): Promise<{ id: string } | null> {
+  assertAllowed(draft);
+  try {
+    return await withBypass((db) =>
+      db.adminNotification.create({
+        data: {
+          recipientUserId: draft.recipientUserId,
+          audience: draft.audience,
+          type: draft.type,
+          tenantId: draft.tenantId,
+          title: draft.title,
+          body: draft.body,
+          destination: draft.destination,
+          locale: draft.locale,
+          dedupeKey: draft.dedupeKey,
+          cooldownKey: draft.cooldownKey ?? null,
+        },
+        select: { id: true },
+      }),
+    );
+  } catch (error) {
+    if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") {
+      return null;
+    }
+    throw error;
+  }
+}
+
 /** The body, once the count is known (D53). Called before any delivery is created. */
 export function finalizeBody(
   notificationId: string,

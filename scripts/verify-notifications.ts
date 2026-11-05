@@ -75,6 +75,15 @@ import {
 } from "../lib/notifications/stages";
 import { ANALYTICS_STAGES } from "../lib/analytics/stages";
 import {
+  COOLDOWN_HOURS,
+  evaluateOwnerAlerts,
+  localeFor,
+  sendWeeklySummary,
+  weeklySummaryDue,
+} from "../lib/notifications/owner-alerts";
+import { INSIGHT_THRESHOLDS } from "../lib/analytics/insights";
+import { localDayOf, localDayToDate, shiftLocalDay } from "../lib/analytics/local-day";
+import {
   newOrderText,
   ownerAlertText,
   platformAlertText,
@@ -1046,6 +1055,166 @@ async function localeChecks(tenantId: string, ownerId: string, place: () => Prom
   ok("P6-13", "a notification is written in the saved language, then the store's, then English");
 }
 
+/**
+ * P6-23 and P6-24: an owner alert fires at §6's threshold, carries its evidence, and does not
+ * fire again for the same subject inside its cooldown.
+ *
+ * The fixture is written to sit exactly ON the threshold rather than comfortably past it,
+ * because "comfortably past" is the case that passes whatever the rule is.
+ */
+async function ownerAlertChecks(tenantId: string, ownerId: string) {
+  const BEIRUT = "Asia/Beirut";
+  await prisma.tenant.update({
+    where: { id: tenantId },
+    data: { analyticsTimezone: BEIRUT, defaultLocale: "en" },
+  });
+  await prisma.user.update({ where: { id: ownerId }, data: { adminLocale: "en" } });
+  const tenant = {
+    id: tenantId,
+    analyticsTimezone: BEIRUT,
+    defaultLocale: "en",
+    owner: { id: ownerId, adminLocale: "en" },
+  };
+  assert.equal(localeFor(tenant), "en");
+
+  const now = new Date();
+  const today = localDayOf(now, BEIRUT);
+  const day = localDayToDate(today);
+
+  // §6's unmet-search rule: `minNoResultSearches` searches for one phrase that found nothing.
+  // Exactly at the line.
+  const atThreshold = INSIGHT_THRESHOLDS.unmetSearch.minNoResultSearches;
+  await prisma.analyticsSearchDaily.upsert({
+    where: { tenantId_localDay_phrase: { tenantId, localDay: day, phrase: "winter coat" } },
+    create: {
+      tenantId,
+      localDay: day,
+      timeZone: BEIRUT,
+      phrase: "winter coat",
+      searches: atThreshold,
+      searchSessions: atThreshold,
+      noResultSearches: atThreshold,
+    },
+    update: { searches: atThreshold, noResultSearches: atThreshold },
+  });
+
+  const fired = await evaluateOwnerAlerts(tenant, now);
+  assert.ok(fired.sent >= 1, `an unmet search at the threshold must alert, got ${JSON.stringify(fired)}`);
+  const alert = await prisma.adminNotification.findFirst({
+    where: { recipientUserId: ownerId, type: "SEARCH_ALERT" },
+    orderBy: { createdAt: "desc" },
+    select: { title: true, body: true, destination: true, cooldownKey: true },
+  });
+  assert.ok(alert, "the alert must be in the ledger");
+  assert.ok(alert.body.includes(String(atThreshold)), "and must carry the number behind it (P6-23)");
+  assert.ok(
+    alert.body.includes("winter coat"),
+    "and name the phrase, so the owner can check it themselves",
+  );
+  assert.equal(
+    alert.destination,
+    "/admin/analytics/searches",
+    "a notification that cannot be checked is one that has to be believed",
+  );
+  ok("P6-23", `an unmet search at exactly ${atThreshold} no-result searches alerts, with its number`);
+
+  // P6-24: the same subject, immediately again — suppressed by the cooldown, not re-sent.
+  const second = await evaluateOwnerAlerts(tenant, now);
+  assert.equal(second.sent, 0, "the same subject must not alert twice in a row");
+  assert.ok(second.suppressed >= 1, "and must be reported as suppressed");
+  const count = await prisma.adminNotification.count({
+    where: { recipientUserId: ownerId, type: "SEARCH_ALERT" },
+  });
+  assert.equal(count, 1, `one alert, not ${count}`);
+
+  // And still suppressed just inside the window; the reset is the window passing.
+  const hours = COOLDOWN_HOURS.SEARCH_ALERT;
+  const justInside = new Date(now.getTime() + (hours - 1) * 3_600_000);
+  assert.equal((await evaluateOwnerAlerts(tenant, justInside)).sent, 0, "still inside the window");
+  ok("P6-24", `a subject alerts once and is suppressed for ${hours}h, and reports that it was`);
+
+  // Below the threshold: nothing, however many times the stage runs. Checked by dropping the
+  // count under the line for a phrase that has never alerted.
+  await prisma.analyticsSearchDaily.create({
+    data: {
+      tenantId,
+      localDay: localDayToDate(shiftLocalDay(today, -1)),
+      timeZone: BEIRUT,
+      phrase: "quiet phrase",
+      searches: atThreshold - 1,
+      searchSessions: atThreshold - 1,
+      noResultSearches: atThreshold - 1,
+    },
+  });
+  const below = await prisma.adminNotification.count({
+    where: { recipientUserId: ownerId, type: "SEARCH_ALERT" },
+  });
+  await evaluateOwnerAlerts(tenant, new Date(now.getTime() + (hours + 1) * 3_600_000));
+  const afterBelow = await prisma.adminNotification.findMany({
+    where: { recipientUserId: ownerId, type: "SEARCH_ALERT" },
+    select: { body: true },
+  });
+  assert.ok(
+    !afterBelow.some((row) => row.body.includes("quiet phrase")),
+    `a phrase one search below ${atThreshold} must never alert`,
+  );
+  assert.ok(afterBelow.length >= below, "sanity: the earlier alert is still there");
+  ok("P6-23", `one search below the threshold produces nothing, however often the stage runs`);
+}
+
+/** P6-28: the weekly summary is due at 09:00 in the store's own zone, across a clock change. */
+async function weeklySummaryChecks(tenantId: string, ownerId: string) {
+  const BEIRUT = "Asia/Beirut";
+  const tenant = {
+    id: tenantId,
+    analyticsTimezone: BEIRUT,
+    defaultLocale: "en",
+    owner: { id: ownerId, adminLocale: "en" },
+  };
+
+  // 2026-03-30 is the Monday after Beirut's spring-forward (2026-03-29 is 23 hours long), and
+  // 2026-10-26 the Monday after the autumn change. A schedule computed in UTC drifts by an hour
+  // across both; one computed in local days and hours cannot.
+  for (const [label, mondayLocal9am, offsetHours] of [
+    ["after spring forward", "2026-03-30", 3],
+    ["after autumn back", "2026-10-26", 2],
+  ] as const) {
+    const at9 = new Date(`${mondayLocal9am}T0${9 - offsetHours}:30:00.000Z`);
+    assert.equal(
+      weeklySummaryDue(tenant, at9),
+      true,
+      `${label}: 09:30 local on Monday must be due (${at9.toISOString()})`,
+    );
+    const at11 = new Date(at9.getTime() + 2 * 3_600_000);
+    assert.equal(weeklySummaryDue(tenant, at11), false, `${label}: 11:30 local is not due`);
+    const sunday = new Date(at9.getTime() - 24 * 3_600_000);
+    assert.equal(weeklySummaryDue(tenant, sunday), false, `${label}: Sunday is not due`);
+  }
+  ok("P6-28", "the weekly summary is due at 09:00 local on Monday, across both clock changes");
+
+  // And it sends once per week, saying so when nothing stood out (§11.7).
+  const monday = new Date("2026-03-30T06:30:00.000Z");
+  const first = await sendWeeklySummary(tenant, monday);
+  assert.equal(first.sent, true, `the summary must send, got ${JSON.stringify(first)}`);
+  const summary = await prisma.adminNotification.findFirst({
+    where: { recipientUserId: ownerId, type: "WEEKLY_SUMMARY" },
+    orderBy: { createdAt: "desc" },
+    select: { body: true, destination: true },
+  });
+  assert.ok(summary, "it must be in the ledger");
+  assert.ok(summary.destination.startsWith("/admin/analytics"), "and open the period it is about");
+  const again = await sendWeeklySummary(tenant, new Date(monday.getTime() + 10 * 60_000));
+  assert.equal(again.sent, false, "a second run in the same hour must send nothing");
+  assert.equal(
+    await prisma.adminNotification.count({
+      where: { recipientUserId: ownerId, type: "WEEKLY_SUMMARY" },
+    }),
+    1,
+    "one summary per week, whatever the schedule does",
+  );
+  ok("P6-10", "the weekly summary sends once and opens the screen behind it");
+}
+
 async function main() {
   matrixChecks();
   serviceWorkerChecks();
@@ -1111,6 +1280,8 @@ async function main() {
     await instantPathChecks(T, ownerId, place);
     await stageChecks(T, ownerId, place);
     await localeChecks(T, ownerId, place);
+    await ownerAlertChecks(T, ownerId);
+    await weeklySummaryChecks(T, ownerId);
 
     // ---------------------------------------------------------------------------------------
     // D52: one order, one notification, however many senders try.

@@ -25,6 +25,11 @@ import { decryptPushSecret } from "@/lib/push/crypto";
 import { pushConfigured } from "@/lib/push/keys";
 import { sendPush } from "@/lib/push/send";
 import { markDeviceExpired, recordDeviceFailure, recordDeviceSuccess } from "@/lib/data/push-subscriptions";
+import {
+  evaluateOwnerAlerts,
+  sendWeeklySummary,
+  weeklySummaryDue,
+} from "@/lib/notifications/owner-alerts";
 
 /** How many stores, deliveries or devices one run will touch. */
 const BATCH = 50;
@@ -240,8 +245,86 @@ export const pushCleanup: Stage = {
   },
 };
 
+/**
+ * The owner's important alerts (§11.8, D54).
+ *
+ * Reads §6's insights per store and sends what qualifies, minus cooldowns and preferences. A
+ * store with nothing qualifying yields nothing, which for most stores most days is the right
+ * answer — the stage reporting "0 sent" is the common case, not a failure.
+ */
+export const ownerAlerts: Stage = {
+  name: "owner-alerts",
+  // The insight set needs seven reads per store, so this is allowed longer than a default stage.
+  leaseMinutes: 10,
+  async run(ctx: StageContext) {
+    if (!pushConfigured()) return { items: 0, detail: "push is not configured" };
+    const tenants = await ownerTenants();
+    if (ctx.dryRun) {
+      return { items: 0, detail: `would evaluate alerts for ${tenants.length} store(s)` };
+    }
+    let sent = 0;
+    let suppressed = 0;
+    for (const tenant of tenants) {
+      const result = await evaluateOwnerAlerts(tenant, ctx.now);
+      sent += result.sent;
+      suppressed += result.suppressed;
+    }
+    return {
+      items: sent,
+      detail: `${sent} alert(s) sent, ${suppressed} suppressed across ${tenants.length} store(s)`,
+    };
+  },
+};
+
+/**
+ * The Monday summary (§11.7).
+ *
+ * Due at 09:00 in each store's OWN zone, which is why this is a stage rather than a cron
+ * expression: one platform-wide Monday 09:00 would reach merchants in different hours, and move
+ * for all of them twice a year.
+ */
+export const ownerWeeklySummary: Stage = {
+  name: "owner-weekly-summary",
+  leaseMinutes: 10,
+  async run(ctx: StageContext) {
+    if (!pushConfigured()) return { items: 0, detail: "push is not configured" };
+    const tenants = await ownerTenants();
+    const due = tenants.filter((tenant) => weeklySummaryDue(tenant, ctx.now));
+    if (due.length === 0) {
+      return { items: 0, detail: `no store is at Monday 09:00 (${tenants.length} checked)` };
+    }
+    if (ctx.dryRun) {
+      return { items: due.length, detail: `would send ${due.length} weekly summary(s)` };
+    }
+    let sent = 0;
+    for (const tenant of due) {
+      const result = await sendWeeklySummary(tenant, ctx.now);
+      if (result.sent) sent += 1;
+    }
+    return { items: sent, detail: `${sent} of ${due.length} due summary(s) sent` };
+  },
+};
+
+/** Stores with an owner, which is every store. Bounded, like every other stage's walk. */
+function ownerTenants() {
+  return withJobBypass((db) =>
+    db.tenant.findMany({
+      select: {
+        id: true,
+        analyticsTimezone: true,
+        defaultLocale: true,
+        owner: { select: { id: true, adminLocale: true } },
+      },
+      take: BATCH,
+      orderBy: { createdAt: "asc" },
+    }),
+  );
+}
+
 export const NOTIFICATION_STAGES: Stage[] = [
   newOrderCatchUp,
+  ownerAlerts,
+  ownerWeeklySummary,
   deliveryLeaseRecovery,
   pushCleanup,
 ];

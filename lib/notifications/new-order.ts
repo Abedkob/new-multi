@@ -27,23 +27,14 @@
 import { withBypass } from "@/lib/prisma";
 import { wantsNotification, ensureOwnerPreferences } from "@/lib/data/notification-preferences";
 import {
+  announcedOrderIds,
   claimOrdersForNotification,
   finalizeBody,
-  queueDeliveries,
-  claimDelivery,
-  recordDeliveryOutcome,
-  announcedOrderIds,
 } from "@/lib/data/notifications";
-import {
-  recordDeviceFailure,
-  recordDeviceSuccess,
-  markDeviceExpired,
-  sendableDevices,
-} from "@/lib/data/push-subscriptions";
-import { decryptPushSecret } from "@/lib/push/crypto";
+import { deliverNotification } from "@/lib/notifications/deliver";
+import { sendableDevices } from "@/lib/data/push-subscriptions";
 import { pushConfigured } from "@/lib/push/keys";
-import { buildNewOrderPayload, assertPayloadIsSafe } from "@/lib/push/payload";
-import { sendPush } from "@/lib/push/send";
+import { assertPayloadIsSafe, buildNewOrderPayload } from "@/lib/push/payload";
 import { newOrderText, type NotificationLocale } from "@/lib/notifications/templates";
 import { orderTotal } from "@/lib/orders";
 
@@ -235,51 +226,16 @@ export async function announceNewOrder(
       }),
     );
 
-    await queueDeliveries(claim.notificationId, tenantId, devices.map((device) => device.id));
-    const queued = await withBypass((db) =>
-      db.adminNotificationDelivery.findMany({
-        where: { notificationId: claim.notificationId, state: "PENDING" },
-        select: { id: true, subscriptionId: true },
-      }),
-    );
-
-    let delivered = 0;
-    for (const delivery of queued) {
-      if (!(await claimDelivery(delivery.id))) continue;
-      const device = devices.find((candidate) => candidate.id === delivery.subscriptionId);
-      if (!device) continue;
-      const verdict = await sendPush(
-        {
-          endpoint: decryptPushSecret(device.endpointCiphertext),
-          p256dh: decryptPushSecret(device.p256dhCiphertext),
-          auth: decryptPushSecret(device.authCiphertext),
-        },
-        payload,
-      );
-      if (verdict.state === "SENT") {
-        delivered += 1;
-        await recordDeliveryOutcome(delivery.id, { state: "SENT" });
-        await recordDeviceSuccess(device.id);
-      } else if (verdict.state === "SKIPPED") {
-        // Push is not configured. The notification stays PENDING, which is the truthful state:
-        // the owner was never told, and nothing here pretends otherwise.
-        continue;
-      } else {
-        await recordDeliveryOutcome(delivery.id, {
-          state: verdict.state,
-          errorCategory: verdict.errorCategory,
-        });
-        if (verdict.state === "EXPIRED") await markDeviceExpired(device.id);
-        else await recordDeviceFailure(device.id);
-      }
-    }
+    // One sending loop for every notification type (lib/notifications/deliver.ts): the lease
+    // rules live in one place rather than once per sender.
+    const summary = await deliverNotification(claim.notificationId, tenantId, devices, payload);
 
     return {
       kind: "sent" as const,
       notificationId: claim.notificationId,
       orders: claim.orderIds.length,
-      devices: queued.length,
-      delivered,
+      devices: summary.queued,
+      delivered: summary.delivered,
     };
   });
 
