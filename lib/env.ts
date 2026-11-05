@@ -112,6 +112,25 @@ export const envSchema = z
       return decoded.length === 32 && decoded.toString("base64") === value;
     }, "Must be a Base64-encoded 32-byte key"),
     LICENSE_HEARTBEAT_SECRET: z.string().min(32).optional(),
+    // --- Phase 6: admin Web Push (§11, D56) ------------------------------------------------
+    // All optional, and the app must behave exactly as it does today without them (P6-31):
+    // push is a convenience for the merchant, never a dependency of the shop. lib/push/keys.ts
+    // reports "not configured" and every sender becomes a no-op that records why.
+    PUSH_VAPID_PUBLIC_KEY: z.string().trim().min(1).optional(),
+    PUSH_VAPID_PRIVATE_KEY: z.string().trim().min(1).optional(),
+    // The "mailto:" or https URL a push service contacts about this application's pushes.
+    PUSH_VAPID_SUBJECT: z.string().trim().min(1).optional(),
+    // A subscription's endpoint is a capability: anyone holding it can push to that device
+    // until it is revoked. Encrypted at rest with its own key, separate from the licence key so
+    // that rotating one does not force the other.
+    PUSH_ENCRYPTION_KEY: z.string().optional().refine((value) => {
+      if (value === undefined || value === "") return true;
+      const decoded = Buffer.from(value, "base64");
+      return decoded.length === 32 && decoded.toString("base64") === value;
+    }, "Must be a Base64-encoded 32-byte key"),
+    // How long one push attempt may take before it is abandoned (D51). Short on purpose: this
+    // runs inside after(), and a container may be shut down 10-30s after a response.
+    PUSH_TIMEOUT_MS: z.coerce.number().int().min(250).max(10_000).default(2_500),
     // --- Storefront analytics (STOREFRONT_ANALYTICS_MASTER_PLAN.md §14) -------------------
     // How far first-party analytics COLLECTION has rolled out. The consent banner and the
     // gating of third-party tags are deliberately NOT tied to this: they apply to every store
@@ -206,6 +225,23 @@ export const envSchema = z
     message: "REDIS_URL is required in production (rate limiters and domain cache must be shared across instances)",
     path: ["REDIS_URL"],
   })
+  // Half-configured push is worse than none: a public key with no private key means the browser
+  // subscribes successfully and nothing is ever delivered, which looks like a broken phone.
+  .refine(
+    (v) =>
+      [v.PUSH_VAPID_PUBLIC_KEY, v.PUSH_VAPID_PRIVATE_KEY, v.PUSH_VAPID_SUBJECT].every((k) => !k) ||
+      [v.PUSH_VAPID_PUBLIC_KEY, v.PUSH_VAPID_PRIVATE_KEY, v.PUSH_VAPID_SUBJECT].every((k) => !!k),
+    {
+      message:
+        "PUSH_VAPID_PUBLIC_KEY, PUSH_VAPID_PRIVATE_KEY and PUSH_VAPID_SUBJECT must be set together",
+      path: ["PUSH_VAPID_PUBLIC_KEY"],
+    },
+  )
+  // And a device whose keys cannot be encrypted must not be stored at all.
+  .refine((v) => !v.PUSH_VAPID_PRIVATE_KEY || !!v.PUSH_ENCRYPTION_KEY, {
+    message: "PUSH_ENCRYPTION_KEY is required once push is configured: a subscription is a secret",
+    path: ["PUSH_ENCRYPTION_KEY"],
+  })
   .refine((v) => v.NODE_ENV !== "production" || v.LICENSE_ENCRYPTION_KEY, {
     message: "LICENSE_ENCRYPTION_KEY is required in production to protect store license secrets",
     path: ["LICENSE_ENCRYPTION_KEY"],
@@ -284,6 +320,11 @@ function load() {
       ANALYTICS_SESSION_TIMEOUT_MINUTES: Number(raw.ANALYTICS_SESSION_TIMEOUT_MINUTES) || 30,
       ANALYTICS_ACTIVE_WINDOW_MINUTES: Number(raw.ANALYTICS_ACTIVE_WINDOW_MINUTES) || 5,
       PLATFORM_GA_ID: raw.PLATFORM_GA_ID || undefined,
+      PUSH_VAPID_PUBLIC_KEY: raw.PUSH_VAPID_PUBLIC_KEY || undefined,
+      PUSH_VAPID_PRIVATE_KEY: raw.PUSH_VAPID_PRIVATE_KEY || undefined,
+      PUSH_VAPID_SUBJECT: raw.PUSH_VAPID_SUBJECT || undefined,
+      PUSH_ENCRYPTION_KEY: raw.PUSH_ENCRYPTION_KEY || undefined,
+      PUSH_TIMEOUT_MS: Number(raw.PUSH_TIMEOUT_MS) || 2_500,
     };
   }
 
@@ -333,6 +374,11 @@ function load() {
         "ANALYTICS_JOB_DATABASE_POOL_MAX",
         "ANALYTICS_SESSION_TIMEOUT_MINUTES",
         "ANALYTICS_ACTIVE_WINDOW_MINUTES",
+        "PUSH_VAPID_PUBLIC_KEY",
+        "PUSH_VAPID_PRIVATE_KEY",
+        "PUSH_VAPID_SUBJECT",
+        "PUSH_ENCRYPTION_KEY",
+        "PUSH_TIMEOUT_MS",
       ] as const
     ).map((k) => [k, process.env[k] === "" ? undefined : process.env[k]]),
   );

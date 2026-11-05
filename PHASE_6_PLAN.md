@@ -32,7 +32,8 @@ more care than everything else in this phase combined:
 |---|---|---|
 | — | Plan approved with four changes, folded in: the order amount is an owner toggle, off by default (D50); non-owner accounts may receive new orders only (D60); the contract-rejection 400 signal joins the platform alerts (P6-25); and real-device delivery is a named human check (P6-32, P6-33). | done |
 | 1 | **The notification data model and the ledger.** Five tables under forced RLS (P4-23a now counts 25), `User.adminLocale`, `lib/notifications/types.ts` (the role→type gate, D60) and `lib/data/notifications.ts` (claim, lease, outcome). `verify:notifications` is 10 checks that actually race: two senders for one order, two for one delivery, and a crashed sender’s lease reclaimed. `verify:isolation` is 17. | done |
-| 2 | `lib/push/*`: keys, encryption, the sender with its timeout, and the payload builder (D50). | next |
+| 2 | **`lib/push/*`**: `keys.ts` (configured or not), `crypto.ts` (endpoint encrypted at rest plus a keyed lookup hash), `payload.ts` (D50 — the builder takes a count and an optional total, never an order) and `send.ts` (one attempt, hard timeout, never throws, permanent vs transient classified). `web-push` added. `verify:notifications` is 14, and three of the new checks were wrong before they were right. | done |
+| 3 | Subscriptions and device management: the data layer, `/admin/notifications`, permission on a user action, the test notification. | next |
 | 2–10 | §5's sequence below. | not started |
 
 ## 1. Scope

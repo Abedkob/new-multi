@@ -38,6 +38,22 @@ import {
   type NotificationDraft,
 } from "../lib/data/notifications";
 import { NOTIFIABLE_TYPES, TYPE_AUDIENCE, mayReceive } from "../lib/notifications/types";
+import {
+  FORBIDDEN_PAYLOAD_FIELDS,
+  assertPayloadIsSafe,
+  buildNewOrderPayload,
+  newOrderTag,
+} from "../lib/push/payload";
+import { classifyPushError, sendPush } from "../lib/push/send";
+import {
+  decryptPushSecret,
+  encryptPushSecret,
+  endpointHash,
+  pushSecretsAvailable,
+} from "../lib/push/crypto";
+import { pushConfigured, vapidPublicKey } from "../lib/push/keys";
+import { createServer, type Socket } from "node:net";
+import { createECDH, randomBytes } from "node:crypto";
 
 let checks = 0;
 const ok = (id: string, message: string) => {
@@ -101,8 +117,192 @@ function matrixChecks() {
   ok("P6-25", "the contract-rejection signal is its own notification type");
 }
 
+/**
+ * D50, on the builder: a payload cannot carry customer data because it is never handed any.
+ *
+ * Checked on the TYPE as well as on the output. A check that only looked at a produced string
+ * would pass for a builder that accepts an order and happens not to interpolate it today.
+ */
+function payloadChecks() {
+  const source = readFileSync("lib/push/payload.ts", "utf8");
+  const facts = /export type NewOrderFacts = \{[\s\S]*?\n};/.exec(source)?.[0] ?? "";
+  assert.ok(facts, "NewOrderFacts must be declared");
+  for (const field of FORBIDDEN_PAYLOAD_FIELDS) {
+    assert.ok(
+      !facts.includes(field),
+      `NewOrderFacts carries ${field}: the builder must not be able to see customer data`,
+    );
+  }
+  assert.ok(/count: number/.test(facts), "it takes a count");
+  assert.ok(/totalCents: number \| null/.test(facts), "and an optional total, nothing else");
+
+  const amountOff = buildNewOrderPayload({
+    facts: { count: 3, totalCents: null },
+    text: { title: "New orders", body: "You have 3 new orders." },
+    recipientUserId: "user-1",
+    triggerOrderId: "order-9",
+    locale: "en",
+  });
+  assert.equal(amountOff.body, "You have 3 new orders.");
+  assert.equal(amountOff.tag, newOrderTag("user-1", "order-9"));
+  assert.equal(amountOff.destination, "/admin/orders");
+  assert.equal(amountOff.dir, "ltr");
+  assert.ok(!/[$]|\d+[.]\d\d/.test(amountOff.body), "with the amount off no money may appear");
+
+  const arabic = buildNewOrderPayload({
+    facts: { count: 1, totalCents: 34_000 },
+    text: { title: "طلب جديد", body: "لديك طلب جديد." },
+    recipientUserId: "user-1",
+    triggerOrderId: "order-9",
+    locale: "ar",
+  });
+  assert.equal(arabic.lang, "ar");
+  assert.equal(arabic.dir, "rtl", "an Arabic body must be marked right-to-left (P6-12)");
+
+  // The last gate: a body assembled somewhere else, with a customer's name in it, is refused.
+  assert.throws(
+    () =>
+      assertPayloadIsSafe({ ...amountOff, body: "New order from Rania Haddad" }, [
+        "Rania Haddad",
+        "03 123 456",
+      ]),
+    /must not contain customer data/,
+    "a payload carrying a customer name must be refused before it is sent",
+  );
+  // And a short value is not matched, or every body containing "ali" would be refused.
+  assert.doesNotThrow(() => assertPayloadIsSafe(amountOff, ["Ali", ""]));
+  assert.throws(
+    () =>
+      buildNewOrderPayload({
+        facts: { count: 0, totalCents: null },
+        text: { title: "t", body: "b" },
+        recipientUserId: "u",
+        triggerOrderId: "o",
+        locale: "en",
+      }),
+    /at least one order/,
+    "a notification about no orders is a bug, not an empty notification",
+  );
+  ok(
+    "P6-10",
+    `the builder cannot see any of ${FORBIDDEN_PAYLOAD_FIELDS.length} customer fields, and money is opt-in`,
+  );
+}
+
+/** D56: a subscription at rest, and the keyed lookup that avoids decrypting the table. */
+function cryptoChecks() {
+  if (!pushSecretsAvailable()) {
+    // Not a skip of the rule. The rule is that these secrets are encrypted, and with no key
+    // nothing can be stored at all — which is what gets asserted instead.
+    assert.throws(() => encryptPushSecret("x"), /PUSH_ENCRYPTION_KEY/);
+    assert.throws(() => endpointHash("x"), /PUSH_ENCRYPTION_KEY/);
+    ok("P6-22", "with no PUSH_ENCRYPTION_KEY a subscription cannot be stored at all");
+    return;
+  }
+  const endpoint = "https://fcm.googleapis.com/fcm/send/abc123";
+  const envelope = encryptPushSecret(endpoint);
+  assert.ok(!envelope.includes("fcm.googleapis.com"), "the endpoint must not be readable");
+  assert.ok(envelope.startsWith("v1:"), "a versioned envelope, like the licence secrets");
+  assert.equal(decryptPushSecret(envelope), endpoint);
+  assert.notEqual(encryptPushSecret(endpoint), envelope, "a fresh IV every time");
+  assert.equal(endpointHash(endpoint), endpointHash(endpoint), "the hash is stable");
+  assert.notEqual(endpointHash(endpoint), endpointHash(endpoint + "x"));
+  assert.throws(() => decryptPushSecret("v2:a:b:c"), /Unsupported/);
+  ok("P6-22", "an endpoint is unreadable at rest and still findable by its keyed hash");
+}
+
+/**
+ * D51, the half a unit check can hold: a push service that hangs costs one timeout and comes
+ * back as a verdict rather than as a throw.
+ *
+ * A real socket, not a mock. The failure this guards against is a promise that never settles
+ * inside `after()`, and a mocked transport is exactly where that would be missed.
+ */
+async function senderChecks() {
+  // A bare TCP listener, NOT an http server: web-push always speaks TLS to an endpoint, and an
+  // http server answers a TLS ClientHello with an HTTP response, which the client rejects
+  // immediately as EPROTO ("wrong version number"). That is a fast failure, not a hang, so the
+  // timeout under test never fired. Accepting the socket and saying nothing stalls the
+  // handshake, which is what a push service going dark actually looks like.
+  // Sockets are tracked so they can be destroyed afterwards. `net.Server` has no
+  // closeAllConnections() (that is http.Server), and `close()` waits for open connections — so
+  // without this the close callback never fires.
+  const sockets = new Set<Socket>();
+  const hanging = createServer((socket) => {
+    sockets.add(socket);
+    socket.on("error", () => {});
+    socket.on("close", () => sockets.delete(socket));
+  });
+  await new Promise<void>((resolve) => hanging.listen(0, "127.0.0.1", () => resolve()));
+  const port = (hanging.address() as { port: number }).port;
+
+  try {
+    const payload = buildNewOrderPayload({
+      facts: { count: 1, totalCents: null },
+      text: { title: "New order", body: "You have a new order." },
+      recipientUserId: "u",
+      triggerOrderId: "o",
+      locale: "en",
+    });
+    // A REAL P-256 key pair, generated here. The first version of this check used a
+    // valid-looking string, and web-push rejected it during payload encryption with "Public key
+    // is not valid for specified curve" — before opening a socket. So the check passed, the
+    // verdict was a FAILED/unknown, and the hanging server under test was never contacted. A
+    // check that cannot reach the thing it is about is worse than no check.
+    const subscriber = createECDH("prime256v1");
+    subscriber.generateKeys();
+    const target = {
+      endpoint: `http://127.0.0.1:${port}/push`,
+      p256dh: subscriber.getPublicKey().toString("base64url"),
+      auth: randomBytes(16).toString("base64url"),
+    };
+
+    const started = Date.now();
+    const verdict = await sendPush(target, payload, 600);
+    const elapsed = Date.now() - started;
+
+    if (!pushConfigured()) {
+      assert.equal(
+        verdict.state,
+        "SKIPPED",
+        "with push unconfigured the sender must be a no-op that says so (P6-31)",
+      );
+      assert.ok(elapsed < 400, `and must not wait on anything, took ${elapsed}ms`);
+      assert.equal(vapidPublicKey(), null, "and the browser is offered no key to subscribe with");
+      ok("P6-31", `push unconfigured: the sender skips in ${elapsed}ms and never opens a socket`);
+    } else {
+      assert.equal(verdict.state, "FAILED");
+      assert.equal(verdict.state === "FAILED" && verdict.errorCategory, "timeout");
+      assert.ok(elapsed < 2_500, `a hanging service must cost the timeout only, took ${elapsed}ms`);
+      ok("P6-01", `a push service that hangs is abandoned after ${elapsed}ms with a timeout verdict`);
+    }
+
+    // Classification decides whether a merchant's device is deleted or retried, so the default
+    // matters: an unrecognised failure must never be read as "this device is gone for good".
+    const unknown = classifyPushError(
+      Object.assign(new Error("received unexpected response code"), { statusCode: 410 }),
+    );
+    assert.equal(unknown.state, "FAILED", "an unrecognised error must not expire a device");
+    assert.equal(classifyPushError(new Error("push timed out")).errorCategory, "timeout");
+    assert.equal(classifyPushError(new Error("connect ECONNREFUSED")).errorCategory, "unreachable");
+    assert.equal(classifyPushError("nonsense").errorCategory, "unknown");
+    ok("P6-04", "a timeout, an unreachable host and an unknown failure are classified, none final");
+  } finally {
+    // Sockets first, THEN close. `server.close()` waits for open connections to end, and the
+    // connection web-push abandoned when the timeout fired is still open — so the close
+    // callback never ran, main() never returned, and the process exited 0 with the database
+    // checks silently unrun. A suite that stops early and reports success is the worst
+    // possible outcome of a check, so it is worth saying plainly why these two lines exist.
+    for (const socket of sockets) socket.destroy();
+    await new Promise<void>((resolve) => hanging.close(() => resolve()));
+  }
+}
+
 async function main() {
   matrixChecks();
+  payloadChecks();
+  cryptoChecks();
+  await senderChecks();
 
   const run = Date.now().toString(36);
   const store = await createStoreWithOwner({
