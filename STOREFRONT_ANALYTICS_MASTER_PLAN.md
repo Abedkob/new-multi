@@ -995,6 +995,11 @@ Verify:
 
 ### Phase 7 — Hardening, complete pilot, and full launch
 
+**Planned** — [PHASE_7_PLAN.md](PHASE_7_PLAN.md), twelve commits with decisions D70–D82.
+It adds one thing this section does not list: **staff accounts**, decided on 2026-11-05 to be
+needed before launch rather than after, so a third role joins an isolation model that has had
+two principals since Phase 1. They are commits 1–3 and gate the rest.
+
 - **Force HTTPS on every custom domain via Cloudflare** (Always Use HTTPS + an edge certificate per store domain, HTTP→HTTPS redirect at the edge, HSTS once verified). Not cosmetic: a plaintext custom domain cannot carry a `Secure` cookie, so consent and identity cookies are refused by the browser, and it is not a secure context, so `crypto.randomUUID` and other secure-context APIs are unavailable — the two defects Phase 3 found. HTTPS everywhere is what makes the shared host and a store's own domain behave identically.
 - **Every E2E suite has its custom-domain leg** (the nine in `scripts/verify-e2e-policy.ts`'s `PENDING_LEG`). A silent pilot runs on a real store's own domain, so a suite that has never run against one has not been exercised against what is being piloted.
 - Security and privacy/legal review
@@ -1045,10 +1050,11 @@ APP_DATABASE_POOL_MAX=20
 ANALYTICS_DATABASE_POOL_MAX=5
 ANALYTICS_JOB_DATABASE_POOL_MAX=2
 
-WEB_PUSH_VAPID_PUBLIC_KEY
-WEB_PUSH_VAPID_PRIVATE_KEY
-WEB_PUSH_VAPID_SUBJECT
-PUSH_SUBSCRIPTION_ENCRYPTION_KEY
+PUSH_VAPID_PUBLIC_KEY
+PUSH_VAPID_PRIVATE_KEY
+PUSH_VAPID_SUBJECT
+PUSH_ENCRYPTION_KEY
+PUSH_TIMEOUT_MS=2500
 
 ANALYTICS_INGESTION_FAILURE_PERCENT=5
 ANALYTICS_AGGREGATION_LAG_MINUTES=20
