@@ -352,8 +352,13 @@ leg was added — and that leg's first run skipped itself with a plausible excus
   hosts file and no elevation.
 - Add each `*.test` hostname to `allowedDevOrigins` in `next.config.ts`, or `next dev` serves
   the page and withholds its JavaScript.
-- `pnpm verify:e2e-policy` enforces all of this statically. Nine suites predate the policy and
-  are listed in its `PENDING_LEG` set, due before the Phase 7 pilot; that list may only shrink.
+- `pnpm verify:e2e-policy` enforces all of this statically. Every suite now has its leg — the
+  nine that predated the policy were paid off in Phase 7 — so its `PENDING_LEG` set is empty and
+  stays that way: a suite added without a leg fails the check, and the fix is to write the leg.
+- A template's leg calls `assertStorefrontDomainBasics` (`scripts/e2e/custom-domain.ts`) for the
+  three things every template owes a store with a domain — root-relative links, no overflow, its
+  routes answering — and then asserts its own thing, which for the motion templates is that the
+  client code ran at all (a `.pin-spacer`, or an inline style GSAP wrote).
 
 ## Development Tips
 

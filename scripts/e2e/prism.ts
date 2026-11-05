@@ -10,6 +10,11 @@ import { saveContent } from "../../lib/data/content";
 import { createProduct } from "../../lib/data/products";
 import { setTenantTemplate } from "../../lib/data/theme";
 import { BASE, launch, makeStore } from "./browser";
+import {
+  assertDevOriginAllowed,
+  assertStorefrontDomainBasics,
+  onCustomDomain,
+} from "./custom-domain";
 
 async function main() {
   const store = await makeStore("Prism UI");
@@ -104,6 +109,69 @@ async function main() {
     assert.equal(await page.locator("[data-collection]").first().evaluate((el) => getComputedStyle(el).position), "relative");
     assert.deepEqual(errors, []);
     console.log("ok: reduced motion is static; no browser runtime errors");
+
+    // ---------------------------------------------- Prism on a store's own domain
+    // Mandatory since 2026-11-04 (scripts/e2e/custom-domain.ts): a leg that cannot run FAILS.
+    //
+    // Prism carries the most client machinery of the three: a split-word hero entrance, a
+    // pinned collection sequence, and a search dialog that is its own component rather than
+    // the shared navbar field. The dialog is the one worth driving here — it queries the
+    // server, renders prices, and links on to a category page, so it fails three different
+    // ways if the host is wrong, and the links it renders are exactly the kind a template
+    // builds from the slug by mistake. The shared-host checks above reach the cart through a
+    // hardcoded /store/<slug>/cart href; here that same link has to be /cart.
+    const domain = "prism-e2e.test";
+    assertDevOriginAllowed(domain);
+    await prisma.tenant.update({ where: { id: store.tenant.id }, data: { domain } });
+    try {
+      await onCustomDomain(domain, async ({ context: domainContext, origin }) => {
+        const d = await domainContext.newPage();
+        const domainErrors: string[] = [];
+        d.on("pageerror", (error) => domainErrors.push(error.message));
+
+        await d.goto(origin, { waitUntil: "load" });
+        await d.getByRole("heading", { name: "A different perspective." }).waitFor();
+        await d.waitForFunction(() => !!document.querySelector("[data-word]")?.getAttribute("style"));
+        assert.ok(
+          await d.locator("[data-prism-hero]").evaluate((el) => el.clientHeight >= window.innerHeight),
+        );
+        assert.equal(await d.locator("[data-collection]").count(), 3);
+
+        const domainDialog = d.getByRole("dialog");
+        await d.getByRole("button", { name: "Search", exact: true }).click();
+        await domainDialog.waitFor();
+        await domainDialog.getByRole("searchbox").fill("Prism");
+        await domainDialog.getByRole("heading", { name: "Prism Overshirt" }).waitFor();
+        assert.ok((await domainDialog.innerText()).includes("$125.00"));
+        const dialogHrefs = await domainDialog
+          .locator('a[href^="/"]')
+          .evaluateAll((as) => (as as HTMLAnchorElement[]).map((a) => a.getAttribute("href")!));
+        assert.ok(dialogHrefs.length > 0, "a search result must be a link");
+        for (const href of dialogHrefs) {
+          assert.ok(
+            !href.startsWith("/store/"),
+            `a search result link must be root-relative on a domain, got ${href}`,
+          );
+        }
+        await d.keyboard.press("Escape");
+
+        // The cart link, which on the shared host is addressed as /store/<slug>/cart.
+        await d.locator('header a[href="/cart"]').click();
+        await d.locator('[data-testid="cart-page"]').waitFor();
+
+        await d.goto(origin, { waitUntil: "load" });
+        await assertStorefrontDomainBasics(d, origin, [
+          "/shop",
+          `/category/${category.slug}`,
+          "/search?q=Prism",
+          "/checkout",
+        ]);
+        assert.deepEqual(domainErrors, [], `browser errors on ${domain}: ${domainErrors.join("\n")}`);
+        console.log(`ok: on ${domain} the hero, collections, search dialog and cart link all work`);
+      });
+    } finally {
+      await prisma.tenant.update({ where: { id: store.tenant.id }, data: { domain: null } });
+    }
   } finally { await browser.close(); await store.remove(); }
 }
 main().catch((error) => { console.error(error); process.exitCode = 1; }).finally(() => prisma.$disconnect());

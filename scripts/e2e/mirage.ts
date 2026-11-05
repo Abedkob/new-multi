@@ -10,6 +10,11 @@ import { saveContent } from "../../lib/data/content";
 import { createProduct } from "../../lib/data/products";
 import { setTenantTemplate } from "../../lib/data/theme";
 import { BASE, launch, makeStore } from "./browser";
+import {
+  assertDevOriginAllowed,
+  assertStorefrontDomainBasics,
+  onCustomDomain,
+} from "./custom-domain";
 
 async function main() {
   const store = await makeStore("Mirage UI");
@@ -126,6 +131,45 @@ async function main() {
 
     assert.deepEqual(errors, [], `browser errors: ${errors.join("\n")}`);
     ok("desktop runtime produced no console or page errors");
+
+    // ---------------------------------------------- Mirage on a store's own domain
+    // Mandatory since 2026-11-04 (scripts/e2e/custom-domain.ts): a leg that cannot run FAILS.
+    //
+    // Mirage's entrance, its collection reveal and its footer sequence are all inline styles
+    // GSAP writes after it loads, which makes the style attribute the honest test of whether
+    // the client ran on this host at all: without it the page renders as whatever the server
+    // sent and nothing moves. Checked on the collections too, because those are scroll-driven —
+    // ScrollTrigger has to have measured the document, not just executed.
+    const domain = "mirage-e2e.test";
+    assertDevOriginAllowed(domain);
+    await prisma.tenant.update({ where: { id: tenantId }, data: { domain } });
+    try {
+      await onCustomDomain(domain, async ({ context: domainContext, origin }) => {
+        const d = await domainContext.newPage();
+        const domainErrors: string[] = [];
+        d.on("console", (message) => {
+          if (message.type() === "error") domainErrors.push(message.text());
+        });
+        d.on("pageerror", (error) => domainErrors.push(error.message));
+
+        await d.goto(origin, { waitUntil: "load" });
+        await d.getByRole("heading", { name: "The next upgrade is here" }).waitFor();
+        await d.waitForFunction(() => document.querySelector("[data-mirage-word]")?.hasAttribute("style"));
+        assert.equal(await d.locator('[data-section="featuredCategories"] a').count(), 3);
+        await d.locator('[data-section="featuredCategories"]').scrollIntoViewIfNeeded();
+        await d.waitForFunction(() => document.querySelector("[data-mirage-collection]")?.hasAttribute("style"));
+        assert.match(
+          (await d.locator("[data-mirage-collection]").first().getAttribute("style")) ?? "",
+          /transform|opacity/,
+        );
+        await d.goto(origin, { waitUntil: "load" });
+        await assertStorefrontDomainBasics(d, origin, ["/shop", "/cart", "/checkout"]);
+        assert.deepEqual(domainErrors, [], `browser errors on ${domain}: ${domainErrors.join("\n")}`);
+        ok(`on ${domain} the entrance and scroll sequences initialize and links are root-relative`);
+      });
+    } finally {
+      await prisma.tenant.update({ where: { id: tenantId }, data: { domain: null } });
+    }
   } finally {
     await browser.close();
     await store.remove();

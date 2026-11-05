@@ -31,9 +31,9 @@ a laptop. Phase 7 can produce:
 | 1 | **`Role.STAFF`, the constraint and the gates - granting nothing.** A new enum value, `User.staffTenantId` with a CHECK constraint ("STAFF implies exactly one store, anything else implies none"), `requireTenantMember` beside `requireOwner`, the proxy admitting both store roles, and `/admin/no-access` - because a refusal to `/login` would loop. RLS needed no change: every policy keys on the tenant. `verify:isolation` 18. | done |
 | 2 | **The capability table** (`lib/permissions.ts`): 18 capabilities, default deny, every admin page/layout/action naming one, and `verify:permissions` failing statically on one that names none. Stock got its own narrow write because the product form replaces the whole product. The nav filters from the same table the pages enforce. `verify:permissions` 24. | done |
 | 3 | **`/admin/staff`**: add, reset, remove; the first password shown once; the scope stated above the form. The audit row is written in `lib/data/staff.ts`, not the action, so it cannot be omitted. `verify:staff` 17. | done |
-| 4 | Custom-domain legs: `checkout.ts`, `categories.ts`, `variants.ts`. | not started |
-| 5 | Custom-domain legs: `discounts.ts`, `social-links.ts`, `storefront-pages.ts`. | not started |
-| 6 | Custom-domain legs: `kinetic.ts`, `mirage.ts`, `prism.ts`. `PENDING_LEG` is empty. | not started |
+| 4 | **Legs: `checkout.ts`, `categories.ts`, `variants.ts`.** checkout buys on the domain (consent cookie at the root, root-relative links, the WhatsApp handoff, the Server Action origin check, `/admin` 404 from there); categories replays the owner's own session against the domain to prove `/admin` is a 404 even for them; variants proves the picker hydrates and that `public/` assets are passed through. Fixed two stale assertions that were testing nothing: the category tree indents with `paddingInlineStart` (Arabic), and the WhatsApp URL arrives on the client's first render. | done |
+| 5 | **Legs: `discounts.ts`, `social-links.ts`, `storefront-pages.ts`.** discounts does not read the sale price, it buys the thing and checks the order snapshot (8000). social-links separates the footer's absolute social links from its root-relative own links. storefront-pages adds the one nothing covered: `robots.txt` and `sitemap.xml` at the **host root**, which proxy.ts has always rewritten — both route docstrings called it future work and are now correct. Hardened two flakes that read a value the instant its selector appeared. | done |
+| 6 | **Legs: `kinetic.ts`, `mirage.ts`, `prism.ts`. `PENDING_LEG` is empty**, and the set stays rather than being deleted so a new suite without a leg still fails. A template is almost all client code, so each leg's own assertion is that the code ran on a non-localhost host (a `.pin-spacer`, an inline style GSAP wrote); `assertStorefrontDomainBasics` holds the three things every template owes a store with a domain. | done |
 | 7 | The real app icon set, and both manifests pointing at it. | not started |
 | 8 | Edge hardening: forced HTTPS, HSTS, and the trusted-proxy guard that makes `cf-ipcountry` safe to believe. | not started |
 | 9 | Production keys, `PHASE_7_DEPLOY_CHECKLIST.md`, and the `pilot` runbook. | not started |
@@ -340,9 +340,18 @@ exists before the matrix does can only be refused, which is the correct directio
 ### Custom domains
 
 - P7-09 `PENDING_LEG` is empty and `verify:e2e-policy` passes with every suite having a leg.
-- P7-10 Checkout completes on a store's own domain, end to end, including the consent decision,
-  the order, and the new-order push.
-- P7-11 No suite contains a skip path; `verify:e2e-policy`'s rule 2 still passes.
+  **Done (commits 4–6):** 44 checks, no gaps.
+- P7-10 Checkout completes on a store's own domain, end to end: the consent decision at the
+  domain root, the cart, the Server Action that places the order, the stock deduction and the
+  delivery-fee snapshot. **Done (commit 4).** Amended: the `after()` new-order push is
+  deliberately **not** in that leg. Nothing in that chain depends on the host — it runs after
+  the response, against ids — and `verify:notifications` drives it with real devices and
+  leases. An assertion that only fires when VAPID keys happen to be configured is a skip by
+  another name, which rule 2 forbids. P7-31 is where a push from a real domain to a real device
+  is accounted for.
+- P7-11 No suite contains a skip path; `verify:e2e-policy`'s rule 2 still passes. **Done** —
+  and it earned its keep: rule 2 failed commit 4 on the word "skip" inside a *comment*
+  explaining why something was left out. The comment was reworded; the rule was not loosened.
 
 ### The edge
 
@@ -403,10 +412,16 @@ exists before the matrix does can only be refused, which is the correct directio
 The things I cannot do, with what each one needs to produce. This becomes
 `HUMAN_CHECKLIST.md` in commit 9 so you can tick it somewhere durable.
 
-**Before commit 4 (the legs need somewhere to point):**
+**Before commit 8 (the edge checks need a real domain):**
 
-- [ ] **Buy the test domain** and tell me the name, so `allowedDevOrigins` and the suites can use
-      it. A throwaway `.com` is fine; it does not need to be the real brand.
+Amended 2026-11-05: this used to say "before commit 4". It was wrong — the legs needed no domain
+of yours at all. Each suite drives its own `*.test` hostname that Chrome resolves to 127.0.0.1
+via `--host-resolver-rules`, so commits 4–6 are done and none of them waited on you. What a real
+domain is actually for is the edge: HTTPS, HSTS, a `Secure` cookie surviving a round trip, and a
+`cf-ipcountry` header that can be believed — P7-12 to P7-16, which is commit 8 and the pilot.
+
+- [ ] **Buy the test domain** and tell me the name, so `allowedDevOrigins` and the edge checks can
+      use it. A throwaway `.com` is fine; it does not need to be the real brand.
 - [ ] **Put it on Cloudflare**: nameservers moved, orange-cloud on, Always Use HTTPS on, origin
       certificate installed, Full (strict). Tell me when the padlock is real.
 - [ ] **Decide D73's table.** The one decision in this plan that is about your business rather

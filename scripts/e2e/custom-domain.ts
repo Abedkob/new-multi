@@ -21,8 +21,9 @@
  * `pnpm verify:e2e-policy` enforces both rules statically.
  */
 
+import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { chromium, type BrowserContext } from "playwright-core";
+import { chromium, type BrowserContext, type Page } from "playwright-core";
 import { BASE } from "./browser";
 
 /**
@@ -74,6 +75,54 @@ export async function onCustomDomain<T>(
  * correct behaviour — real custom domains are HTTPS — but it is not a reason to pass. The suite
  * says so and fails, and the operator runs it against `next dev` or an HTTPS origin.
  */
+/**
+ * The half of a template's custom-domain leg that is the same for all thirteen of them.
+ *
+ * A template's own leg has to assert its own thing — whether its motion initialized, whether
+ * its search dialog opens — because that is what differs between them and what the host can
+ * silently take away. These three are what every template owes a store with a domain, and
+ * saying them once means a new template's leg cannot quietly leave one out:
+ *
+ *   1. Every storefront link is root-relative. A template that builds links from the slug
+ *      instead of from store.basePath 404s every one of them here, and only here.
+ *   2. The composition still fits. The viewport is the same, but the URL depth is not, and a
+ *      template that pads from the path (or renders a different nav) can overflow.
+ *   3. The routes a shopper reaches from those links actually answer on this host.
+ */
+export async function assertStorefrontDomainBasics(
+  page: Page,
+  origin: string,
+  routes: string[],
+): Promise<void> {
+  const host = new URL(origin).host;
+  assert.equal(new URL(page.url()).host, host, "the leg must be driving the custom domain");
+
+  const internal = await page
+    .locator('a[href^="/"]')
+    .evaluateAll((as) => (as as HTMLAnchorElement[]).map((a) => a.getAttribute("href")!));
+  assert.ok(internal.length > 0, "a storefront page must link into the store");
+  for (const href of internal) {
+    assert.ok(
+      !href.startsWith("/store/"),
+      `on a domain a storefront link must not carry /store/<slug>, got ${href}`,
+    );
+  }
+
+  const size = await page.evaluate(() => ({
+    viewport: document.documentElement.clientWidth,
+    content: document.documentElement.scrollWidth,
+  }));
+  assert.ok(size.content <= size.viewport, `horizontal overflow on ${host}: ${JSON.stringify(size)}`);
+
+  for (const route of routes) {
+    assert.equal(
+      (await page.goto(`${origin}${route}`))?.status(),
+      200,
+      `${route} must answer on a store's own domain`,
+    );
+  }
+}
+
 export const PRODUCTION_BUILD_HINT =
   "no cookie was set on the custom domain. Either this is a production build (which forces " +
   "Secure, and a plaintext host cannot carry it — run against `next dev` or an HTTPS origin), " +

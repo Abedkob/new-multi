@@ -30,14 +30,16 @@ const E2E_DIR = "scripts/e2e";
 const INFRASTRUCTURE = new Set(["browser.ts", "custom-domain.ts"]);
 
 /**
- * Suites that predate the policy and do not have their leg yet. This list may only SHRINK: the
- * check fails if an entry gains a leg (remove it from here) or names a file that is gone.
+ * Suites that predate the policy and do not have their leg yet.
  *
- * Due before the Phase 7 pilot (STOREFRONT_ANALYTICS_MASTER_PLAN.md §13) — a silent pilot on a
- * real store is a custom domain, so a suite that has never run against one has not been
- * exercised against the thing being piloted.
+ * EMPTY since 2026-11-05, and it stays that way: every suite in scripts/e2e now exercises its
+ * feature on a store's own domain. The set is kept rather than deleted because it is the only
+ * thing that makes the gap visible — a suite added without a leg fails rule 1 below, and the
+ * only way to quiet that is to write the leg, not to list the file here. If you are reading
+ * this because you want to add an entry: the nine that were here were paid off before the
+ * Phase 7 pilot, and the two bugs that bought the policy are described above.
  */
-const PENDING_LEG = new Set(["kinetic.ts", "mirage.ts", "prism.ts"]);
+const PENDING_LEG = new Set<string>();
 
 let failures = 0;
 let checks = 0;

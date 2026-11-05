@@ -10,6 +10,11 @@ import { saveContent } from "../../lib/data/content";
 import { createProduct } from "../../lib/data/products";
 import { setTenantTemplate } from "../../lib/data/theme";
 import { BASE, launch, makeStore } from "./browser";
+import {
+  assertDevOriginAllowed,
+  assertStorefrontDomainBasics,
+  onCustomDomain,
+} from "./custom-domain";
 
 const product = (
   tenantId: string,
@@ -199,6 +204,48 @@ async function main() {
 
     assert.deepEqual(errors, [], `browser errors: ${errors.join("\n")}`);
     ok("desktop runtime produced no console or page errors");
+
+    // ---------------------------------------------- Kinetic on a store's own domain
+    // Mandatory since 2026-11-04 (scripts/e2e/custom-domain.ts): a leg that cannot run FAILS.
+    //
+    // A motion template is almost entirely client code, so on a host that is not localhost it
+    // either runs or the storefront is a static page with half its layout missing — the Phase 3
+    // failure, in the place where it would be hardest to notice, because the page still looks
+    // deliberate. The pin-spacer is the proof: ScrollTrigger creates it, so if it is there,
+    // GSAP loaded, measured the page and pinned the category film on this host too.
+    const domain = "kinetic-e2e.test";
+    assertDevOriginAllowed(domain);
+    await prisma.tenant.update({ where: { id: tenantId }, data: { domain } });
+    try {
+      await onCustomDomain(domain, async ({ context: domainContext, origin }) => {
+        const d = await domainContext.newPage();
+        const domainErrors: string[] = [];
+        d.on("console", (message) => {
+          if (message.type() === "error") domainErrors.push(message.text());
+        });
+        d.on("pageerror", (error) => domainErrors.push(error.message));
+
+        await d.goto(origin, { waitUntil: "load" });
+        await d.getByRole("heading", { name: "CLASSY WATCH" }).waitFor();
+        await d.locator(".pin-spacer").first().waitFor();
+        assert.equal(await d.locator('[data-section="featuredCategories"] a').count(), 3);
+        await assertStorefrontDomainBasics(d, origin, [
+          "/shop",
+          `/products/${overshirt.slug}`,
+          "/cart",
+          "/checkout",
+        ]);
+        assert.deepEqual(domainErrors, [], `browser errors on ${domain}: ${domainErrors.join("\n")}`);
+
+        // And the shared commerce behaviour underneath the motion still works from here.
+        await d.goto(`${origin}/products/${overshirt.slug}`, { waitUntil: "load" });
+        await d.getByTestId("add-to-cart-button").click();
+        assert.equal(await d.getByTestId("cart-count").first().innerText(), "(1)");
+        ok(`on ${domain} the GSAP scene initializes, links are root-relative and the cart works`);
+      });
+    } finally {
+      await prisma.tenant.update({ where: { id: tenantId }, data: { domain: null } });
+    }
   } finally {
     await browser.close();
     await store.remove();

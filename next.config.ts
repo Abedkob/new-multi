@@ -17,6 +17,9 @@ const nextConfig: NextConfig = {
     "discounts-e2e.test",
     "social-e2e.test",
     "pages-e2e.test",
+    "kinetic-e2e.test",
+    "mirage-e2e.test",
+    "prism-e2e.test",
   ],
   experimental: {
     serverActions: {
