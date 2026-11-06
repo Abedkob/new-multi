@@ -449,15 +449,29 @@ comments. Delete this section once it's no longer useful.
   "resolves into Cloudflare's ranges" would weaken the one gate behind `Tenant.domain`'s
   "verified and live" contract, and would need the range list that §4c argues against
   committing.
-- **Application-level tenant scoping is unverified on the 25 RLS-covered tables.** Deleting
-  `tenantId` from the WHERE clause of such a query changes nothing observable: Postgres filters
-  the row out anyway, so `verify:isolation`, the pentest and every E2E suite still pass. This
-  was confirmed by doing it on purpose. `verify:isolation` cannot see it either — it runs as the
-  restricted role precisely so both layers are exercised together, which means neither can tell
-  them apart. What is verified is that the two layers **together** refuse. The day something
-  runs without the restricted role (`APP_DATABASE_URL` unset, a migration console, a restored
-  copy with no `app_user`), the layer everyone assumes is there is the one nobody has tested.
-  Catching it would need a second isolation run as the owner role, which is a suite of its own.
+- **Application-level tenant scoping — was unverified, now has its own suite.** Deleting
+  `tenantId` from the WHERE clause of a query on one of the 25 RLS-covered tables used to change
+  nothing observable: Postgres filtered the row out anyway, so `verify:isolation` (18 checks),
+  the pentest and every E2E suite still passed. Confirmed by planting it in `getProduct` twice,
+  months apart.
+
+  `verify:isolation` cannot see it by design — it runs as `app_user` precisely so a pass covers
+  both layers at once, and that is also why neither layer can be told apart there. **`pnpm
+  verify:app-scoping`** is the twin that runs as the owner role, where RLS is inert and the
+  application's WHERE clause is the only thing left: 13 checks over `lib/data`'s products,
+  content, discounts, coupons, campaigns and section visibility. The planted bug fails it.
+
+  Two guards keep it honest, because the way a suite like this dies is by silently becoming a
+  duplicate of its twin: it refuses to run unless the role really bypasses RLS (remove the
+  `./_owner` import and it fails with a message saying so, which was tested), and
+  `assertRlsInert` is a positive control — a raw cross-tenant read that *must* return the row,
+  because if the database is still filtering then nothing the suite reports is about the
+  application.
+
+  **What is still not covered:** the suite exercises a chosen list of data-layer functions, not
+  every one, and nothing enforces that a new tenant-scoped function gets added to it. A static
+  check — every exported function in `lib/data/*.ts` that touches a tenant-scoped model must
+  name `tenantId` in its WHERE — would close that, and does not exist.
 - **Ingestion's latency: measured twice, and the first measurement was the laptop.** §12.3 asks
   for p95 under 150 ms. The first run on 2026-11-06 reported **192 ms at 5 concurrent and 437 ms
   at 30**, and was written down here as an unexplained overrun. Re-measured the same day against

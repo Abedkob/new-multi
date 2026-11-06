@@ -42,6 +42,7 @@ pnpm dev                              # http://localhost:3000
 | `pnpm db:seed` | Create/reset the platform admin from `PLATFORM_ADMIN_*` env vars |
 | `pnpm demo:seed` | Create a full "Demo Boutique" store with products & sample orders |
 | `pnpm verify:isolation` | Test tenant isolation (DB-level access attempts must fail) |
+| `pnpm verify:app-scoping` | The same attacks as `verify:isolation`, but **as the owner role with RLS inert**, so the application's own WHERE clauses are the only defence. Refuses to run unless the role really bypasses RLS |
 | `pnpm verify:commerce` | Test catalog/order/stock logic (category trees, variant rules, concurrent stock deduction) |
 | `pnpm verify:templates` | Test all templates × all sections (needs server running) |
 | `pnpm verify:permissions` | Test role-based access + the static rule that every admin route names a capability (needs server + login session) |
@@ -419,7 +420,17 @@ the pre-Phase-7 behaviour, so a deployment that sets none of them behaves exactl
 
 No automated test suite yet. Manual verification scripts + browser E2E tests:
 
-- `pnpm verify:isolation`: app-level tenant isolation (DB access attempts must fail).
+- `pnpm verify:isolation`: tenant isolation as the **restricted** role (`app_user`), so a pass
+  means the application's WHERE clauses and RLS *together* refuse. It fails rather than running
+  as a privileged role, which would switch the database half off while still reporting green.
+- `pnpm verify:app-scoping`: the same attacks as the **owner** role, where RLS is inert — so a
+  pass means the WHERE clauses refuse on their own. Both exist because run only under `app_user`
+  the two layers are indistinguishable: delete `tenantId` from `getProduct`'s WHERE and Postgres
+  removes the row anyway, so all 18 isolation checks pass. That was planted and confirmed, and
+  it is what this suite catches. It refuses to run unless its role really bypasses RLS, and
+  proves it with a cross-tenant read that must succeed — otherwise it would silently become a
+  duplicate of its twin. The database-layer checks (the license row's policy, the WITH CHECK
+  halves, the staff CHECK constraint) stay in `verify:isolation`, where they mean something.
 - `pnpm verify:commerce`: category trees, variant rules, stock deduction (concurrent), order snapshots, cancellation.
 - `pnpm verify:templates`: all 13 templates × 10 sections, switches, live preview in admin/platform.
 - `pnpm verify:permissions`: role-based access via real login sessions + the static rule that every admin page, layout and action names a capability from `lib/permissions.ts` (and that staff hold exactly six of them).
