@@ -458,11 +458,32 @@ comments. Delete this section once it's no longer useful.
   runs without the restricted role (`APP_DATABASE_URL` unset, a migration console, a restored
   copy with no `app_user`), the layer everyone assumes is there is the one nobody has tested.
   Catching it would need a second isolation run as the owner role, which is a suite of its own.
-- **Ingestion is over its latency budget on a development machine.** §12.3 asks for p95 under
-  150 ms; `pnpm load-test` on 2026-11-06 measured 192 ms at 5 concurrent and 437 ms at 30, on a
-  laptop also running PostgreSQL and the load generator. Not yet diagnosed, and not yet measured
-  anywhere that resembles production — P7-23's VPS run is what decides whether this is the
-  environment or the path.
+- **Ingestion's latency: measured twice, and the first measurement was the laptop.** §12.3 asks
+  for p95 under 150 ms. The first run on 2026-11-06 reported **192 ms at 5 concurrent and 437 ms
+  at 30**, and was written down here as an unexplained overrun. Re-measured the same day against
+  a fresh production build on the same machine, with `--ingest-levels=1,5,30`:
+
+  | ingest | first run | re-run |
+  |---|---|---|
+  | 1 concurrent | not measured | **p95 9 ms** |
+  | 5 concurrent | p95 192 ms | **p95 39 ms** |
+  | 30 concurrent | p95 437 ms | **p95 166 ms**, p99 979 ms |
+
+  So one request costs 9 ms, and 5 concurrent — §12.3's "expected load" for one small store — is
+  comfortably inside the budget. The first run was taken while several verification suites were
+  running on the same laptop; it measured the machine.
+
+  **The database is not the cost either way.** A batch is 5 statements for a new visitor and 7
+  for a returning one, **7.6 ms total inside Postgres**, with `ingestBatch` end to end at p50
+  12 ms (measured by attaching a query log to the analytics client). The round trips worth
+  optimising are not there — including that `Promise.all` inside an interactive transaction does
+  not parallelise, which costs about a millisecond.
+
+  What remains genuinely open: **30 sustained writers is marginally over** (166 ms) with a long
+  tail at p99 (979 ms), and 30 concurrent beacons against one small store is closer to a
+  saturation test than to expected load — `scripts/load-test.ts` says so where it picks the
+  levels. P7-23's VPS run is still what decides the absolute numbers; what the re-run settles is
+  that there is no known hot spot in the path to fix first.
 - **HSTS is not enabled.** `EDGE_HSTS_MAX_AGE` is 0 everywhere committed, by design (D74): it is
   the one setting that cannot be withdrawn quickly, so it goes on by hand after the pilot store
   has served a week of traffic.

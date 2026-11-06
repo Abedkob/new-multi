@@ -272,7 +272,11 @@ async function main() {
     // store is a handful of beacons in flight, not thirty sustained writers — which is a
     // saturation test wearing the same name. Reporting both is the only way to tell "this path
     // is slow" from "I just overloaded a laptop".
-    const ingestLevels = [5, 30];
+    // `--ingest-levels=1,5,30` overrides these. Level 1 is worth running: it is the only way to
+    // separate the cost of ONE request from the cost of queueing behind others, and the first
+    // time ingestion came in over budget (p95 192 ms at 5) the database turned out to be 12 ms
+    // of it — so without a single-writer number there is nothing to attribute the rest to.
+    const ingestLevels = (arg("ingest-levels") ?? "5,30").split(",").map((n) => Number(n.trim()));
     const ingestRuns: Summary[] = [];
     for (const level of ingestLevels) ingestRuns.push(await run("ingest", level, SECONDS, () =>
       hit(ingestPath, {
