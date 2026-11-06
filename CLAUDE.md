@@ -58,6 +58,7 @@ pnpm dev                              # http://localhost:3000
 | `pnpm drill:restore` | Dump this database, restore it into a scratch copy beside it, and check the copy: row counts, forced RLS, the runtime role's grants |
 | `pnpm verify:config` | Static check that the compose file, `.env.example`, `DOCKPLOY_SETUP.md`, the deploy checklist and the master plan's §14 all agree with `lib/env.ts` — no phantom variable, nothing production needs left unpassed (no server needed) |
 | `pnpm verify:edge` | Static check of the edge trust gate (D75): the four modes, the strip list, the single `countryFrom` caller, the https upgrade, and that no committed config enables HSTS (no server needed) |
+| `pnpm verify:rate-limit` | Test the Redis-backed limiter against a real Redis: the budget, the trailing window at a boundary, a TTL on every bucket, 50 concurrent callers, and that an old-shape key degrades rather than allows. Needs `REDIS_URL` and **fails** without one |
 | `pnpm verify:icons` | Static check of the installable apps' icons: every manifest `src` resolves to a real PNG of the size it claims, both apps' marks differ, no orphans (no server needed) |
 | `pnpm icons:build` | Re-render `public/icons/*.png` from `assets/icon-{admin,platform}.svg` (needs Chrome). Commit what it writes |
 | `pnpm verify:reports` | Test the report read layer (aggregate-only rule, store-local date ranges across DST, null-not-zero rates, trend thresholds) |
@@ -381,7 +382,21 @@ the pre-Phase-7 behaviour, so a deployment that sets none of them behaves exactl
 - **§12.3's own budgets, same run:** 30-day dashboard p95 851ms (budget 1.5s) and active-now
   p95 67ms (budget 300ms) are comfortable. **Ingestion is over**: p95 192ms at 5 concurrent and
   437ms at 30, against a 150ms budget. Recorded in KNOWN_GAPS.md rather than explained away.
-- **Rate limiting is Redis-backed with in-memory fallback** (`lib/redis.ts`, `lib/rate-limit.ts`): set `REDIS_URL` to share limits across instances; without it (or if Redis is unreachable — fails open) each instance limits independently. The domain-resolution cache is still in-memory per-instance regardless.
+- **Rate limiting is Redis-backed with in-memory fallback** (`lib/redis.ts`, `lib/rate-limit.ts`):
+  set `REDIS_URL` to share limits across instances; without it, or when Redis cannot answer, each
+  instance limits independently. It **does not fail open** — `redisRateLimit` reports
+  `available: false` and the caller applies the in-memory limiter, because an unreachable Redis
+  once *was* reported as "allowed" and that turned every limit off at once. The
+  domain-resolution cache is still in-memory per-instance regardless.
+- **Both backends are a trailing window, and the Redis one is a single atomic script.** It used
+  to be `INCR` + `EXPIRE`, which was wrong twice: a fixed window (so the shared limiter — the
+  production one — allowed up to 2x the budget across a boundary, while the in-memory fallback
+  did not), and two round trips (a process dying between them left a bucket holding a count with
+  no TTL, which nothing clears, so that address was rate limited *permanently* with nothing
+  logged). Buckets are sorted sets of hit timestamps under a versioned `rl:v2:` prefix, so they
+  can never meet an old integer key. A refused hit is not recorded, or retrying would push the
+  window forward and extend a block for as long as a client kept trying. `pnpm verify:rate-limit`
+  holds all of it down; six of its checks fail against the old implementation.
 - **Storefront data:** `loadStorefrontData` runs 5 reads inside one `withTenant` transaction (was 5 separate ones, costing 5 pooled connections per page load).
 
 ## Important Gotchas

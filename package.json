@@ -59,7 +59,8 @@
     "e2e:kinetic": "tsx scripts/e2e/kinetic.ts",
     "e2e:mirage": "tsx scripts/e2e/mirage.ts",
     "e2e:prism": "tsx scripts/e2e/prism.ts",
-    "icons:build": "tsx scripts/build-icons.ts"
+    "icons:build": "tsx scripts/build-icons.ts",
+    "verify:rate-limit": "tsx scripts/verify-rate-limit.ts"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1138.0",

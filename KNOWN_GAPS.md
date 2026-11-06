@@ -302,7 +302,8 @@ Newest sections at the bottom; delete an item when it's fixed.
   check — use DNS-only (grey cloud) for its A record.
 - **`proxy.ts`'s host cache (`hostHits`/`hostMisses`/`domainBySlug`, 30s TTL, in-memory,
   oldest-first eviction; misses capped separately so junk Host headers can't flush real stores)** is per-instance,
-  like the rate limiters — fine for one instance, needs a shared store (or just a shorter TTL)
+  like the rate limiters' *in-memory fallback* (the limiters themselves are shared through Redis
+  when `REDIS_URL` is set) — fine for one instance, needs a shared store (or just a shorter TTL)
   once there's more than one. A newly-connected domain can take up to 30s to start resolving.
 - **Local testing:** Chrome resolves `*.localhost` to 127.0.0.1 without any hosts-file edit, and
   Next's dev server already allows `*.localhost` origins by default (`allowedDevOrigins`), so

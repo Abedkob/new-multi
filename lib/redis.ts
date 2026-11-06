@@ -143,17 +143,79 @@ export async function closeRedis(): Promise<void> {
 }
 
 /**
- * Distributed rate limiter using Redis. Atomically increments a counter for the given key
- * and checks if it exceeds the limit within the time window.
+ * Distributed rate limiter using Redis: a TRAILING window, evaluated in one atomic script.
  *
  * The result distinguishes a real verdict from "Redis could not answer". That distinction is the
  * point: an unreachable Redis used to be reported as `allowed: true`, which silently turned the
  * limiter off everywhere instead of falling back to the in-memory one. Callers that get
  * `available: false` must apply their own limit — see lib/rate-limit.ts.
+ *
+ * Two things this deliberately does NOT do any more, both found by `verify:rate-limit`:
+ *
+ * 1. **It is not `INCR` + `EXPIRE`.** Those are two round trips, and a process that died between
+ *    them left a key holding a count with no TTL — which nothing clears, so that key was rate
+ *    limited *permanently*. A narrow window with an unbounded consequence: one unlucky crash and
+ *    an address could never log in or check out again, with nothing logged and no way to notice
+ *    except a customer saying so. The script below always sets the key's lifetime in the same
+ *    atomic step that writes to it, so a TTL cannot go missing.
+ *
+ * 2. **It is not a fixed window.** A counter keyed to a `windowSeconds` TTL resets wholesale, so
+ *    a caller could spend the entire budget at the end of one window and the whole of it again
+ *    immediately after — 16 login attempts in a few seconds against a documented limit of 8.
+ *    Worse, the in-memory fallback has always been a trailing window, so the two backends
+ *    answered the same question differently and production was the lenient one. This keeps one
+ *    timestamp per hit in a sorted set and drops those older than the window, which is exactly
+ *    what the in-memory limiter does with its array.
+ *
+ * A blocked hit is NOT recorded (it would push the window forward and extend a block for as long
+ * as a client kept retrying) — again matching the in-memory path.
  */
 export type RedisRateLimitResult =
   | { available: true; allowed: boolean; remaining: number; retryAfterMs: number }
   | { available: false };
+
+/**
+ * The whole decision, server-side, so it cannot interleave with another instance's.
+ *
+ * KEYS[1] the bucket · ARGV: now (ms), window (ms), limit, a unique member for this hit.
+ * Returns {allowed, remaining, retryAfterMs}.
+ */
+const SLIDING_WINDOW_LUA = `
+local bucket = KEYS[1]
+local now    = tonumber(ARGV[1])
+local window = tonumber(ARGV[2])
+local limit  = tonumber(ARGV[3])
+local member = ARGV[4]
+
+redis.call('ZREMRANGEBYSCORE', bucket, '-inf', now - window)
+local used = redis.call('ZCARD', bucket)
+
+if used >= limit then
+  local oldest = redis.call('ZRANGE', bucket, 0, 0, 'WITHSCORES')
+  local retry = window
+  if oldest[2] then
+    retry = math.ceil(tonumber(oldest[2]) + window - now)
+    if retry < 0 then retry = 0 end
+  end
+  redis.call('PEXPIRE', bucket, window)
+  return {0, 0, retry}
+end
+
+redis.call('ZADD', bucket, now, member)
+redis.call('PEXPIRE', bucket, window)
+return {1, limit - used - 1, 0}
+`;
+
+/**
+ * Keys are versioned because the shape changed. The old limiter stored a plain integer under the
+ * caller's key; a sorted-set command against one of those is a `WRONGTYPE` error, which this
+ * function reports as `available: false` — so for the lifetime of the old keys every limit would
+ * have quietly degraded to per-instance. A new prefix means the two never meet.
+ */
+const BUCKET_PREFIX = "rl:v2:";
+
+/** Makes each hit a distinct sorted-set member; two hits in the same millisecond must both count. */
+let hitCounter = 0;
 
 export async function redisRateLimit(
   key: string,
@@ -163,24 +225,23 @@ export async function redisRateLimit(
   if (!client) return { available: false };
 
   try {
-    const windowSeconds = Math.ceil(opts.windowMs / 1000);
-    const current = await client.incr(key);
+    const now = Date.now();
+    const member = `${now}-${(hitCounter = (hitCounter + 1) % Number.MAX_SAFE_INTEGER)}-${Math.random()
+      .toString(36)
+      .slice(2, 8)}`;
 
-    // Set expiration on first hit
-    if (current === 1) {
-      await client.expire(key, windowSeconds);
-    }
+    const reply = (await client.eval(SLIDING_WINDOW_LUA, {
+      keys: [BUCKET_PREFIX + key],
+      arguments: [String(now), String(opts.windowMs), String(opts.limit), member],
+    })) as [number, number, number];
 
-    const remaining = Math.max(0, opts.limit - current);
-    const allowed = current <= opts.limit;
-
-    let retryAfterMs = 0;
-    if (!allowed) {
-      const ttl = await client.ttl(key);
-      retryAfterMs = ttl > 0 ? ttl * 1000 : opts.windowMs;
-    }
-
-    return { available: true, allowed, remaining, retryAfterMs };
+    const [allowed, remaining, retryAfterMs] = reply.map(Number);
+    return {
+      available: true,
+      allowed: allowed === 1,
+      remaining: Math.max(0, remaining),
+      retryAfterMs: Math.max(0, retryAfterMs),
+    };
   } catch (error) {
     console.error("[redis] rate limit error, falling back to in-memory limits:", error);
     // Not "allowed": the caller applies its own limit instead of none at all.
