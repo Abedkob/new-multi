@@ -120,8 +120,20 @@ Production **refuses to boot** without these, and `lib/env.ts` names each one in
       `curl -s https://<host>/admin/manifest.webmanifest | head` is the quick version.
 - [ ] A storefront still renders, a product page still renders, an order can still be placed.
       Collection is `off`, so no analytics row should appear for any of it.
-- [ ] Load test against the production build, not `next dev` (commit 10's numbers): 30 / 100 /
-      150 concurrent against §12.3's budgets.
+- [ ] Load test against the production build, not `next dev`:
+
+      ```bash
+      BASE_URL=https://<host> pnpm load-test --levels=30,100,150,300
+      ```
+
+      Compare with the two sets of numbers in CLAUDE.md. The laptop run over-reports contention
+      badly — this is the one that counts, and P7-23 is where it gets written down.
+- [ ] Restore drill (`pnpm drill:restore`) against this database, then the half it cannot do:
+      boot the app against the restored copy and place an order. Note that `pg_dump` writes no
+      `CREATE ROLE`, so a restore onto a fresh machine needs `scripts/sql/rls-role.sql` before
+      the runtime can connect at all.
+- [ ] `BASE_URL=https://<host> pnpm pentest:cross-tenant` — 31 attempts, all of which must be
+      refused, against the real deployment rather than a laptop.
 
 ## 5. The scheduled command
 

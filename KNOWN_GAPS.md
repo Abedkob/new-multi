@@ -448,6 +448,20 @@ comments. Delete this section once it's no longer useful.
   "resolves into Cloudflare's ranges" would weaken the one gate behind `Tenant.domain`'s
   "verified and live" contract, and would need the range list that §4c argues against
   committing.
+- **Application-level tenant scoping is unverified on the 25 RLS-covered tables.** Deleting
+  `tenantId` from the WHERE clause of such a query changes nothing observable: Postgres filters
+  the row out anyway, so `verify:isolation`, the pentest and every E2E suite still pass. This
+  was confirmed by doing it on purpose. `verify:isolation` cannot see it either — it runs as the
+  restricted role precisely so both layers are exercised together, which means neither can tell
+  them apart. What is verified is that the two layers **together** refuse. The day something
+  runs without the restricted role (`APP_DATABASE_URL` unset, a migration console, a restored
+  copy with no `app_user`), the layer everyone assumes is there is the one nobody has tested.
+  Catching it would need a second isolation run as the owner role, which is a suite of its own.
+- **Ingestion is over its latency budget on a development machine.** §12.3 asks for p95 under
+  150 ms; `pnpm load-test` on 2026-11-06 measured 192 ms at 5 concurrent and 437 ms at 30, on a
+  laptop also running PostgreSQL and the load generator. Not yet diagnosed, and not yet measured
+  anywhere that resembles production — P7-23's VPS run is what decides whether this is the
+  environment or the path.
 - **HSTS is not enabled.** `EDGE_HSTS_MAX_AGE` is 0 everywhere committed, by design (D74): it is
   the one setting that cannot be withdrawn quickly, so it goes on by hand after the pilot store
   has served a week of traffic.

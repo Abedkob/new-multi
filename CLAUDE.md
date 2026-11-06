@@ -53,6 +53,9 @@ pnpm dev                              # http://localhost:3000
 | `pnpm verify:notifications` | Test admin push end to end: the ledger under concurrent senders, delivery leases, the payload rules (no customer data, money opt-in), the endpoint allowlist, owner alerts at §6’s thresholds, platform alerts on transition, and both languages |
 | `pnpm verify:report-states` | Test the report screens' states (nothing measured yet, traffic without orders, Redis down, Arabic/RTL, phone cards, admin paths refused on a custom domain) |
 | `pnpm verify:e2e-policy` | Static check that every E2E suite has a custom-domain leg and no skip path (no server needed) |
+| `pnpm pentest:cross-tenant` | Sign in as store B and try to reach store A over HTTP: every id route, every list page, the platform console, host-based routing, the internal endpoints (needs server) |
+| `pnpm load-test` | §12.3's budgets against a **production build** at 30/100/150/300 concurrent (needs `pnpm build && pnpm start`) |
+| `pnpm drill:restore` | Dump this database, restore it into a scratch copy beside it, and check the copy: row counts, forced RLS, the runtime role's grants |
 | `pnpm verify:config` | Static check that the compose file, `.env.example`, `DOCKPLOY_SETUP.md`, the deploy checklist and the master plan's §14 all agree with `lib/env.ts` — no phantom variable, nothing production needs left unpassed (no server needed) |
 | `pnpm verify:edge` | Static check of the edge trust gate (D75): the four modes, the strip list, the single `countryFrom` caller, the https upgrade, and that no committed config enables HSTS (no server needed) |
 | `pnpm verify:icons` | Static check of the installable apps' icons: every manifest `src` resolves to a real PNG of the size it claims, both apps' marks differ, no orphans (no server needed) |
@@ -358,12 +361,26 @@ the pre-Phase-7 behaviour, so a deployment that sets none of them behaves exactl
 
 ## Performance & Scaling Notes
 
-- **Connection pool:** `max: 30` (up from node-postgres default of 10). Load-tested:
-  - 30 concurrent users: p50 550ms, 0 failures.
-  - 100 concurrent: p50 1.4s, 0 failures.
-  - 150 concurrent: p95 ~2.9s, 0 failures.
-  - 300 concurrent: 10% fail with 500 (Prisma's `maxWait` timeout).
-  - *Always test against `next build && next start`, not `next dev`.*
+- **Connection pool:** `max: 30` (up from node-postgres default of 10). Two sets of numbers,
+  because they were taken on different machines and neither replaces the other. Re-take them
+  with `pnpm load-test` against `next build && next start` — **never `next dev`**, whose numbers
+  measure the compiler.
+
+  | Concurrent | Earlier run | 2026-11-06 (`pnpm load-test`, dev laptop) |
+  |---|---|---|
+  | 30 | p50 550ms, 0 fail | p50 1129ms, p95 2043ms, 0 fail |
+  | 100 | p50 1.4s, 0 fail | p50 3545ms, p95 4291ms, 0 fail |
+  | 150 | p95 ~2.9s, 0 fail | p50 4855ms, p95 5764ms, 0 fail |
+  | 300 | 10% fail (500) | **64% fail (500)**, p50 7920ms |
+
+  The November run had PostgreSQL, the app and the load generator on one laptop, so it measures
+  contention between them as much as the application — the figures are not comparable, and the
+  one that will count is the VPS run before the pilot (P7-23). What *is* comparable is the
+  failure mode: every 500 at 300 concurrent is Prisma's `Unable to start a transaction in the
+  given time`, the pool's `maxWait`, exactly as the earlier run recorded.
+- **§12.3's own budgets, same run:** 30-day dashboard p95 851ms (budget 1.5s) and active-now
+  p95 67ms (budget 300ms) are comfortable. **Ingestion is over**: p95 192ms at 5 concurrent and
+  437ms at 30, against a 150ms budget. Recorded in KNOWN_GAPS.md rather than explained away.
 - **Rate limiting is Redis-backed with in-memory fallback** (`lib/redis.ts`, `lib/rate-limit.ts`): set `REDIS_URL` to share limits across instances; without it (or if Redis is unreachable — fails open) each instance limits independently. The domain-resolution cache is still in-memory per-instance regardless.
 - **Storefront data:** `loadStorefrontData` runs 5 reads inside one `withTenant` transaction (was 5 separate ones, costing 5 pooled connections per page load).
 
@@ -390,6 +407,16 @@ No automated test suite yet. Manual verification scripts + browser E2E tests:
 - `pnpm verify:reports`: the report read layer — that it reads aggregates only (by walking its own imports), that a date range means store-local days across a 23- and a 25-hour day, that a rate with no denominator is null rather than 0, and that a trend is withheld below its sample floor.
 - `pnpm verify:insights`: every §6 threshold exercised at the line, one below it and one above, plus the rules that a redacted search phrase never becomes a suggestion, that an unmeasured figure is treated as unknown rather than low, and that no insight asserts a cause.
 - `pnpm verify:integrations`: what an owner pastes is reduced to an id (no markup, no script), a malformed value is refused with its expected shape, consent nulls the advertising ids server-side, the verification tags are present for a visitor who declined **and on the store's own domain**, and every integration write leaves one audit row while a no-op leaves none.
+- `pnpm pentest:cross-tenant`: the attack an actual tenant can mount — a real session, a real
+  cookie, and another store's id. Every attempt is **paired with the legitimate version of the
+  same request**, so a refusal cannot pass because the route 404s for its owner too, and every
+  refusal is judged by the response body rather than the status code. It prints what it tried
+  and what it left to the other suites.
+- `pnpm drill:restore`: a backup is a hypothesis until it is restored. Dumps, restores into a
+  scratch database, then checks the copy for row counts, forced RLS, and the runtime role's
+  grants — `pg_dump` writes no `CREATE ROLE`, so a restore onto a fresh machine has no
+  `app_user`, and "fixing" that by pointing `APP_DATABASE_URL` at the owner turns RLS off
+  silently.
 - `pnpm e2e:*`: Chrome automation, one script per feature (categories, variants, discounts, social-links, storefront pages, checkout, kinetic/mirage/prism template-specific flows).
 
 ### Custom-domain legs are mandatory, and a skip is a failure

@@ -48,6 +48,7 @@ import { hashPassword } from "../lib/passwords";
 import { disconnectJobPrisma } from "../lib/prisma-job";
 import { prisma } from "../lib/prisma";
 import { closeRedis } from "../lib/redis";
+import { DELIBERATELY_OPEN } from "./_rls-exceptions";
 
 /**
  * Files mentioning a fixed string, via git so nothing outside the repository is searched.
@@ -598,16 +599,8 @@ async function rlsConfigurationCheck() {
     policyFor.set(p.tablename, [...(policyFor.get(p.tablename) ?? []), p.policyname]);
   }
 
-  /**
-   * Tables that carry a tenantId and are deliberately NOT under RLS, each with the reason.
-   * Anything else with a tenantId must be protected, and a new one shows up as a failure rather
-   * than as silence.
-   */
-  const DELIBERATELY_OPEN: Record<string, string> = {
-    // An audit record ABOUT a store is not data belonging to it: a store owner must not be able
-    // to read or alter it, and it outlives the store (nullable tenantId, ON DELETE SET NULL).
-    AnalyticsAuditLog: "platform evidence about a store, not the store's data",
-  };
+  // The one declaration, shared with drill:restore so the two checks cannot disagree about
+  // which tables are allowed to be open. See scripts/_rls-exceptions.ts.
 
   /**
    * Gaps this check FOUND, recorded rather than papered over. The list may only shrink, and it

@@ -67,9 +67,17 @@ The order matters. [EDGE_HARDENING.md](EDGE_HARDENING.md) §3 is the same list w
       the live database. All of them must come back as documented; query 4 returning anything
       other than zeros means RLS is inert in production, which is the one failure here that
       looks like success.
-- [ ] **Backup and restore drill** (P7-24). I can write the script; the restore has to happen
-      against your infrastructure, and you have to be the one who confirms the app booted
-      against the restored copy.
+- [ ] **Backup and restore drill** (P7-24). The script exists and passes here:
+      `pnpm drill:restore` dumps, restores into a scratch database and checks the copy. What is
+      yours is running it **on the VPS** and then booting the app against the restored copy —
+      the drill prints the two commands. Note `pg_dump` writes no `CREATE ROLE`, so a restore
+      onto a fresh machine needs `scripts/sql/rls-role.sql` first.
+- [ ] **Load test on the VPS** (P7-23): `BASE_URL=https://<host> pnpm load-test --levels=30,100,150,300`
+      against a production build. The laptop numbers in CLAUDE.md are not a substitute — they
+      had the database and the load generator on the same machine, and 300 concurrent failed
+      64% there against 10% in the earlier recorded run. Write down what the real server does.
+- [ ] **Penetration test against the real deployment**:
+      `BASE_URL=https://<host> pnpm pentest:cross-tenant`. 31 attempts, all must be refused.
 - [ ] **Run retention's first production pass as a dry run** (P7-26) and read the output before
       letting it delete anything:
       `pnpm analytics:scheduled --stage=retention --dry-run`, or

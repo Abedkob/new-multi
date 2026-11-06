@@ -37,7 +37,7 @@ a laptop. Phase 7 can produce:
 | 7 | **The icon set, and the two bugs it uncovered.** Two source SVGs → eight committed PNGs via `pnpm icons:build` (Chrome, no new dependency), one declaration in `lib/push/icons.ts` that the generator, both manifests and `verify:icons` all read. The icons were the easy half: **both manifests were 307ing to `/login`**, so neither app could be installed by anyone — a browser fetches a manifest with no cookies — and a store's own domain was serving the admin manifest, because `.webmanifest` has a dot in it and the custom-domain branch checked for static files before refusing platform paths. `verify:icons` 16, `verify:permissions` 25. | done |
 | 8 | **Edge hardening, and the half of it that is not in this repository.** `lib/edge.ts`: four variables all defaulting to the pre-Phase-7 behaviour, a trust gate that checks a secret Cloudflare adds (not an IP range — the socket's peer address never reaches Next), one chokepoint in front of `countryFrom` with `verify:edge` failing on a second caller, the forgeable headers dropped from an untrusted request, an https upgrade that fires only on an explicit `x-forwarded-proto: http`, and three response headers on every reply `proxy.ts` produces. `clientIp` now prefers the address the edge reported over counting hops. HSTS is absent from every committed config and `verify:edge` fails if that changes. The origin lock itself is `EDGE_HARDENING.md` §4c, with the break-glass path, because Dokploy's Traefik is shared with every other deployment on the box. Found D84 on the way: a Cloudflare-proxied domain cannot be connected in the platform admin at all. `verify:edge` 25. | done |
 | 9 | **The runbook, and the configuration gap it was written to close.** `PHASE_7_DEPLOY_CHECKLIST.md` (off → verify → pilot → all, with a rollback table), `HUMAN_CHECKLIST.md`, D80's numbers above, and D78's §14 correction. The gap commit 8 reported was real but mis-attributed: `docker-compose.yml` is "reference only" per `DOCKPLOY_SETUP.md`, and **that** document — the actual production path, where environment is set in Dockploy's UI — listed 8 of the 49 variables `lib/env.ts` reads, missing all three that production refuses to boot without. Both are complete now, and `pnpm verify:config` (15 checks) compares every document against the code rather than trusting any of them. §14 itself named three variables nothing reads. | done |
-| 10 | Load test, backup/restore drill, cross-tenant penetration script. | not started |
+| 10 | **The three testing artefacts, and what each one found.** `pentest-cross-tenant.ts` (31 attempts, each paired with the legitimate version of the same request so a refusal cannot pass vacuously, each judged by the response body rather than the status code) — it catches a `withBypass` leak planted on purpose, and it cannot catch a missing `tenantId` on an RLS-covered table, which is now written down. `load-test.ts` against a production build at 30/100/150/300: the dashboard and active-now budgets are comfortable, ingestion is over its 150 ms budget, and 300 concurrent fails 64% with the documented pool timeout on this laptop. `backup-restore-drill.ts` dumps, restores and checks the copy — row counts, forced RLS, and the runtime role, because `pg_dump` writes no `CREATE ROLE`. Its first run disagreed with `verify:aggregates` about `AnalyticsAuditLog`, so the exception list is now one declaration both read. | done |
 | 10 -> merge | After commit 10: `analytics/phase-1` into `codex/new-brand-migration`, deployed with `ANALYTICS_ROLLOUT_MODE=off`, following `PHASE_7_DEPLOY_CHECKLIST.md`. | not started |
 | 11 | The pilot. **Postponed until you say so.** Carries the five edge checks that need a live domain (P7-12 to P7-16). | postponed |
 | 12 | `ANALYTICS_ROLLOUT_MODE=all`, launch-week monitoring, `PHASE_7_ACCEPTANCE.md`. **Postponed.** | postponed |
@@ -353,6 +353,8 @@ exists before the matrix does can only be refused, which is the correct directio
 | `scripts/verify-staff.ts` | The matrix exercised as a real staff session against every admin route, deny-by-default asserted. |
 | `scripts/pentest-cross-tenant.ts` | §13's cross-tenant penetration test, as a script rather than an afternoon. |
 | `scripts/load-test.ts` | §12.3's budgets against `next build && next start`, per CLAUDE.md. |
+| `scripts/backup-restore-drill.ts` | P7-24: dump, restore into a scratch database, and check the copy rather than the exit code. |
+| `scripts/_rls-exceptions.ts` | The one list of tenant-scoped tables deliberately left open, read by `verify:aggregates` and the drill. |
 | `PHASE_7_DEPLOY_CHECKLIST.md` | The ordered merge → deploy → `pilot` → `all` runbook. |
 | `PHASE_7_ACCEPTANCE.md` | The record, written last. |
 | `HUMAN_CHECKLIST.md` | §8 below, as a file you can tick. |
@@ -480,10 +482,28 @@ the edge's. `EDGE_HARDENING.md` §6 has the curl commands for each.
 ### Operations
 
 - P7-23 Load test at 30/100/150 concurrent meets §12.3's budgets against a production build,
-  with the numbers recorded.
+  with the numbers recorded. **Script done, numbers recorded, budgets NOT all met on a
+  development machine** (`pnpm load-test`, 2026-11-06, production build on a laptop also
+  running PostgreSQL and the load generator): storefront 30/100/150 concurrent pass with no
+  failures (p50 1129/3545/4855 ms); 300 concurrent fails 64% with Prisma's `maxWait`, the same
+  failure mode the earlier run recorded at 10%. The 30-day dashboard (p95 851 ms) and
+  active-now (p95 67 ms) are inside their budgets; **ingestion is not** — p95 192 ms at 5
+  concurrent against a 150 ms budget. The run that decides any of this is yours, on the VPS,
+  and it is in HUMAN_CHECKLIST.md.
 - P7-24 A database backup is restored into a scratch database and the app boots against it.
+  **Half done: `pnpm drill:restore`, 6 checks, run today against the real database.** It dumps,
+  creates a scratch database, restores, and then checks the copy rather than the exit code —
+  all 36 tables' row counts match, every tenant-scoped table came back ENABLE + FORCE with its
+  policies (28, plus the one documented exception), and the runtime role has its 144 grants.
+  The booting half is yours: the drill prints the two commands, because a restore that passes
+  every check and cannot serve a page has still failed.
 - P7-25 `pentest-cross-tenant.ts` finds nothing, and its attempts are listed so a future reader
-  knows what was tried.
+  knows what was tried. **Done: 31 attempts, all refused, against a production build.** Six
+  id routes, eight list pages, the platform console, four anonymous paths, six host-header
+  attacks on a store's own domain, the two internal endpoints, the public search API, and a
+  final check that the target's rows are untouched. The script prints every attempt and, at the
+  end, what it did **not** try and which suite covers that instead — including Server Action
+  POSTs, which are not reachable from a script because Next's action ids are per-build.
 - P7-26 Retention's first production run is a **dry run**, and its output is recorded before any
   real run.
 
