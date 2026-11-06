@@ -52,3 +52,6 @@ next-env.d.ts
 
 # Screenshots written by pnpm e2e:consent
 consent-screenshots/
+
+# Built by `pnpm build:job` for the production image; never committed.
+/dist

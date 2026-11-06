@@ -794,11 +794,13 @@ export const en = {
 
   // Analytics reports (app/admin/(panel)/analytics/*) and the §6 insights
   "reports.notMeasuring.title": "Nothing has been measured yet",
-  "reports.notMeasuring.body": "This is not the same as “no visitors”. Measurement needs two things to be true, and until both are, there is nothing to count rather than nothing happening.",
+  "reports.notMeasuring.body": "This is not the same as “no visitors”. Measurement needs three things to be true, and until all three are, there is nothing to count rather than nothing happening.",
   "reports.notMeasuring.rolloutOn": "Your store is switched on for measurement.",
   "reports.notMeasuring.rolloutOff": "Your store is not switched on for measurement yet. Only the platform can do that — ask whoever set your store up.",
   "reports.notMeasuring.consentSeen": "At least one visitor has answered the privacy banner.",
   "reports.notMeasuring.consentNone": "No visitor has agreed to measurement yet. Visitors who decline are never counted, by design.",
+  "reports.notMeasuring.aggregatedYes": "The scheduled update has run for your store.",
+  "reports.notMeasuring.aggregatedNo": "The scheduled update has not run yet. Figures are built by it, not as visitors arrive, so nothing can appear until it does — ask whoever set your store up.",
   "reports.notMeasuring.note": "Figures appear here after the next scheduled update, which runs every few minutes. Visitors who declined measurement will never appear in them.",
   "reports.live.label": "Here right now",
   "reports.live.unavailable": "Temporarily unavailable",

@@ -58,6 +58,8 @@ pnpm dev                              # http://localhost:3000
 | `pnpm load-test` | §12.3's budgets against a **production build** at 30/100/150/300 concurrent (needs `pnpm build && pnpm start`) |
 | `pnpm drill:restore` | Dump this database, restore it into a scratch copy beside it, and check the copy: row counts, forced RLS, the runtime role's grants |
 | `pnpm verify:config` | Static check that the compose file, `.env.example`, `DOCKPLOY_SETUP.md`, the deploy checklist and the master plan's §14 all agree with `lib/env.ts` — no phantom variable, nothing production needs left unpassed (no server needed) |
+| `pnpm build:job` | Bundle the operational commands (`dist/analytics-scheduled.mjs`, `dist/seed.mjs`) for the production image. Run by the Dockerfile's builder stage; `dist/` is git-ignored |
+| `pnpm verify:container-commands` | Static check that every command a runbook tells an operator to run **inside the container** exists in the image's runtime stage (no server needed) |
 | `pnpm verify:edge` | Static check of the edge trust gate (D75): the four modes, the strip list, the single `countryFrom` caller, the https upgrade, and that no committed config enables HSTS (no server needed) |
 | `pnpm verify:rate-limit` | Test the Redis-backed limiter against a real Redis: the budget, the trailing window at a boundary, a TTL on every bucket, 50 concurrent callers, and that an old-shape key degrades rather than allows. Needs `REDIS_URL` and **fails** without one |
 | `pnpm verify:icons` | Static check of the installable apps' icons: every manifest `src` resolves to a real PNG of the size it claims, both apps' marks differ, no orphans (no server needed) |
@@ -408,6 +410,33 @@ the pre-Phase-7 behaviour, so a deployment that sets none of them behaves exactl
 
 ## Important Gotchas
 
+- **`pnpm <script>` does not exist in the production image, and four runbooks said it did.**
+  The runtime stage copies Next's standalone output, three global npm packages (`prisma`,
+  `dotenv`, `pg`) and one script. No pnpm, no tsx, no `scripts/`, no TypeScript sources. So
+  `docker exec … pnpm analytics:scheduled` (the five-minute scheduled command) and
+  `docker exec … pnpm db:seed` (the first platform admin) could never have run — and the
+  scheduled one never did: `AnalyticsScheduledRun` was empty on the test deployment, so no
+  aggregate existed and every report was blank while collection worked perfectly. The rollout
+  being `off` is the only reason an empty report looked like the expected answer.
+  **In the container it is `node dist/analytics-scheduled.mjs` and `node dist/seed.mjs`**, built
+  by `pnpm build:job`; migrations are `prisma migrate deploy` via the global CLI (never
+  `pnpm db:migrate`, which is `migrate dev` — interactive, and may author a migration).
+  `pnpm verify:container-commands` fails if a runbook names something the image lacks, and it
+  found the `db:seed`, `demo:seed` and `verify:*` instances on its first run. The verify suites
+  and `demo:seed` are **not** bundled on purpose: they create and delete throwaway stores, so
+  the runbooks now say to run them from a checkout with `DATABASE_URL` pointed at the target.
+- **`.next/standalone/node_modules` holds five packages, not your dependency tree.** Next bundles
+  the app's dependencies into its compiled server chunks, so standalone traces only `next`,
+  `react`, `react-dom`, `pg` and `@aws-sdk`. `zod`, `redis`, `web-push`, `bcryptjs` and the
+  Prisma client are not resolvable modules there at all — and the `pg` that is traced is
+  **partial**: it has `pg-types` but not `postgres-array`, which `pg-types` requires at load,
+  because Next traces only the paths the web app reaches. So anything that runs beside
+  `server.js` must carry its own dependencies: `scripts/build-job.mjs` bundles everything and
+  leaves external only `pg-native` and node-redis's two optional extras, each justified in the
+  file. It also needs a `createRequire` banner, since bundled CommonJS calls `require()` and an
+  ESM output has none. Every one of those was found by **running the bundle against a real
+  standalone tree**, not by reading it — a developer's flat `node_modules` has everything and
+  proves nothing.
 - **Restart `pnpm dev` after DB migrations.** A running dev server caches the old Prisma client and throws "Cannot read properties of undefined" until restarted.
 - **Prisma client generation needs `DATABASE_URL` at install time.** Copy `.env.example` → `.env` before `pnpm install`.
 - **AGENTS.md and CLAUDE.md are hand-maintained.** This entry used to say `next dev` regenerates them from `scripts/generate-agent-files.js`; that script does not exist in the repository, and the working tree stays clean across dev-server restarts. AGENTS.md is the Next.js rules file from `create-next-app`; this file is ours. Edit them directly.

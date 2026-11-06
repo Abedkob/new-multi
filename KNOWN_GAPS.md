@@ -135,6 +135,27 @@ Newest sections at the bottom; delete an item when it's fixed.
 
 ## Testing and ops
 
+- **The runbooks' container commands are only checked by shape, not by execution.**
+  `pnpm verify:container-commands` is static: it proves the Dockerfile's runtime stage copies the
+  entrypoints the runbooks name, that no fenced command runs the scheduled command through
+  `pnpm`, and that no `docker exec` line invokes `pnpm`. It does **not** run anything in a built
+  image, and it cannot tell "run this on your laptop" from "run this in the container" for an
+  arbitrary command, because the documents never marked that distinction — so a new container
+  command of some other shape (a bare binary, say) would pass unnoticed. That shape is where the
+  original defect lived for seven phases: four documents told an operator to schedule
+  `pnpm analytics:scheduled` in an image with no pnpm, no tsx and no `scripts/` directory, so it
+  never ran once. `AnalyticsScheduledRun` was empty, no aggregate existed, every report was
+  blank — while collection itself worked perfectly — and the rollout being `off` made an empty
+  report look like the expected answer. The only thing that proves the real image can run the
+  real command is running it there, which is now a step in §5 of the deploy checklist and is
+  still a thing a person does rather than a check.
+- **Nothing warns that collection is on and aggregation is not.** The three conditions are now
+  stated on the owner's Overview, but there is no platform-side alert for "events are arriving
+  for a store whose aggregation cursor has never advanced" — which is precisely the state the
+  test deployment sat in. `health-evaluate` watches ingestion and lag; it does not watch for a
+  scheduler that is not running at all, and a scheduler that never runs also never writes the
+  row an alert would key on.
+
 - **No automated test suite or CI.** Verification is four manual scripts
   (`pnpm verify:isolation`, `verify:commerce`, `verify:templates`, `verify:permissions`) plus
   browser runs (`e2e:*`). The

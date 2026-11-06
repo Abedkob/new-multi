@@ -131,9 +131,14 @@ checklist, including the one switch you cannot set after the merge:
 
 - [ ] **Seed Platform Admin**
   ```bash
-  docker exec multitenant-app pnpm db:seed
+  docker exec multitenant-app node dist/seed.mjs
   # Creates admin user from PLATFORM_ADMIN_* env vars
   ```
+
+  **Not `pnpm db:seed`**, which is what this line said until Phase 7 and could never have run
+  here: the runtime image has no pnpm and no tsx, and `prisma db seed` shells out to
+  `tsx prisma/seed.ts`. The bundled entrypoint is built by `pnpm build:job` and held down by
+  `pnpm verify:container-commands`.
 
 - [ ] **Test App is Running**
   ```bash
@@ -160,12 +165,29 @@ checklist, including the one switch you cannot set after the merge:
 - [ ] Redis only accessible internally (not exposed publicly)
 
 ### Verification Scripts
+
+Run these **from a checkout**, not inside the container — they need the development toolchain
+(pnpm, tsx, the TypeScript sources), none of which is in the runtime image. Point them at the
+target with `DATABASE_URL`:
+
 ```bash
-# SSH into Dockploy server and run:
-docker exec multitenant-app pnpm verify:isolation
-docker exec multitenant-app pnpm verify:commerce
-docker exec multitenant-app pnpm verify:permissions
+DATABASE_URL=<the deployment's URL> pnpm verify:isolation
 ```
+
+```bash
+DATABASE_URL=<the deployment's URL> pnpm verify:commerce
+```
+
+```bash
+DATABASE_URL=<the deployment's URL> pnpm verify:permissions
+```
+
+Each of them **creates and deletes throwaway stores**, so prefer staging. Against production,
+run them before the pilot store exists, and never during the pilot window — a suite's teardown
+is not something to debug next to real orders.
+
+`verify:isolation` additionally needs `APP_DATABASE_URL` to point at the restricted `app_user`
+role; it refuses to run as a privileged role rather than reporting a green that means nothing.
 
 - [ ] All three verification scripts pass
 
@@ -178,10 +200,12 @@ docker exec multitenant-app pnpm verify:permissions
 
 ## Optional: Demo Store (2 min)
 
-Create a demo store with sample data for testing:
+Create a demo store with sample data for testing. A development command, run **from a checkout**
+against the target — it is not in the runtime image, and a demo store on a production deployment
+is a decision, not a step:
 
 ```bash
-docker exec multitenant-app pnpm demo:seed
+DATABASE_URL=<the deployment's URL> pnpm demo:seed
 ```
 
 - [ ] "Demo Boutique" store created

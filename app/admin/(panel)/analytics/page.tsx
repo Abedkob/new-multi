@@ -16,6 +16,7 @@ import {
 import { activeVisitors } from "@/lib/analytics/presence";
 import { rolloutIncludes } from "@/lib/analytics/rollout";
 import { countConsentReceipts } from "@/lib/data/consent";
+import { hasAggregationRun } from "@/lib/data/analytics-aggregation";
 import { getTenantById } from "@/lib/data/tenants";
 import { formatPrice } from "@/lib/format";
 import { getT } from "@/lib/i18n/locale";
@@ -106,6 +107,7 @@ export default async function AnalyticsOverviewPage({
         <NotMeasuring
           inRollout={rolloutIncludes(tenant)}
           hasConsentReceipts={(await countConsentReceipts(tenantId)) > 0}
+          hasAggregated={await hasAggregationRun(tenantId)}
         />
         <LiveVisitors presence={presence} />
       </div>

@@ -333,14 +333,25 @@ Once app is healthy, run setup commands:
 **In Dockploy's terminal or container shell:**
 
 ```bash
-# Run migrations
-docker exec multitenant-app pnpm db:migrate
+# Migrations already ran at boot (the container's CMD runs `prisma migrate deploy`).
+# To re-run them by hand, use the globally installed Prisma CLI — never `migrate dev`:
+docker exec multitenant-app prisma migrate deploy
 
 # Seed platform admin
-docker exec multitenant-app pnpm db:seed
+docker exec multitenant-app node dist/seed.mjs
+```
 
-# (Optional) Create demo store
-docker exec multitenant-app pnpm demo:seed
+**These are the container spellings, and they are not the development ones.** Until Phase 7 this
+block said `pnpm db:migrate` and `pnpm db:seed`; neither can run in the runtime image, which has
+no pnpm and no tsx. `pnpm db:migrate` was wrong twice over — it maps to `prisma migrate dev`,
+which is interactive and may generate a migration, so it has no business touching production.
+`pnpm verify:container-commands` now fails if this document names something the image lacks.
+
+The demo store is a development command — run it **from a checkout**, with `DATABASE_URL`
+pointed at the deployment, and only if you actually want a demo store on it:
+
+```bash
+DATABASE_URL=<the deployment's URL> pnpm demo:seed
 ```
 
 **Or through Dockploy UI:**
@@ -442,7 +453,7 @@ Backups: Daily
 | App returns 500 error | Missing env var | Check all env vars are set, restart app |
 | `ECONNREFUSED` in logs | Service not ready | Wait for health checks, check logs |
 | Certificate not provisioning | HTTP port blocked | Ensure port 80 is open to Let's Encrypt |
-| Login fails | Wrong password | Run `docker exec ... pnpm db:seed` again |
+| Login fails | Wrong password | Run `docker exec multitenant-app node dist/seed.mjs` again |
 | Migrations won't run | App not healthy | Check logs, restart container |
 
 ---

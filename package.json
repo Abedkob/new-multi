@@ -61,7 +61,9 @@
     "e2e:prism": "tsx scripts/e2e/prism.ts",
     "icons:build": "tsx scripts/build-icons.ts",
     "verify:rate-limit": "tsx scripts/verify-rate-limit.ts",
-    "verify:app-scoping": "tsx scripts/verify-app-scoping.ts"
+    "verify:app-scoping": "tsx scripts/verify-app-scoping.ts",
+    "build:job": "node scripts/build-job.mjs",
+    "verify:container-commands": "tsx scripts/verify-container-commands.ts"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1138.0",
@@ -95,6 +97,7 @@
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "@types/web-push": "^3.6.4",
+    "esbuild": "^0.28.2",
     "eslint": "^9",
     "eslint-config-next": "16.3.5",
     "playwright-core": "^1.63.0",

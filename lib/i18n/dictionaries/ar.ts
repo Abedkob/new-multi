@@ -795,11 +795,13 @@ export const ar: Record<DictionaryKey, string> = {
 
   // التقارير والملاحطات
   "reports.notMeasuring.title": "لم يُقَس أي شيء بعد",
-  "reports.notMeasuring.body": "وهذا ليس معناه «لا زوار». القياس يحتاج أمرين معًا، وحتى يتحققا لا يوجد ما يُحسب — لا أنّ شيئًا لم يحدث.",
+  "reports.notMeasuring.body": "وهذا ليس معناه «لا زوار». القياس يحتاج أمورًا ثلاثة معًا، وحتى تتحقق جميعًا لا يوجد ما يُحسب — لا أنّ شيئًا لم يحدث.",
   "reports.notMeasuring.rolloutOn": "متجرك مُفعَّل للقياس.",
   "reports.notMeasuring.rolloutOff": "متجرك غير مُفعَّل للقياس بعد. المنصة وحدها تستطيع تفعيله — اسأل من أنشأ متجرك.",
   "reports.notMeasuring.consentSeen": "زائر واحد على الأقل أجاب على إشعار الخصوصية.",
   "reports.notMeasuring.consentNone": "لم يوافق أي زائر على القياس بعد. ومن يرفض لا يُحسب أبدًا، وهذا مقصود.",
+  "reports.notMeasuring.aggregatedYes": "التحديث المجدول عمل لمتجرك.",
+  "reports.notMeasuring.aggregatedNo": "التحديث المجدول لم يعمل بعد. الأرقام يبنيها هو، لا وصول الزوار، فلا يمكن أن يظهر شيء قبله — اسأل من أنشأ متجرك.",
   "reports.notMeasuring.note": "تظهر الأرقام هنا بعد التحديث المجدول التالي، الذي يعمل كل بضع دقائق. ومن رفض القياس لن يظهر فيها أبدًا.",
   "reports.live.label": "هنا الآن",
   "reports.live.unavailable": "غير متاح مؤقتًا",

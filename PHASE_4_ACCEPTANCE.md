@@ -213,10 +213,16 @@ production-build figures stand.
 
 1. `ANALYTICS_ROLLOUT_MODE` stays `off`. Phase 4 built the machinery; §13 holds the launch.
 2. **Run retention as a dry run first** and read the counts:
-   `pnpm analytics:scheduled --dry-run`. Enable the live run only after the numbers have been
-   looked at by a person (D35).
-3. Schedule `pnpm analytics:scheduled` every five minutes in Dockploy (§10), and give the
-   container the usual 10–30s graceful shutdown so `after()` callbacks finish.
+   `pnpm analytics:scheduled --dry-run` in development, or
+   `node dist/analytics-scheduled.mjs --dry-run` in the container. Enable the live run only
+   after the numbers have been looked at by a person (D35).
+3. Schedule `node dist/analytics-scheduled.mjs` every five minutes in Dockploy (§10), and give
+   the container the usual 10–30s graceful shutdown so `after()` callbacks finish.
+
+   **Corrected in Phase 7.** Both lines above said `pnpm analytics:scheduled`, which works in
+   development and cannot work in the image — no `tsx`, no `scripts/`, no sources. The command
+   is now bundled by `pnpm build:job`, and `pnpm verify:container-commands` holds the
+   distinction down so this cannot drift back.
 4. New environment variables, all optional with defaults:
    `ANALYTICS_JOB_DATABASE_POOL_MAX` (2), `ANALYTICS_HEALTH_FLUSH_MINUTES` (5),
    `ANALYTICS_RAW_RETENTION_DAYS` (90), `ANALYTICS_VISITOR_RETENTION_MONTHS` (13),

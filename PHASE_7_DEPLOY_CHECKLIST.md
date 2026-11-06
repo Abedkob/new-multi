@@ -137,13 +137,36 @@ Production **refuses to boot** without these, and `lib/env.ts` names each one in
 
 ## 5. The scheduled command
 
-- [ ] Dockploy scheduled command, every five minutes, same image: `pnpm analytics:scheduled`.
+- [ ] Dockploy scheduled command, every five minutes, same image:
+
+      ```bash
+      node dist/analytics-scheduled.mjs
+      ```
+
+      **Not `pnpm analytics:scheduled`**, which is the development spelling. It is what this
+      document said for seven phases, and it could never have worked: the runtime image has no
+      `tsx`, no `scripts/` directory and no TypeScript sources, so the scheduled command had no
+      entrypoint at all. Nothing aggregated, `AnalyticsScheduledRun` stayed empty, and the
+      rollout being `off` is the only reason an empty report looked expected. The bundle is built
+      by `pnpm build:job` in the Dockerfile's builder stage, and
+      `pnpm verify:container-commands` fails if this document ever names something the image
+      does not contain.
+- [ ] Confirm it before scheduling it, in the deployed container:
+
+      ```bash
+      docker exec <app-container> node dist/analytics-scheduled.mjs --stage=aggregate-recompute
+      ```
+
+      Then `SELECT stage, "finishedAt", error FROM "AnalyticsScheduledRun" ORDER BY "startedAt" DESC LIMIT 5;`
+      — a row with no error is the proof. Zero rows means the command is still not running, and
+      a scheduler that reports success while writing no row is the failure this step exists to
+      catch.
 - [ ] 10–30 second graceful shutdown configured, so `after()` callbacks finish.
 - [ ] **Retention's first production run is a dry run** (P7-26). Either way works; the second is
       the one to use from a scheduler:
 
       ```bash
-      pnpm analytics:scheduled --stage=retention --dry-run
+      node dist/analytics-scheduled.mjs --stage=retention --dry-run
       ```
 
       or set `ANALYTICS_RETENTION_DRY_RUN=true` for the scheduled command's first run.

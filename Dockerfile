@@ -18,6 +18,11 @@ RUN npm install -g pnpm && DATABASE_URL="postgresql://placeholder:placeholder@lo
 # Build Next.js app
 RUN pnpm run build
 
+# Bundle the scheduled command (scripts/build-job.mjs). Next's standalone output contains only
+# what the WEB process imports, so without this the job the runbooks tell an operator to schedule
+# has no entrypoint in the image at all.
+RUN pnpm run build:job
+
 # Stage 3: Runtime
 FROM node:22-alpine AS runner
 WORKDIR /app
@@ -37,6 +42,19 @@ COPY --from=builder /app/public ./public
 COPY prisma ./prisma
 COPY prisma.config.ts ./prisma.config.ts
 COPY scripts/ensure-app-role.cjs ./scripts/ensure-app-role.cjs
+
+# The operational commands (scripts/build-job.mjs), run here as:
+#
+#   node dist/analytics-scheduled.mjs [--dry-run] [--stage=<name>]   §5 of the deploy checklist
+#   node dist/seed.mjs                                               the first platform admin
+#
+# `pnpm analytics:scheduled` and `pnpm db:seed` are the DEVELOPMENT spellings and neither exists
+# in this image: they need pnpm, tsx and the TypeScript sources, none of which are copied here.
+# `prisma db seed` is no better — prisma.config.ts has it shell out to `tsx prisma/seed.ts`.
+# scripts/verify-container-commands.ts fails if a runbook tells an operator to run something in
+# the container that is not present in this stage.
+COPY --from=builder /app/dist ./dist
+
 
 # Health check
 HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \

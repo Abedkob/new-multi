@@ -133,13 +133,13 @@ asked again rather than the platform honouring a grant it can no longer verify. 
 3. **Seed Platform Admin**
    - After app is healthy, run:
    ```bash
-   docker exec multitenant-app pnpm db:seed
+   docker exec multitenant-app node dist/seed.mjs
    ```
    - Admin account created from `PLATFORM_ADMIN_*` env vars
 
 4. **Optional: Create Demo Store**
    ```bash
-   docker exec multitenant-app pnpm demo:seed
+   DATABASE_URL=<the deployment's URL> pnpm demo:seed   # from a checkout, not the container
    ```
    - Test store "Demo Boutique" with sample products
 
@@ -272,7 +272,7 @@ To run multiple app instances behind a load balancer:
 | Database connection errors | Verify `DATABASE_URL` and `APP_DATABASE_URL` match container names. Restart PostgreSQL: `docker restart multitenant-db` |
 | RLS policies not enforced | Verify `APP_DATABASE_URL` is set (not empty). Check `SELECT * FROM pg_policies;` in database. |
 | Redis connection refused | Verify `REDIS_URL` password matches `REDIS_PASSWORD` env var. Restart Redis: `docker restart multitenant-redis` |
-| Migrations stuck | Check if migrations lock file exists. Clear: `docker exec multitenant-db rm /var/lib/postgresql/data/.migration_lock` (if present). Retry: `docker exec multitenant-app pnpm db:migrate` |
+| Migrations stuck | Check if migrations lock file exists. Clear: `docker exec multitenant-db rm /var/lib/postgresql/data/.migration_lock` (if present). Retry: `docker exec multitenant-app prisma migrate deploy` |
 | HTTPS certificate not provisioning | Ensure A-record points to Dockploy server. Check Caddy logs. Wait 5-10 mins for Let's Encrypt propagation. |
 | Rate limiting too aggressive | Check `TRUSTED_PROXY_COUNT` is correct (1 = direct, 2 = Cloudflare + proxy). Adjust in env vars. |
 
@@ -320,7 +320,7 @@ If a deployment breaks production:
 
 3. **Run migrations backward** (if schema changed)
    ```bash
-   docker exec multitenant-app pnpm db:migrate resolve  # Last resort; usually migrations are forward-only
+   docker exec multitenant-app prisma migrate resolve  # Last resort; usually migrations are forward-only
    ```
 
 4. **Verify health**

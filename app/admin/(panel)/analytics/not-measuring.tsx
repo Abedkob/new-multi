@@ -11,17 +11,25 @@ import { useT } from "@/lib/i18n/context";
  * aggregate row whatsoever, the tiles are replaced by this: the two conditions measurement needs,
  * and which of them this store is actually missing.
  *
- * `inRollout` and `hasConsentReceipts` are facts about the store, not guesses. Measurement needs
- * both: the store switched into the rollout by the platform, and a visitor who granted analytics
- * consent. Neither is something the owner can fake, and only one of them is theirs to fix — so
- * the copy says which.
+ * The three are facts about the store, not guesses: the store switched into the rollout by the
+ * platform, a visitor who granted analytics consent, and a scheduled update that has actually
+ * run. None is something the owner can fake, and only one of them is theirs to fix — so the copy
+ * says which.
+ *
+ * `hasAggregated` was added in Phase 7, after the first two conditions both went green on a real
+ * deployment and the report stayed empty anyway. The figures are built from aggregates, and the
+ * command that builds them had no entrypoint in the production image — so the panel was naming
+ * two satisfied conditions and silently omitting the one that was false. A diagnostic that can
+ * be complete and still point the wrong way is worse than no diagnostic.
  */
 export function NotMeasuring({
   inRollout,
   hasConsentReceipts,
+  hasAggregated,
 }: {
   inRollout: boolean;
   hasConsentReceipts: boolean;
+  hasAggregated: boolean;
 }) {
   const t = useT();
   return (
@@ -44,6 +52,14 @@ export function NotMeasuring({
             hasConsentReceipts
               ? "reports.notMeasuring.consentSeen"
               : "reports.notMeasuring.consentNone",
+          )}
+        </li>
+        <li>
+          <strong>{hasAggregated ? "✓" : "•"}</strong>{" "}
+          {t(
+            hasAggregated
+              ? "reports.notMeasuring.aggregatedYes"
+              : "reports.notMeasuring.aggregatedNo",
           )}
         </li>
       </ul>

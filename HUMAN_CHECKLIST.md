@@ -80,7 +80,8 @@ The order matters. [EDGE_HARDENING.md](EDGE_HARDENING.md) §3 is the same list w
       `BASE_URL=https://<host> pnpm pentest:cross-tenant`. 31 attempts, all must be refused.
 - [ ] **Run retention's first production pass as a dry run** (P7-26) and read the output before
       letting it delete anything:
-      `pnpm analytics:scheduled --stage=retention --dry-run`, or
+      `node dist/analytics-scheduled.mjs --stage=retention --dry-run` **inside the container**
+      (`pnpm analytics:scheduled` is the development spelling and is not in the image), or
       `ANALYTICS_RETENTION_DRY_RUN=true` for the scheduled command's first run.
 
 ## The pilot
