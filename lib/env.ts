@@ -306,10 +306,22 @@ export const envSchema = z
       "ANALYTICS_SIGNING_SECRET is required in production (consent cookies must be signed). Generate with: openssl rand -base64 32",
     path: ["ANALYTICS_SIGNING_SECRET"],
   })
-  .refine((v) => v.NODE_ENV !== "production" || (v.PLATFORM_PRIVACY_NAME && v.PLATFORM_PRIVACY_EMAIL), {
+  // Both are required in production, and they are checked SEPARATELY on purpose. One refinement
+  // covering both could only file its issue against one path, so a deployment that set
+  // PLATFORM_PRIVACY_NAME and redeployed got the identical error naming the variable it had just
+  // set — indistinguishable from "my change did not take effect". It cost a real deploy cycle on
+  // the test host. Each variable now reports its own absence, and because a failed refinement
+  // leaves the result dirty rather than aborted, every other missing variable is still listed in
+  // the same startup error.
+  .refine((v) => v.NODE_ENV !== "production" || !!v.PLATFORM_PRIVACY_NAME, {
     message:
-      "PLATFORM_PRIVACY_NAME and PLATFORM_PRIVACY_EMAIL are required in production (the platform is a joint controller and must be identifiable on every store's privacy page)",
+      "PLATFORM_PRIVACY_NAME is required in production (the platform is a joint controller and must be identifiable on every store's privacy page)",
     path: ["PLATFORM_PRIVACY_NAME"],
+  })
+  .refine((v) => v.NODE_ENV !== "production" || !!v.PLATFORM_PRIVACY_EMAIL, {
+    message:
+      "PLATFORM_PRIVACY_EMAIL is required in production (a store's privacy page must give a visitor an address to write to)",
+    path: ["PLATFORM_PRIVACY_EMAIL"],
   });
 
 function load() {
