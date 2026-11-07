@@ -34,6 +34,7 @@ import { describeRetention, runRetention } from "@/lib/analytics/retention";
 import { NOTIFICATION_STAGES } from "@/lib/notifications/stages";
 import type { Stage, StageContext } from "@/lib/analytics/scheduled";
 import { env } from "@/lib/env";
+import { participationWhere } from "@/lib/analytics/rollout";
 import { jobPrisma, withJobBypass, withJobTenant } from "@/lib/prisma-job";
 
 /** How many stores one run will touch. A thousand stores must not become one unbounded query. */
@@ -55,7 +56,10 @@ async function tenantsToProcess(): Promise<AggregateTenant[]> {
   // is exactly what withJobBypass is for, and being explicit keeps the intent readable.
   return withJobBypass((tx) =>
     tx.tenant.findMany({
-      where: { analyticsPausedAt: null },
+      // participationWhere(), not `analyticsPausedAt: null`: the rollout decides which stores
+      // collect, so it must also decide which stores are aggregated. They used to disagree, and
+      // the looser one was here — see the note on participationWhere for what that cost.
+      where: participationWhere(),
       select: { id: true, analyticsTimezone: true },
       orderBy: { createdAt: "asc" },
       take: TENANT_BATCH,

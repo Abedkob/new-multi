@@ -60,6 +60,7 @@ pnpm dev                              # http://localhost:3000
 | `pnpm verify:config` | Static check that the compose file, `.env.example`, `DOCKPLOY_SETUP.md`, the deploy checklist and the master plan's §14 all agree with `lib/env.ts` — no phantom variable, nothing production needs left unpassed (no server needed) |
 | `pnpm build:job` | Bundle the operational commands (`dist/analytics-scheduled.mjs`, `dist/seed.mjs`) for the production image. Run by the Dockerfile's builder stage; `dist/` is git-ignored |
 | `pnpm verify:container-commands` | Static check that every command a runbook tells an operator to run **inside the container** exists in the image's runtime stage (no server needed) |
+| `pnpm verify:rollout` | Pure check that the rollout's two shapes agree — `includesWith` (a request) and `whereWith` (a job's tenant filter) — in all three modes, that every analytics stage walk is gated and the housekeeping ones are not, and that the mode is read in exactly one place (no server or database) |
 | `pnpm verify:edge` | Static check of the edge trust gate (D75): the four modes, the strip list, the single `countryFrom` caller, the https upgrade, and that no committed config enables HSTS (no server needed) |
 | `pnpm verify:rate-limit` | Test the Redis-backed limiter against a real Redis: the budget, the trailing window at a boundary, a TTL on every bucket, 50 concurrent callers, and that an old-shape key degrades rather than allows. Needs `REDIS_URL` and **fails** without one |
 | `pnpm verify:icons` | Static check of the installable apps' icons: every manifest `src` resolves to a real PNG of the size it claims, both apps' marks differ, no orphans (no server needed) |
@@ -425,6 +426,25 @@ the pre-Phase-7 behaviour, so a deployment that sets none of them behaves exactl
   found the `db:seed`, `demo:seed` and `verify:*` instances on its first run. The verify suites
   and `demo:seed` are **not** bundled on purpose: they create and delete throwaway stores, so
   the runbooks now say to run them from a checkout with `DATABASE_URL` pointed at the target.
+- **One definition of "this store takes part in analytics", in two shapes.** The rollout gate had
+  drifted into three: request paths used `rolloutIncludes`, the aggregation stages used
+  `analyticsPausedAt: null`, and `owner-alerts`/`owner-weekly-summary` used **no filter at all**.
+  The job's was the loosest, and `recomputeDays` upserts the daily metric unconditionally — so a
+  store the rollout excluded got a row of zeros, which sets `lastComputedAt`, which makes
+  `/admin/analytics` treat it as measured and render **a grid of zeros**: exactly what P5-25 and
+  the NotMeasuring panel exist to prevent, since zeros read as "nobody came to your store". In
+  `pilot` it also contradicted §7 of the deploy checklist, which has an operator confirm the
+  pilot store collects and no other store does. Nobody saw it because the scheduled command
+  could not run in the image at all — two defects hiding each other, the second one due the
+  moment the first was fixed. Now `lib/analytics/rollout.ts` holds the decision once as a pure
+  function of a `Participation` value, in two shapes: `includesWith` for a request and
+  `whereWith` for a tenant filter. `current()` is the only place the environment is read.
+  **Housekeeping is deliberately ungated** — retention must still delete an excluded store's
+  expired rows, and a new order is an order whatever the rollout says — and
+  `pnpm verify:rollout` fails if that split is blurred in either direction. The trade-off, in
+  the open: in `off` nothing aggregates either, so a rollback stops aggregates being corrected
+  as well as stopping collection; a day that still needs recomputing afterwards is a manual
+  `--stage=nightly-backfill` with the mode temporarily restored.
 - **`.next/standalone/node_modules` holds five packages, not your dependency tree.** Next bundles
   the app's dependencies into its compiled server chunks, so standalone traces only `next`,
   `react`, `react-dom`, `pg` and `@aws-sdk`. `zod`, `redis`, `web-push`, `bcryptjs` and the

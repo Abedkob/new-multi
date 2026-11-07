@@ -63,7 +63,8 @@
     "verify:rate-limit": "tsx scripts/verify-rate-limit.ts",
     "verify:app-scoping": "tsx scripts/verify-app-scoping.ts",
     "build:job": "node scripts/build-job.mjs",
-    "verify:container-commands": "tsx scripts/verify-container-commands.ts"
+    "verify:container-commands": "tsx scripts/verify-container-commands.ts",
+    "verify:rollout": "tsx scripts/verify-rollout.ts"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1138.0",

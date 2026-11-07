@@ -19,6 +19,7 @@
 
 import type { Stage, StageContext } from "@/lib/analytics/scheduled";
 import { jobPrisma, withJobBypass } from "@/lib/prisma-job";
+import { participationWhere } from "@/lib/analytics/rollout";
 import { CATCH_UP_WINDOW_MS, announceNewOrder } from "@/lib/notifications/new-order";
 import { claimDelivery, recordDeliveryOutcome } from "@/lib/data/notifications";
 import { decryptPushSecret } from "@/lib/push/crypto";
@@ -311,10 +312,23 @@ export const ownerWeeklySummary: Stage = {
   },
 };
 
-/** Stores with an owner, which is every store. Bounded, like every other stage's walk. */
+/**
+ * Stores whose owner may receive an analytics notification.
+ *
+ * This used to be every store, with no filter — not even `analyticsPausedAt`. So an owner could
+ * be sent an insight alert, or a Monday summary of zeros, about a store the platform had
+ * explicitly silenced or had never switched on. The alerts read §6's insights, which treat an
+ * unmeasured figure as unknown rather than low (D54), so a false "your conversion dropped" was
+ * unlikely — but a weekly summary of zeros to a store that was never measured is still a push
+ * notification asserting something untrue.
+ *
+ * The new-order notification is NOT gated this way: an order is an order whether or not the
+ * store is in the analytics rollout.
+ */
 function ownerTenants() {
   return withJobBypass((db) =>
     db.tenant.findMany({
+      where: participationWhere(),
       select: {
         id: true,
         analyticsTimezone: true,
