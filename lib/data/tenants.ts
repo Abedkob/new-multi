@@ -100,6 +100,38 @@ export function setTenantPaused(id: string, reason: string | null) {
 }
 
 /**
+ * The platform-admin switch for the in-store till.
+ *
+ * One function writes all three columns, so they cannot drift — the setTenantPaused shape, where
+ * `null` means off. The timestamp is stamped here from the server's clock and never passed in,
+ * like jointControllerRecordedAt.
+ *
+ * `counterSalesFirstEnabledAt` is set once and NEVER cleared. Disabling the till must stop new
+ * sales without hiding the receipts and takings a store already has: that is the difference
+ * between "may record now" (the boolean) and "has history its owner may read" (the timestamp).
+ */
+export function setTenantCounterSales(id: string, operatorId: string | null) {
+  return withBypass(async (db) => {
+    if (operatorId === null) {
+      await db.tenant.update({
+        where: { id },
+        data: { counterSalesEnabled: false },
+        select: { id: true },
+      });
+      return;
+    }
+    // COALESCE in one statement, because "set it only if it is still null" is the whole point and
+    // a read-then-write would race two operators enabling the same store.
+    await db.$executeRaw`
+      UPDATE "Tenant"
+      SET "counterSalesEnabled" = true,
+          "counterSalesEnabledBy" = ${operatorId},
+          "counterSalesFirstEnabledAt" = COALESCE("counterSalesFirstEnabledAt", now())
+      WHERE id = ${id}`;
+  });
+}
+
+/**
  * A store's privacy identity and reporting basis, edited after creation.
  *
  * Changing the reporting zone re-buckets future days only — past aggregates are not rewritten,

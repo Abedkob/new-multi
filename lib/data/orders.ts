@@ -7,6 +7,7 @@ import { calculateCouponDiscount, couponStatus } from "@/lib/pricing";
 import { findCouponForPricing, normalizeCouponCode } from "@/lib/data/coupons";
 import { parseAttributes, variantLabel } from "@/lib/variants";
 import { isLicenseActive } from "@/lib/license/status";
+import { decrementStockOrThrow, incrementStock, StockShortError } from "@/lib/data/stock";
 
 /**
  * Orders. Every function takes a tenantId (from the storefront's slug lookup when a customer
@@ -277,25 +278,26 @@ export async function placeOrder(
       }
     }
 
-    for (const id of ids) {
-      const qty = wanted.get(id)!;
-      const { count } = await tx.productVariant.updateMany({
-        where: { id, stock: { gte: qty }, product: { tenantId } },
-        data: { stock: { decrement: qty } },
-      });
-      if (count !== 1) {
+    // The conditional decrement lives in lib/data/stock.ts, shared with the in-store till, so
+    // there is exactly one `stock >= qty` guard in the codebase. The wording a shopper sees is
+    // built here and the StockShortError is translated back into an OrderError, so this path's
+    // error code, message text and detail payload are unchanged.
+    try {
+      await decrementStockOrThrow(tx, tenantId, wanted, (id, available) => {
         const v = byId.get(id)!;
-        const fresh = await tx.productVariant.findUnique({ where: { id }, select: { stock: true } });
-        const available = fresh?.stock ?? 0;
         const label = variantLabel(parseAttributes(v.attributes), "");
-        throw new OrderError(
-          "STOCK",
-          available > 0
-            ? `Only ${available} left of "${v.product.name}${label ? ` (${label})` : ""}". Please lower the quantity.`
-            : `"${v.product.name}${label ? ` (${label})` : ""}" just sold out.`,
-          { variantId: id, available },
-        );
+        return available > 0
+          ? `Only ${available} left of "${v.product.name}${label ? ` (${label})` : ""}". Please lower the quantity.`
+          : `"${v.product.name}${label ? ` (${label})` : ""}" just sold out.`;
+      });
+    } catch (error) {
+      if (error instanceof StockShortError) {
+        throw new OrderError("STOCK", error.message, {
+          variantId: error.variantId,
+          available: error.available,
+        });
       }
+      throw error;
     }
 
     return tx.order.create({
@@ -459,14 +461,10 @@ export async function updateOrderStatus(tenantId: string, id: string, next: Orde
     }
 
     if (next === "CANCELLED") {
-      for (const item of order.items) {
-        // variantId is null when the variant was deleted after the order: nothing to restore.
-        if (!item.variantId) continue;
-        await tx.productVariant.updateMany({
-          where: { id: item.variantId, product: { tenantId } },
-          data: { stock: { increment: item.quantity } },
-        });
-      }
+      // Shared with a counter-sale void (lib/data/stock.ts). A line whose variant was deleted
+      // after the order has variantId null and cannot be restored; the helper skips it and
+      // reports the count, which this path does not need but the till's receipt does.
+      await incrementStock(tx, tenantId, order.items);
     }
     return next;
   });

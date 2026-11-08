@@ -18,6 +18,9 @@
  */
 
 import "dotenv/config";
+// Before anything reads lib/env: the scheduled stages process only stores inside the
+// analytics rollout, and the default mode is `off`, which matches no store at all.
+import "./_rollout-all";
 import "./_owner";
 import assert from "node:assert/strict";
 import {
@@ -661,7 +664,10 @@ async function rlsConfigurationCheck() {
     `RLS is forced but no policy exists on: ${policyless.join(", ")} — which denies everything, ` +
       "so this is a broken table rather than a safe one",
   );
-  assert.ok(protectedCount >= 25, `expected the tenant-scoped tables, found ${protectedCount}`);
+  // 27 since the till: CounterSale and CounterSaleItem both carry a tenantId. The floor moves
+  // with the schema on purpose — a migration that adds a tenant-scoped table and forgets its
+  // policy fails above, and one that adds a table this check never sees fails here.
+  assert.ok(protectedCount >= 27, `expected the tenant-scoped tables, found ${protectedCount}`);
 
   // And the platform-level tables must stay out, deliberately: putting the job's own run records
   // under a tenant policy would make them invisible to the job.

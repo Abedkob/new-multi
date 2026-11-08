@@ -40,7 +40,7 @@ model User {
   /// reads; this is what a scheduled job reads at 09:00 on Monday, when there is no request and
   /// therefore no cookie. Null means "never chose", which falls back to the store's default
   /// locale and then to English.
-  adminLocale        String?
+  adminLocale String?
 
   // One owner owns exactly one tenant.
   tenant Tenant?
@@ -57,86 +57,99 @@ model User {
   staffTenantId String?
   staffTenant   Tenant? @relation("TenantStaff", fields: [staffTenantId], references: [id], onDelete: Cascade)
 
-  pushSubscriptions      PushSubscription[]
-  ownerNotificationPrefs OwnerNotificationPreference?
+  pushSubscriptions         PushSubscription[]
+  ownerNotificationPrefs    OwnerNotificationPreference?
   platformNotificationPrefs PlatformNotificationPreference?
-  notifications          AdminNotification[]
+  notifications             AdminNotification[]
+  counterSalesSold          CounterSale[]                   @relation("CounterSaleSeller")
+  counterSalesVoided        CounterSale[]                   @relation("CounterSaleVoider")
 }
 
 model Tenant {
-  id                        String         @id @default(cuid())
-  slug                      String         @unique
-  name                      String
-  ownerId                   String         @unique
-  owner                     User           @relation(fields: [ownerId], references: [id])
+  id                         String         @id @default(cuid())
+  slug                       String         @unique
+  name                       String
+  ownerId                    String         @unique
+  owner                      User           @relation(fields: [ownerId], references: [id])
   // Custom storefront domain (e.g. "acme.com") — set ONLY once it's verified and DNS actually
   // points here. Every URL-emitting surface (SEO helpers, sitemap, robots.txt, canonicals, and
   // the domain-routing proxy) trusts this field unconditionally and starts sending traffic and
   // search engines there the moment it's non-null. An unverified or mistyped value here sends
   // real traffic to a domain that doesn't serve this store. Null means the store is only
   // reachable at the platform's own /store/[slug] path. See lib/store-url.ts.
-  domain                    String?        @unique
+  domain                     String?        @unique
   // Per-store marketing integrations, set by the platform admin (/platform/stores/[slug]/...)
   // and injected into this store's storefront only. All nullable = off. Every value is
   // format-validated on save AND again before it is rendered into a <script> or <meta>
   // (lib/integrations.ts), since these strings end up in inline script text.
-  gaMeasurementId           String? // GA4, "G-XXXXXXX"
-  googleAdsId               String? // Google Ads tag, "AW-123456789"
-  googleAdsPurchaseLabel    String? // Ads conversion label for purchases, sent as AW-.../<label>
-  metaPixelId               String? // Meta (Facebook/Instagram) Pixel / dataset id, digits
-  googleSiteVerification    String? // Search Console HTML-tag token (google-site-verification)
-  metaDomainVerification    String? // Meta Business domain verification token
+  gaMeasurementId            String? // GA4, "G-XXXXXXX"
+  googleAdsId                String? // Google Ads tag, "AW-123456789"
+  googleAdsPurchaseLabel     String? // Ads conversion label for purchases, sent as AW-.../<label>
+  metaPixelId                String? // Meta (Facebook/Instagram) Pixel / dataset id, digits
+  googleSiteVerification     String? // Search Console HTML-tag token (google-site-verification)
+  metaDomainVerification     String? // Meta Business domain verification token
   // Browser-tab icon for this store's storefront, set by the platform admin only (Branding
   // section). An image URL in our storage (lib/storage.ts). Null = a generated letter icon.
-  faviconUrl                String?
+  faviconUrl                 String?
   // Optional public profile/location links managed by the store owner. Null means the link is
   // not shown anywhere on the storefront.
-  facebookUrl               String?
-  instagramUrl              String?
-  tiktokUrl                 String?
-  whatsappNumber            String?
-  googleMapsUrl             String?
+  facebookUrl                String?
+  instagramUrl               String?
+  tiktokUrl                  String?
+  whatsappNumber             String?
+  googleMapsUrl              String?
   // One simple store-wide delivery price. Orders snapshot both values at checkout so later
   // settings changes never rewrite order history.
-  deliveryFeeCents          Int            @default(0)
-  deliveryNote              String         @default("")
-  templateId                String         @default("minimal")
-  themeOverrides            Json           @default("{}")
+  deliveryFeeCents           Int            @default(0)
+  deliveryNote               String         @default("")
+  templateId                 String         @default("minimal")
+  themeOverrides             Json           @default("{}")
   // Owner-controlled on/off switches for the optional storefront sections.
   // Missing keys fall back to defaults (see lib/sections.ts).
-  sectionVisibility         Json           @default("{}")
+  sectionVisibility          Json           @default("{}")
   // Platform-admin pause state. Owners retain dashboard access; public storefront and checkout
   // are blocked while paused. Keep operator pause separate from provider license status.
-  isPaused                  Boolean        @default(false)
-  pausedAt                  DateTime?
-  pauseReason               String?
+  isPaused                   Boolean        @default(false)
+  pausedAt                   DateTime?
+  pauseReason                String?
   // --- Storefront analytics: privacy identity, reporting basis, launch control --------------
   // The platform and the merchant are JOINT CONTROLLERS for storefront analytics, so each store
   // has to be able to name its own controller and privacy contact on its privacy page. Set by
   // the platform admin at store creation; NULL means privacy setup is incomplete and the store
   // must not be put into the analytics rollout (pnpm verify:consent fails while it is).
-  privacyControllerName     String?
-  privacyEmail              String?
-  privacyPolicyUrl          String?
+  privacyControllerName      String?
+  privacyEmail               String?
+  privacyPolicyUrl           String?
   // Which version of the joint-controller arrangement was recorded, when, and by which platform
   // operator (a User id) — the audit trail behind the arrangement itself.
-  jointControllerVersion    String?
-  jointControllerRecordedAt DateTime?
-  jointControllerRecordedBy String?
+  jointControllerVersion     String?
+  jointControllerRecordedAt  DateTime?
+  jointControllerRecordedBy  String?
   // IANA zone the store's business day is resolved in (daily/hourly reports, weekly summaries).
   // Timestamps are always stored in UTC; this only decides where the day boundary falls, so a
   // viewer's own device timezone never redefines the store's day.
-  analyticsTimezone         String         @default("Asia/Beirut")
+  analyticsTimezone          String         @default("Asia/Beirut")
   // Language the storefront consent notice opens in, and the fallback for owner notifications.
-  defaultLocale             String         @default("en")
+  defaultLocale              String         @default("en")
   // Bumping this asks every visitor for consent again (a changed notice needs a fresh decision).
-  consentNoticeVersion      Int            @default(1)
+  consentNoticeVersion       Int            @default(1)
   // Platform-only emergency stop for analytics. Deliberately NOT isPaused: that takes the whole
   // storefront offline, this only silences measurement and leaves the store selling.
-  analyticsPausedAt         DateTime?
-  analyticsPauseReason      String?
-  license                   TenantLicense?
-  createdAt                 DateTime       @default(now())
+  analyticsPausedAt          DateTime?
+  analyticsPauseReason       String?
+  // --- In-store counter sales (the till) ----------------------------------------------------
+  // Platform-admin switch. Off until an operator enables it, which is why the default is false
+  // rather than true-with-an-opt-out: a store cannot grant itself a sales channel.
+  counterSalesEnabled        Boolean        @default(false)
+  // When the till was FIRST enabled, and never cleared again. Disabling sets the boolean false
+  // and leaves this set, which is what separates "may record a sale now" from "has till history
+  // an owner is entitled to read". Clearing it would hide a store's own receipts.
+  counterSalesFirstEnabledAt DateTime?
+  // The last platform operator to flip the switch (a User id). Deliberately not a foreign key,
+  // like jointControllerRecordedBy: an audit reference must outlive that operator's account.
+  counterSalesEnabledBy      String?
+  license                    TenantLicense?
+  createdAt                  DateTime       @default(now())
 
   contents                  TenantContent[]
   products                  Product[]
@@ -156,8 +169,9 @@ model Tenant {
   marketingCampaigns        MarketingCampaign[]
   pushSubscriptions         PushSubscription[]
   adminNotifications        AdminNotification[]
-  notificationAlertStates   NotificationAlertState[] @relation("TenantAlertStates")
-  staff                     User[]                   @relation("TenantStaff")
+  notificationAlertStates   NotificationAlertState[]     @relation("TenantAlertStates")
+  staff                     User[]                       @relation("TenantStaff")
+  counterSales              CounterSale[]
 }
 
 // A campaign the owner saved while building a tracked link (D39).
@@ -174,13 +188,21 @@ model MarketingCampaign {
   id              String    @id @default(cuid())
   tenantId        String
   tenant          Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  /** What the owner called it. Shown in the admin; never matched against the data. */
+  /**
+   * What the owner called it. Shown in the admin; never matched against the data.
+   */
   name            String
-  /** The normalized utm_campaign value — the join key, and the only field a report could see. */
+  /**
+   * The normalized utm_campaign value — the join key, and the only field a report could see.
+   */
   utmCampaign     String
-  /** The builder's channel id ("instagram", "whatsapp", "custom", …), for the owner's recall. */
+  /**
+   * The builder's channel id ("instagram", "whatsapp", "custom", …), for the owner's recall.
+   */
   channel         String
-  /** Where the link pointed, relative to the store base ("" for home). */
+  /**
+   * Where the link pointed, relative to the store base ("" for home).
+   */
   destinationPath String    @default("")
   createdAt       DateTime  @default(now())
   archivedAt      DateTime?
@@ -289,16 +311,17 @@ model TenantContent {
 // product without real variation gets a single default variant with empty attributes.
 // `attributes` is free-form ({ size: "40", color: "white" }), so there is no fixed schema.
 model ProductVariant {
-  id                 String      @id @default(cuid())
+  id                 String            @id @default(cuid())
   productId          String
-  product            Product     @relation(fields: [productId], references: [id], onDelete: Cascade)
-  attributes         Json        @default("{}")
-  stock              Int         @default(0)
+  product            Product           @relation(fields: [productId], references: [id], onDelete: Cascade)
+  attributes         Json              @default("{}")
+  stock              Int               @default(0)
   priceCentsOverride Int?
   imageUrl           String?
-  sortOrder          Int         @default(0)
-  createdAt          DateTime    @default(now())
+  sortOrder          Int               @default(0)
+  createdAt          DateTime          @default(now())
   orderItems         OrderItem[]
+  counterSaleItems   CounterSaleItem[]
 
   @@index([productId])
 }
@@ -466,7 +489,7 @@ model Order {
   /// delivery means a cancellation routinely lands days after the order, and the daily figures
   /// for the day it was PLACED have to be recomputed when that happens (D33). Without this
   /// column there is no way to ask which days a late change affected.
-  updatedAt                              DateTime     @updatedAt @default(now())
+  updatedAt                              DateTime     @default(now()) @updatedAt
   items                                  OrderItem[]
 
   // Analytics attribution, snapshotted at purchase time (Phase 3, master plan 9.1). All
@@ -500,11 +523,11 @@ model Order {
   firstTouchCampaign   String?
   analyticsCountry     String?
   analyticsDeviceClass String?
+  /// Which notification batches announced this order (Phase 6, §9.8).
+  notificationLinks    AdminNotificationOrder[]
 
   @@index([tenantId, createdAt])
   @@index([tenantId, updatedAt])
-  /// Which notification batches announced this order (Phase 6, §9.8).
-  notificationLinks AdminNotificationOrder[]
 }
 
 // Name, attributes and price are copied at order time, so later edits to (or deletion of) the
@@ -527,6 +550,130 @@ model OrderItem {
   quantity                    Int
 
   @@index([orderId])
+  @@index([variantId])
+}
+
+// --- In-store counter sales (the till) --------------------------------------------------------
+//
+// A sale rung up at a physical counter. Deliberately NOT an Order, and the reasons are
+// structural rather than stylistic:
+//
+//   * Order.customerName / customerPhone / customerAddress / deliveryLocation are NOT NULL with
+//     no default. A counter sale has none of them, and the orders screens read all four
+//     unconditionally. Making them nullable would give up "a web order always has a phone
+//     number" across the whole existing surface; writing sentinels would put a customer who does
+//     not exist into the merchant's order list.
+//   * OrderStatus has no honest value for it. PENDING is auto-cancelled by
+//     expireStalePendingOrders, which would restore the stock of a sale that already happened;
+//     DELIVERED is terminal, so a mistake could never be voided.
+//   * Every reader that totals money from Order would silently absorb counter sales — the
+//     analytics aggregates, the owner dashboard, the new-order notification sweep, coupon usage.
+//     A missed filter on conversion rate reports 6% instead of 2%: plausible, and acted on.
+//
+// So the till is its own pair of tables, and "in-store money is never summed into web money"
+// holds because tx.order.findMany CANNOT return a counter sale. Both tables are tenant-scoped
+// and under forced RLS; the item reaches its tenant through a composite foreign key, the shape
+// CouponProduct and AnalyticsSession already use.
+
+enum CounterSaleStatus {
+  RECORDED
+  VOIDED
+}
+
+/// How the money was taken. A recording method for reconciliation, not a payment integration.
+enum CounterSalePayment {
+  CASH
+  CARD
+}
+
+model CounterSale {
+  id       String @id @default(cuid())
+  tenantId String
+  tenant   Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  status  CounterSaleStatus  @default(RECORDED)
+  /// Required with no default: the cashier chooses, so the till can be reconciled against a
+  /// card terminal. A default would quietly make every unspecified sale cash.
+  payment CounterSalePayment
+
+  /// Idempotency key, minted once per cart by the till screen and unique per store. A cashier
+  /// double-tapping, or retrying after an ambiguous network failure, sends the same id — and the
+  /// unique index below is what makes exactly one sale commit. The constraint IS the mechanism;
+  /// there is no lock. Same pattern as AdminNotification.dedupeKey.
+  submissionId     String
+  /// A hash of the lines and the payment method. A retry of the SAME cart returns the existing
+  /// sale; the same id with materially different contents is refused rather than silently
+  /// treated as a duplicate.
+  linesFingerprint String
+
+  /// Who took the money. Nullable because a staff account can be removed from the store and the
+  /// sale must outlive it — so the name is snapshotted beside it, like every other snapshot here.
+  soldByUserId       String?
+  soldBy             User?   @relation("CounterSaleSeller", fields: [soldByUserId], references: [id], onDelete: SetNull)
+  soldByNameSnapshot String
+
+  notes     String   @default("")
+  createdAt DateTime @default(now())
+
+  /// A void reverses a mistake at the counter. It is not a return: there is no refund flow, no
+  /// restocking fee and no customer record. The original lines are never modified.
+  voidedAt          DateTime?
+  voidedByUserId    String?
+  voidedBy          User?     @relation("CounterSaleVoider", fields: [voidedByUserId], references: [id], onDelete: SetNull)
+  voidReason        String?
+  /// How many lines actually had their stock returned. Stored rather than derived, because a
+  /// variant deleted AFTER the void would make a successful restore look like a failed one — and
+  /// reporting a restore that did not happen is the failure mode worth spending a column on.
+  voidRestoredLines Int?
+
+  items CounterSaleItem[]
+
+  /// Deliberately absent: customer and delivery fields (there is no customer record), coupon
+  /// snapshots (a code is a web-marketing artifact), any analytics attribution column (there is
+  /// no session to attribute, and a nullable one would invite joining the till into acquisition),
+  /// a stored total (derive it, as orderTotal does — with no delivery fee a stored column could
+  /// only drift), and updatedAt (nothing recomputes a counter sale by day).
+
+  /// Lets CounterSaleItem reach its tenant through a composite foreign key.
+  @@unique([id, tenantId])
+  /// One sale per submission, per store. The idempotency guarantee.
+  @@unique([tenantId, submissionId])
+  /// Serves both the history list and the takings aggregate, which filter on status and range
+  /// on createdAt. One index because there is one access pattern.
+  @@index([tenantId, status, createdAt])
+}
+
+/// One line of a counter sale. Name, attributes and every price are copied at the moment of
+/// sale: updateProduct hard-deletes variants the owner removes from the form, so history must
+/// not depend on the catalogue still agreeing with it.
+model CounterSaleItem {
+  id            String      @id @default(cuid())
+  tenantId      String
+  counterSaleId String
+  counterSale   CounterSale @relation(fields: [counterSaleId, tenantId], references: [id, tenantId], onDelete: Cascade)
+
+  variantId String?
+  variant   ProductVariant? @relation(fields: [variantId], references: [id], onDelete: SetNull)
+
+  productNameSnapshot         String
+  variantAttributesSnapshot   Json    @default("{}")
+  /// The four money columns are kept separately so a receipt can say what was given away:
+  /// the catalogue price, what an automatic campaign took off, what the person at the till took
+  /// off, and what was actually charged. A CHECK in the migration ties them together, so the
+  /// charged price is always explainable and can never be an arbitrary typed number.
+  regularPriceCentsSnapshot   Int
+  discountCentsSnapshot       Int     @default(0)
+  discountIdSnapshot          String?
+  discountNameSnapshot        String?
+  /// A manual reduction by whoever is at the till, with the reason they gave. Staff are capped
+  /// (lib/counter-sales.ts); the owner is not.
+  manualDiscountCentsSnapshot Int     @default(0)
+  manualDiscountReason        String?
+  /// The final unit price actually charged.
+  priceCentsSnapshot          Int
+  quantity                    Int
+
+  @@index([tenantId, counterSaleId])
   @@index([variantId])
 }
 
@@ -779,31 +926,31 @@ model AnalyticsProductDaily {
   tenantId String
   tenant   Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
 
-  localDay  DateTime @db.Date
-  timeZone  String
+  localDay    DateTime @db.Date
+  timeZone    String
   /// Not a foreign key: a product deleted next year must not erase what it sold today.
-  productId String
+  productId   String
   /// What the product was called THAT DAY, snapshotted like an order item's name (D44). Without
   /// it, deleting a product makes every past row unnameable. Nullable because rows written
   /// before this column existed have no honest value: null means "not recorded", which the
   /// report shows as "Deleted product" rather than as an empty name.
   productName String?
 
-  viewSessions          Int @default(0)
-  views                 Int @default(0)
+  viewSessions          Int  @default(0)
+  views                 Int  @default(0)
   /// Distinct visitors who viewed it, and how many of them had seen the store before today.
   /// Nullable for the same reason as productName: a 0 on a day that never measured them would
   /// read as "nobody", which is a different claim from "unknown" (D48a).
   viewVisitors          Int?
   returningViewVisitors Int?
-  addToCartSessions     Int @default(0)
-  whatsappClickSessions Int @default(0)
+  addToCartSessions     Int  @default(0)
+  whatsappClickSessions Int  @default(0)
   /// Sessions that bought this product. Reached through OrderItem.variantId -> ProductVariant,
   /// because an order item snapshots a NAME, not a product id; an item whose variant was
   /// deleted outright can no longer name its product and is left out rather than guessed at.
-  purchasingSessions    Int @default(0)
-  unitsOrdered          Int @default(0)
-  orderValueCents       Int @default(0)
+  purchasingSessions    Int  @default(0)
+  unitsOrdered          Int  @default(0)
+  orderValueCents       Int  @default(0)
 
   computedAt DateTime @default(now())
 
@@ -855,13 +1002,13 @@ model AnalyticsAcquisitionDaily {
   medium     String   @default("")
   campaign   String   @default("")
 
-  sessions Int @default(0)
+  sessions                    Int  @default(0)
   /// The rest of what §5.5 asks for per source (D48). Nullable, not 0: these were added after
   /// the table, and a zero on a day that never counted them is indistinguishable from a day
   /// when nothing happened. The report refuses to total a range that contains either.
-  visitors            Int?
-  productViewSessions Int?
-  cartSessions        Int?
+  visitors                    Int?
+  productViewSessions         Int?
+  cartSessions                Int?
   /// Intent, per source. Separate column, never added to an order value (§3.4).
   whatsappPotentialValueCents Int?
 
@@ -913,11 +1060,11 @@ model AnalyticsAuditLog {
   actorEmail  String
 
   /// PRIVACY_SUMMARY | PRIVACY_EXPORT | PRIVACY_ERASE, and Phase 5's report access.
-  action String
+  action  String
   /// What was acted on — a privacy identifier, never a name or a phone number.
   subject String?
   /// One line for a human: counts, not contents.
-  detail String?
+  detail  String?
 
   at DateTime @default(now())
 
@@ -946,9 +1093,9 @@ model AnalyticsOperationalMetric {
   windowStart DateTime
   windowEnd   DateTime
 
-  attemptedBatches       Int @default(0)
-  acceptedBatches        Int @default(0)
-  storedEvents           Int @default(0)
+  attemptedBatches        Int @default(0)
+  acceptedBatches         Int @default(0)
+  storedEvents            Int @default(0)
   rejectedOwnershipEvents Int @default(0)
 
   /// The three kinds, kept apart on purpose (D29). A policy drop is the system working, an
@@ -968,7 +1115,6 @@ model AnalyticsOperationalMetric {
   @@index([at])
   @@index([instance, at])
 }
-
 
 // =============================================================================================
 // Phase 6: admin push notifications (§9.6-§9.8, §11)
@@ -1090,27 +1236,27 @@ model PlatformNotificationPreference {
   userId String @unique
   user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
 
-  inactiveStoreAlerts    Boolean @default(true)
-  storeDeclineAlerts     Boolean @default(true)
-  ingestionHealthAlerts  Boolean @default(true)
+  inactiveStoreAlerts     Boolean @default(true)
+  storeDeclineAlerts      Boolean @default(true)
+  ingestionHealthAlerts   Boolean @default(true)
   aggregationHealthAlerts Boolean @default(true)
-  redisFallbackAlerts    Boolean @default(true)
-  pushDeliveryAlerts     Boolean @default(true)
-  weeklyPlatformSummary  Boolean @default(true)
+  redisFallbackAlerts     Boolean @default(true)
+  pushDeliveryAlerts      Boolean @default(true)
+  weeklyPlatformSummary   Boolean @default(true)
 
   updatedAt DateTime @updatedAt
 }
 
 /// The logical notification: that this person was told this thing (§9.8).
 model AdminNotification {
-  id               String               @id @default(cuid())
-  recipientUserId  String
-  recipient        User                 @relation(fields: [recipientUserId], references: [id], onDelete: Cascade)
-  audience         NotificationAudience
-  type             NotificationType
+  id              String               @id @default(cuid())
+  recipientUserId String
+  recipient       User                 @relation(fields: [recipientUserId], references: [id], onDelete: Cascade)
+  audience        NotificationAudience
+  type            NotificationType
   /// The store it is about, where there is one. Null for a platform-wide notification.
-  tenantId         String?
-  tenant           Tenant?              @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  tenantId        String?
+  tenant          Tenant?              @relation(fields: [tenantId], references: [id], onDelete: Cascade)
 
   /// Snapshotted as sent, in the language it was sent in (D58). Never re-rendered.
   title       String
@@ -1157,17 +1303,17 @@ model AdminNotificationOrder {
 
 /// One attempt to reach one device (§9.8).
 model AdminNotificationDelivery {
-  id             String                    @id @default(cuid())
+  id             String            @id @default(cuid())
   notificationId String
-  notification   AdminNotification         @relation(fields: [notificationId], references: [id], onDelete: Cascade)
+  notification   AdminNotification @relation(fields: [notificationId], references: [id], onDelete: Cascade)
   subscriptionId String
-  subscription   PushSubscription          @relation(fields: [subscriptionId], references: [id], onDelete: Cascade)
+  subscription   PushSubscription  @relation(fields: [subscriptionId], references: [id], onDelete: Cascade)
   /// Denormalised from the notification so this table can live under the same tenant policy
   /// (§9.9). Null for a platform delivery, exactly as on the notification.
   tenantId       String?
 
-  state    NotificationDeliveryState @default(PENDING)
-  attempts Int                       @default(0)
+  state          NotificationDeliveryState @default(PENDING)
+  attempts       Int                       @default(0)
   /// While this is in the future, another sender must not claim this delivery (D52). A crashed
   /// sender's lease expires and the scheduled recovery stage picks the delivery up.
   leaseExpiresAt DateTime?
