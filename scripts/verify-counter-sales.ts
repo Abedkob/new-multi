@@ -639,30 +639,56 @@ async function main() {
       // notificationLinks: { none: {} } announces ANY order with no link, so an Order-shaped
       // counter sale would have pushed "you have a new order" for a sale the staff member just
       // rang up in front of the customer. CounterSale has no such relation, which is why.
-      // The expectation is DERIVED from the Order table rather than written as a number: this
-      // suite has placed a real web order by now, which the sweep is supposed to find, and
-      // asserting 0 would only have proved the test ran before the order existed. The sweep is
-      // cross-tenant (withJobBypass), so the count is too.
-      const announceable = await prisma.order.count({
-        where: {
-          status: { not: "CANCELLED" },
-          notificationLinks: { none: {} },
-          createdAt: { gte: new Date(Date.now() - 30 * 60_000) },
-        },
+      // In a dry run `items` is the number of STORES the sweep would announce for, not the
+      // number of orders — one notification per store claims that store's backlog. So the
+      // expectation is the set of stores with an announceable ORDER, derived from the table
+      // rather than written as a number: this suite has placed a real web order by now, and
+      // the dev database may hold others, so a hard-coded 0 would only have proved the test ran
+      // before any of them existed.
+      const window = { gte: new Date(Date.now() - 30 * 60_000) };
+      const announceable = await prisma.order.findMany({
+        where: { status: { not: "CANCELLED" }, notificationLinks: { none: {} }, createdAt: window },
+        select: { tenantId: true },
+        distinct: ["tenantId"],
       });
-      const counterSales = await prisma.counterSale.count({ where: { tenantId: A } });
-      assert.ok(counterSales > 0, "this check is vacuous without a counter sale to ignore");
+      const storeIds = announceable.map((row) => row.tenantId);
+
+      // Store B is the control: counter sales and no orders at all. If a sale ever became an
+      // Order row, B would appear in the list above and the count below would be one higher.
+      const bProduct = await createProduct(B, {
+        name: "Control Mug",
+        basePriceCents: 900,
+        ...productInput,
+        variants: [{ attributes: {}, stock: 5, priceCentsOverride: null, imageUrl: null }],
+      });
+      await recordCounterSale(B, {
+        submissionId: uuid(),
+        payment: "CARD",
+        lines: [{ variantId: bProduct.variants[0].id, quantity: 1 }],
+        soldByUserId: b.user.id,
+        soldByName: "B",
+        role: "STORE_OWNER",
+      });
+      assert.ok(
+        (await prisma.counterSale.count({ where: { tenantId: B } })) > 0,
+        "the control store needs a counter sale for this check to mean anything",
+      );
+      assert.equal(
+        await prisma.order.count({ where: { tenantId: B } }),
+        0,
+        "the control store must have no orders, or it would legitimately be announced",
+      );
+      assert.ok(!storeIds.includes(B), "a store with only counter sales must not be announceable");
 
       const report = await runScheduled([newOrderCatchUp], { log: () => {}, dryRun: true });
       const stage = report.stages[0];
       assert.equal(stage?.status, "OK", JSON.stringify(report));
       assert.equal(
         stage.items,
-        announceable,
-        `the sweep would announce ${stage.items} but only ${announceable} web order(s) are ` +
-          `pending, with ${counterSales} counter sale(s) in the same store. A counter sale is ` +
-          `not an Order, so it can never appear here — if this number is higher, something has ` +
-          `started writing sales into the Order table.`,
+        storeIds.length,
+        `the sweep would announce for ${stage.items} store(s) but only ${storeIds.length} have a ` +
+          `pending web order. A counter sale is not an Order and can never appear here — a higher ` +
+          `number means something has started writing sales into the Order table.`,
       );
     });
 

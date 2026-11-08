@@ -71,7 +71,7 @@ pnpm dev                              # http://localhost:3000
 | `pnpm verify:insights` | Test §6's insight rules at, just below and just above every threshold (pure; no server or database) |
 | `pnpm verify:integrations` | Test the owner's Google/Meta connections: snippet extraction, consent gating, verification tags on a custom domain, audit rows (needs server) |
 | `pnpm uploads:migrate --rewrite-from=<old URL>` | Rewrite stored R2 URLs after moving buckets/domains |
-| `pnpm e2e:categories` / `e2e:variants` / `e2e:discounts` / `e2e:social-links` / `e2e:pages` / `e2e:checkout` / `e2e:kinetic` / `e2e:mirage` / `e2e:prism` | Chrome automation tests, one per feature area (needs server + Chrome installed; each creates/removes throwaway stores) |
+| `pnpm e2e:categories` / `e2e:variants` / `e2e:discounts` / `e2e:social-links` / `e2e:pages` / `e2e:checkout` / `e2e:counter` / `e2e:kinetic` / `e2e:mirage` / `e2e:prism` | Chrome automation tests, one per feature area (needs server + Chrome installed; each creates/removes throwaway stores) |
 
 **After pulling changes:**
 ```bash
@@ -277,6 +277,57 @@ const allProducts = await withBypass(async (tx) => {
   fire on the **transition** recorded in `NotificationAlertState`, not on the condition (D55).
 - `User.adminLocale` persists the dashboard language, because a scheduled job has no cookie
   (D58). Notification wording lives in `lib/notifications/templates.ts`, not the dictionaries.
+
+## In-Store Counter Sales (the till)
+
+A second sales channel for a shop that also serves people over a counter. Off until a platform
+operator switches it on per store.
+
+- **`CounterSale` / `CounterSaleItem`, deliberately NOT an `Order`.** `Order.customerName`,
+  `customerPhone`, `customerAddress` and `deliveryLocation` are `NOT NULL` with no default and
+  the orders screens read all four unconditionally — reusing it would mean nulling four columns
+  on every existing web order or writing a customer who does not exist into the order list.
+  `OrderStatus` has no honest value either: `PENDING` is auto-cancelled by
+  `expireStalePendingOrders`, which would restore the stock of a sale that already happened, and
+  `DELIVERED` is terminal, so a mistake could never be voided. And about a dozen readers that
+  total money from `Order` would each need a `channel: "WEB"` filter they could forget — the
+  conversion-rate one reports 6% instead of 2%, which is believable and gets acted on. With
+  separate tables, `tx.order.findMany` **cannot** return a counter sale.
+- **One submission, one sale.** `@@unique([tenantId, submissionId])` is the whole mechanism — the
+  `AdminNotification.dedupeKey` pattern, no lock. The till mints one id per cart and replaces it
+  only after a sale completes, so a double tap or a retry after an ambiguous network failure is
+  answered with the same sale; `linesFingerprint` refuses the same id with different items
+  instead of silently returning the first sale.
+- **One conditional stock decrement in the codebase**, `lib/data/stock.ts`, shared with
+  `placeOrder`. `verify:counter` greps to prove there is only one, and the deadlock-avoiding id
+  sort lives inside the primitive rather than in its callers.
+- **A void reverses a mistake; it is not a returns system.** Owner-only (`counter:void`), for the
+  `orders:cancel` reason. Compare-and-swap on the status read, so a second void stops before
+  touching stock. `updateProduct` hard-deletes variants an owner removes from the form, so a line
+  can have no variant left to credit — `voidRestoredLines` records how many were actually
+  restored, because a variant deleted *after* the void would make a later read conclude the
+  opposite.
+- **Money is explainable or refused.** A CHECK enforces
+  `priceCentsSnapshot = regular - automatic - manual`, so no code path can charge an arbitrary
+  number or drive a line negative; another requires a reason for any manual reduction. Staff are
+  capped at `STAFF_MAX_MANUAL_DISCOUNT_PERCENT` (20), the owner is not.
+- **Off keeps the history.** `counterSalesFirstEnabledAt` is set once and never cleared, which is
+  what separates `canSellAtCounter` (may record now) from `hasCounterSaleHistory` (may read what
+  was recorded). Disabling the till stops new sales and leaves every receipt readable. The admin
+  layout filters its nav by both, at no query cost.
+- **A store with no till gets a 404, not `/admin/no-access`** — the refusal page means "your role
+  may not", and this is not about the role.
+- **The web figures are never touched.** In-store takings are read straight from these tables
+  (`getCounterTakings`, one `$queryRaw` with `FILTER` clauses), never from
+  `AnalyticsDailyMetric` — those aggregates only run for stores inside the analytics rollout,
+  whose default is `off`, so a till's takings would otherwise be invisible until an unrelated
+  privacy decision was made. The dashboard shows the figure as its own tile and
+  `verify:aggregates`' P4-22b fails if anything adds two channel money figures together.
+- **A counter sale sends no push.** `newOrderCatchUp` announces any `Order` with no notification
+  link; `CounterSale` has no such relation, which is why the person who just rang up a sale in
+  front of a customer is not notified about it.
+- Counter units do **not** appear in `AnalyticsProductDaily`, so product performance means online
+  performance (KNOWN_GAPS.md).
 
 ## Staff Accounts & Capabilities
 

@@ -16,7 +16,8 @@ import { saveContent } from "../lib/data/content";
 import { createDiscount } from "../lib/data/discounts";
 import { placeOrder, updateOrderStatus } from "../lib/data/orders";
 import { createProduct, updateProduct, type VariantInput } from "../lib/data/products";
-import { createStoreWithOwner } from "../lib/data/tenants";
+import { createStoreWithOwner, setTenantCounterSales } from "../lib/data/tenants";
+import { recordCounterSale } from "../lib/data/counter-sales";
 import { generateTempPassword, hashPassword } from "../lib/passwords";
 import { slugify } from "../lib/slug";
 import { attributeSignature, parseAttributes } from "../lib/variants";
@@ -345,10 +346,63 @@ async function main() {
     [{ variantId: await variantFor("Wool Throw Blanket", { color: "Terracotta" }), quantity: 2 }],
   );
 
+  // ---- the till, so every counter screen has something on it -------------------------------
+  // Idempotent like the rest of this script: re-running it must not pile up sales, so the two
+  // are keyed on fixed submission ids — which is also a small demonstration of what those ids
+  // are for.
+  const owner = await prisma.user.findUniqueOrThrow({
+    where: { email: OWNER_EMAIL },
+    select: { id: true, name: true },
+  });
+  await setTenantCounterSales(tenantId, owner.id);
+  // Two variants that actually have stock, chosen by query rather than by name: the catalogue
+  // above seeds some variants at zero on purpose, and a demo script must not fail because the
+  // one it hard-coded happens to be the sold-out one.
+  const sellable = await prisma.productVariant.findMany({
+    where: { product: { tenantId }, stock: { gte: 2 } },
+    orderBy: { id: "asc" },
+    take: 2,
+    select: { id: true },
+  });
+  // Seeded once, not every run. The fixed submission ids make a re-run idempotent while the
+  // sale is unchanged — but editing WHICH products the demo sells would then hit the
+  // same-id-different-items guard, which is right for a till and wrong for a seed script. So the
+  // question this asks is "does this store already have a till history", not "is this sale new".
+  const alreadyHasSales = (await prisma.counterSale.count({ where: { tenantId } })) > 0;
+  if (!alreadyHasSales && sellable.length === 2) {
+    const counterSales = [
+      {
+        submissionId: "demo-counter-1",
+        payment: "CASH" as const,
+        lines: [{ variantId: sellable[0].id, quantity: 1 }],
+      },
+      {
+        submissionId: "demo-counter-2",
+        payment: "CARD" as const,
+        lines: [
+          {
+            variantId: sellable[1].id,
+            quantity: 1,
+            manualDiscountCents: 500,
+            manualDiscountReason: "Display model",
+          },
+        ],
+      },
+    ];
+    for (const sale of counterSales) {
+      await recordCounterSale(tenantId, {
+        ...sale,
+        soldByUserId: owner.id,
+        soldByName: owner.name,
+        role: "STORE_OWNER",
+      });
+    }
+  }
+
   console.log(
     `Seeded ${Object.keys(CONTENT).length} content keys, ${CATEGORIES.length} categories, ` +
       `${PRODUCTS.length} products with ${PRODUCTS.reduce((n, p) => n + p.variants.length, 0)} variants, ` +
-      `1 active discount, 2 sample orders, all optional sections on` +
+      `1 active discount, 2 sample orders, a till with 2 counter sales, all optional sections on` +
       (removed.count ? `, removed ${removed.count} obsolete keys.` : "."),
   );
 }

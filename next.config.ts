@@ -20,6 +20,7 @@ const nextConfig: NextConfig = {
     "kinetic-e2e.test",
     "mirage-e2e.test",
     "prism-e2e.test",
+    "counter-e2e.test",
   ],
   experimental: {
     serverActions: {

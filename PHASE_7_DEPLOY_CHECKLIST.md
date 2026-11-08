@@ -207,6 +207,11 @@ least **20 orders**; a quieter week is not a pilot, it is a dry run.
 |---|---|---|
 | P7-27 | Analytics order count vs the authoritative `Order` table | **exactly equal**, 0 discrepancy |
 | P7-27 | Analytics revenue vs the same | **exactly equal**, 0 cents |
+
+In-store counter sales are **outside P7-27's scope, by construction.** They live in their own
+tables, so the analytics figures and the `Order` table can be compared to the cent without
+subtracting anything — which is one of the reasons the till was not built as a kind of order.
+A store's in-store takings are reconciled on its own till screen instead.
 | P7-28 | Contract rejections over the window | **0** |
 | P7-29 | Operational drop rate (batches attempted vs accepted) | **under 5%** |
 | P7-30 | Aggregation lag without an alert firing | **never above 20 minutes** |

@@ -39,6 +39,7 @@ export function VoidControl({ saleId }: { saleId: string }) {
       )}
       <Button
         variant="destructive"
+        data-testid="counter-void"
         className="justify-self-start"
         disabled={!reason.trim() || pending}
         onClick={() => setOpen(true)}

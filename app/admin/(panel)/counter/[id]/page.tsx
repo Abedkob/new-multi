@@ -80,7 +80,9 @@ export default async function CounterSalePage({ params }: PageProps<"/admin/coun
 
       <div className="flex items-center justify-between border-t pt-3">
         <span className="text-sm text-muted-foreground">{t("counter.sale.total")}</span>
-        <span className="text-2xl font-semibold tabular-nums">{formatPrice(total)}</span>
+        <span data-testid="receipt-total" className="text-2xl font-semibold tabular-nums">
+          {formatPrice(total)}
+        </span>
       </div>
 
       {sale.status === "VOIDED" ? (

@@ -163,7 +163,7 @@ export function Till({ role }: { role: AdminRole }) {
 
   if (recorded) {
     return (
-      <div className="grid max-w-md gap-4 rounded-lg border p-6">
+      <div data-testid="till-recorded" className="grid max-w-md gap-4 rounded-lg border p-6">
         <p className="text-lg font-medium">{t("counter.new.recorded")}</p>
         <p className="text-3xl font-semibold tabular-nums">{formatPrice(total)}</p>
         <div className="flex flex-wrap gap-2">
@@ -208,6 +208,7 @@ export function Till({ role }: { role: AdminRole }) {
           {visible?.map((item) => (
             <li
               key={item.variantId}
+              data-testid="till-result"
               className="flex items-center justify-between gap-3 rounded-lg border p-3"
             >
               <div className="min-w-0">
@@ -229,6 +230,7 @@ export function Till({ role }: { role: AdminRole }) {
               <Button
                 size="sm"
                 variant="outline"
+                data-testid="till-add"
                 disabled={item.stock <= 0}
                 onClick={() => addItem(item)}
               >
@@ -248,7 +250,7 @@ export function Till({ role }: { role: AdminRole }) {
 
         <ul className="grid gap-3">
           {lines.map((line) => (
-            <li key={line.variantId} className="grid gap-2 rounded-lg border p-3">
+            <li key={line.variantId} data-testid="till-line" className="grid gap-2 rounded-lg border p-3">
               <div className="flex items-start justify-between gap-2">
                 <p className="min-w-0 truncate text-sm font-medium">
                   {line.productName}
@@ -342,14 +344,16 @@ export function Till({ role }: { role: AdminRole }) {
             />
             <div className="flex items-center justify-between border-t pt-3">
               <span className="text-sm text-muted-foreground">{t("counter.new.total")}</span>
-              <span className="text-2xl font-semibold tabular-nums">{formatPrice(total)}</span>
+              <span data-testid="till-total" className="text-2xl font-semibold tabular-nums">
+                {formatPrice(total)}
+              </span>
             </div>
             {errorKey && (
               <p role="alert" className="text-sm text-destructive">
                 {t(errorKey as Parameters<typeof t>[0])}
               </p>
             )}
-            <Button size="lg" onClick={complete} disabled={pending}>
+            <Button size="lg" data-testid="till-complete" onClick={complete} disabled={pending}>
               {pending ? t("counter.new.recording") : t("counter.new.record")}
             </Button>
           </>

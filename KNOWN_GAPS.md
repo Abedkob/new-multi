@@ -133,6 +133,24 @@ Newest sections at the bottom; delete an item when it's fixed.
   (`reviews.item1.quote`...), so a typo in `content["..."]` compiles. `pnpm verify:templates`
   catches non-canonical keys statically; tightening the types would be better.
 
+## In-store counter sales
+
+- **Counter units never reach `AnalyticsProductDaily`.** That table is keyed off `OrderItem`, so
+  "top products" and every per-product conversion rate mean *online* performance only. Correct
+  under the rule that in-store and web figures are never merged, and the screens say website
+  where they mean website — but a shop selling mostly over the counter will find its product
+  report describes the smaller half of its business. Widening it means deciding what a
+  "purchasing session" is for a sale with no session, which is a product decision rather than a
+  query.
+- **No returns or refunds.** A void reverses a mistake at the counter and puts the stock back; it
+  is not a refund record, and there is no partial return, restocking fee or customer record.
+- **No cash-drawer or shift reconciliation**, no receipt printing, and no gap-free receipt
+  numbering (`counterSaleRef` is the last six characters of the id, like `orderRef`).
+- **The manual discount has no ceiling for the owner and a fixed 20% one for staff**, not a
+  per-tenant setting. Visibility came first: the figure is on the receipt, the history list and
+  the owner's dashboard tile. A configurable cap or an approval flow is a decision for when that
+  figure says one is needed.
+
 ## Testing and ops
 
 - **The till's query COUNTS are not asserted, only its latency.** `pnpm measure:counter` reports
