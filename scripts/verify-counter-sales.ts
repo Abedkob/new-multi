@@ -127,6 +127,30 @@ async function main() {
       assert.equal(await prisma.counterSale.count({ where: { tenantId: A } }), 0);
     });
 
+    await check("the switch cannot be granted from the store's own panel", async () => {
+      // The platform decides which stores have a till, so the owner must have no way to write
+      // the column — not merely no screen for it. Checked by grep rather than by trying it,
+      // because the thing to prevent is the code existing at all: a server action under
+      // app/admin that set this would be a store granting itself a sales channel, and no
+      // capability check would catch it since the owner legitimately holds every capability.
+      const writers = gitGrepFiles("counterSalesEnabled:").filter((f) => f !== "package.json");
+      const inAdmin = writers.filter((f) => f.startsWith("app/admin/"));
+      assert.deepEqual(
+        inAdmin,
+        [],
+        `these write the till switch from the store's own panel: ${inAdmin.join(", ")}`,
+      );
+      // Deliberately not "only lib/data/tenants.ts mentions the column". In Prisma a read and a
+      // write are the same text — `counterSalesEnabled: true` is a select clause as often as it
+      // is an update — so a grep cannot tell them apart, and an assertion that pretended to
+      // would fail on every legitimate reader. What it CAN answer precisely is where the column
+      // could be written from, and the answer that matters is "not from the store's own panel".
+      assert.ok(
+        writers.some((f) => f === "lib/data/tenants.ts"),
+        "setTenantCounterSales must still be the setter",
+      );
+    });
+
     await setTenantCounterSales(A, a.user.id);
     await setTenantCounterSales(B, b.user.id);
 
