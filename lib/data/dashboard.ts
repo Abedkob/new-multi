@@ -54,6 +54,34 @@ export function getDashboard(tenantId: string) {
         }),
       ]);
 
+    // In-store takings, as their OWN figure. Deliberately not added to salesThisMonthCents
+    // above: one is money taken online and the other money taken at a counter, and a single
+    // "revenue" number would make the web conversion rate and the pilot's order reconciliation
+    // meaningless. The same rule the reports already keep between order value and WhatsApp
+    // potential value — and pnpm verify:aggregates greps for anyone adding the two together.
+    //
+    // Read only when the store has a till. A shop that has never had one pays a single
+    // primary-key lookup for the question and nothing more, which matters because these queries
+    // share one connection and therefore run one after another.
+    const till = await db.tenant.findUnique({
+      where: { id: tenantId },
+      select: { counterSalesEnabled: true, counterSalesFirstEnabledAt: true },
+    });
+    const hasTill = !!till && (till.counterSalesEnabled || till.counterSalesFirstEnabledAt !== null);
+    const [counterRow] = hasTill
+      ? await db.$queryRaw<{ cents: number; sales: number }[]>`
+          SELECT COALESCE(SUM(x.total), 0)::int AS cents, COUNT(*)::int AS sales
+          FROM (
+            SELECT s.id, SUM(i."priceCentsSnapshot" * i.quantity) AS total
+            FROM "CounterSale" s
+            JOIN "CounterSaleItem" i ON i."counterSaleId" = s.id AND i."tenantId" = s."tenantId"
+            WHERE s."tenantId" = ${tenantId}
+              AND s.status = 'RECORDED'
+              AND s."createdAt" >= ${monthStart}
+            GROUP BY s.id
+          ) x`
+      : [];
+
     const orderCounts = Object.fromEntries(ORDER_STATUSES.map((s) => [s, 0])) as Record<OrderStatusValue, number>;
     for (const row of byStatus) orderCounts[row.status] = row._count._all;
     const value = (key: string) => content.find((c) => c.key === key)?.value.trim() ?? "";
@@ -64,6 +92,10 @@ export function getDashboard(tenantId: string) {
       orderCounts,
       salesThisMonthCents: sales?.cents ?? 0,
       paidOrdersThisMonth: sales?.orders ?? 0,
+      /** null when this store has no till, so the dashboard shows no tile rather than a zero. */
+      counterSalesThisMonth: hasTill
+        ? { cents: counterRow?.cents ?? 0, sales: counterRow?.sales ?? 0 }
+        : null,
       ordersThisWeek,
       recentOrders,
       lowStock,

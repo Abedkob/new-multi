@@ -61,6 +61,8 @@ pnpm dev                              # http://localhost:3000
 | `pnpm build:job` | Bundle the operational commands (`dist/analytics-scheduled.mjs`, `dist/seed.mjs`) for the production image. Run by the Dockerfile's builder stage; `dist/` is git-ignored |
 | `pnpm verify:container-commands` | Static check that every command a runbook tells an operator to run **inside the container** exists in the image's runtime stage (no server needed) |
 | `pnpm verify:rollout` | Pure check that the rollout's two shapes agree — `includesWith` (a request) and `whereWith` (a job's tenant filter) — in all three modes, that every analytics stage walk is gated and the housekeeping ones are not, and that the mode is read in exactly one place (no server or database) |
+| `pnpm verify:counter` | Test the in-store till: idempotent submissions, stock moving once in each direction, an honest void, frozen snapshots, the staff discount ceiling, the database's own CHECKs, cross-tenant refusal as `app_user`, and that a counter sale moves **no** web aggregate |
+| `pnpm measure:counter` | Build a realistic catalogue (2,000 products x 3 variants, 500 sales) and time the till's four operations, with `EXPLAIN ANALYZE` for the search and the takings aggregate. Reports; asserts nothing |
 | `pnpm verify:edge` | Static check of the edge trust gate (D75): the four modes, the strip list, the single `countryFrom` caller, the https upgrade, and that no committed config enables HSTS (no server needed) |
 | `pnpm verify:rate-limit` | Test the Redis-backed limiter against a real Redis: the budget, the trailing window at a boundary, a TTL on every bucket, 50 concurrent callers, and that an old-shape key degrades rather than allows. Needs `REDIS_URL` and **fails** without one |
 | `pnpm verify:icons` | Static check of the installable apps' icons: every manifest `src` resolves to a real PNG of the size it claims, both apps' marks differ, no orphans (no server needed) |
@@ -407,6 +409,26 @@ the pre-Phase-7 behaviour, so a deployment that sets none of them behaves exactl
   can never meet an old integer key. A refused hit is not recorded, or retrying would push the
   window forward and extend a block for as long as a client kept trying. `pnpm verify:rate-limit`
   holds all of it down; six of its checks fail against the old implementation.
+- **The till's numbers** (`pnpm measure:counter`, 2,000 products / 6,000 variants / 500 sales,
+  dev laptop):
+
+  | Operation | p50 | p95 |
+  |---|---|---|
+  | `searchTillItems` | 19ms | 27ms |
+  | `recordCounterSale` (2 lines) | 28ms | 41ms |
+  | `listCounterSalesPage` | 13ms | 22ms |
+  | `getCounterTakings` | 9ms | 12ms |
+
+  **`Product.name` has no text index** — no `pg_trgm`, no tsvector anywhere in this schema — so
+  the till's unanchored `ILIKE` is a scan of that store's products. At this size Postgres picks a
+  sequential scan over 2,006 rows and finishes in 13ms, so the trigger for adding the extension
+  is written down rather than guessed: **search p95 above 150ms at a realistic catalogue**. It is
+  27ms, so no extension.
+  **Always `ANALYZE` before trusting a figure from this script.** Its first run timed the takings
+  aggregate at p95 208ms on a nested loop that discarded 271,068 rows, with `rows=1` estimates
+  throughout — a freshly bulk-loaded table has no statistics, so that measured the planner's
+  ignorance. With `ANALYZE` the same query plans as a hash join and takes 12ms. The script now
+  analyzes as part of seeding.
 - **Storefront data:** `loadStorefrontData` runs 5 reads inside one `withTenant` transaction (was 5 separate ones, costing 5 pooled connections per page load).
 
 ## Important Gotchas

@@ -373,6 +373,8 @@ export const ar: Record<DictionaryKey, string> = {
   "dashboard.stat.newOrdersHint": "بانتظار تأكيدك",
   "dashboard.stat.salesThisMonth": "مبيعات هذا الشهر",
   "dashboard.stat.confirmedOrDelivered": "{0} مؤكد أو تم توصيله",
+  "dashboard.stat.counterSales": "في المتجر هذا الشهر",
+  "dashboard.stat.counterSalesHint": "{0} بيعة مباشرة، منفصلة عن مبيعات الإنترنت",
   "dashboard.stat.ordersThisWeek": "طلبات هذا الأسبوع",
   "dashboard.stat.last7Days": "آخر 7 أيام، بدون احتساب الملغاة",
   "categories.singular": "فئة",

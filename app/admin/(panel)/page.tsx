@@ -6,6 +6,7 @@ import {
   CalendarDays,
   Check,
   DollarSign,
+  Store,
   ExternalLink,
   Package,
   PackageOpen,
@@ -134,6 +135,24 @@ export default async function AdminHome() {
         >
           {formatPrice(d.salesThisMonthCents)}
         </Stat>
+        {/*
+          Its own tile, never folded into "sales this month". Rendered only for a store that has
+          a till, so every other shop's dashboard is unchanged rather than showing a zero for a
+          channel it does not have.
+        */}
+        {d.counterSalesThisMonth && (
+          <Stat
+            icon={Store}
+            label={t("dashboard.stat.counterSales")}
+            hint={resolveMessage(
+              t,
+              encodeMessage("dashboard.stat.counterSalesHint", d.counterSalesThisMonth.sales),
+            )}
+            href="/admin/counter"
+          >
+            {formatPrice(d.counterSalesThisMonth.cents)}
+          </Stat>
+        )}
         <Stat
           icon={CalendarDays}
           label={t("dashboard.stat.ordersThisWeek")}

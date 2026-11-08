@@ -25,6 +25,11 @@ import { readFileSync } from "node:fs";
 import { prisma } from "../lib/prisma";
 import { createStoreWithOwner, setTenantCounterSales } from "../lib/data/tenants";
 import { createProduct, updateProduct } from "../lib/data/products";
+import { placeOrder } from "../lib/data/orders";
+import { recomputeDays } from "../lib/analytics/aggregate";
+import { localDayOf } from "../lib/analytics/local-day";
+import { runScheduled } from "../lib/analytics/scheduled";
+import { newOrderCatchUp } from "../lib/notifications/stages";
 import {
   CounterSaleError,
   counterSaleFingerprint,
@@ -551,6 +556,114 @@ async function main() {
       assert.equal(mug.productName, "Mug");
       assert.ok(items.length <= 20, "results are bounded");
       assert.equal((await searchTillItems(A, "nothing-matches-this", 20)).length, 0);
+    });
+
+    // ---------------------------------------------------------------------------------------
+    // Separation from web analytics — the assertions this whole design exists for
+    // ---------------------------------------------------------------------------------------
+    console.log("\nThe till never touches the web figures:");
+    await check("a counter sale moves no web aggregate, and a web order moves them exactly", async () => {
+      const product = await createProduct(A, {
+        name: "Separation Mug",
+        basePriceCents: 1000,
+        ...productInput,
+        variants: [{ attributes: {}, stock: 50, priceCentsOverride: null, imageUrl: null }],
+      });
+      const variantId = product.variants[0].id;
+      const zone = (
+        await prisma.tenant.findUniqueOrThrow({ where: { id: A }, select: { analyticsTimezone: true } })
+      ).analyticsTimezone;
+      const today = localDayOf(new Date(), zone);
+      const agg = { id: A, analyticsTimezone: zone };
+
+      // Baseline: whatever today looks like before either sale exists.
+      await recomputeDays(agg, [today]);
+      const before = await prisma.analyticsDailyMetric.findUnique({
+        where: { tenantId_localDay: { tenantId: A, localDay: new Date(`${today}T00:00:00.000Z`) } },
+        select: { orders: true, orderValueCents: true, sessions: true },
+      });
+      const base = {
+        orders: before?.orders ?? 0,
+        orderValueCents: before?.orderValueCents ?? 0,
+        sessions: before?.sessions ?? 0,
+      };
+
+      // A counter sale FIRST, so if it leaked it would already be in the figures below.
+      await recordCounterSale(A, {
+        submissionId: uuid(),
+        payment: "CASH",
+        lines: [{ variantId, quantity: 4 }],
+        ...seller,
+      });
+      await recomputeDays(agg, [today]);
+      const afterTill = await prisma.analyticsDailyMetric.findUnique({
+        where: { tenantId_localDay: { tenantId: A, localDay: new Date(`${today}T00:00:00.000Z`) } },
+        select: { orders: true, orderValueCents: true, sessions: true },
+      });
+      assert.equal(afterTill?.orders ?? 0, base.orders, "a counter sale must not be a website order");
+      assert.equal(
+        afterTill?.orderValueCents ?? 0,
+        base.orderValueCents,
+        "nor website revenue — 4,000 cents of in-store money must be absent from this column",
+      );
+      assert.equal(afterTill?.sessions ?? 0, base.sessions, "and it is not a session");
+
+      // Now a web order on the same day, and the figures must move by EXACTLY its amount.
+      await placeOrder(
+        A,
+        {
+          customerName: "Web Shopper",
+          customerPhone: "+961 70 000 030",
+          customerAddress: "1 Web Street",
+          deliveryLocation: "Test location",
+          notes: "",
+        },
+        [{ variantId, quantity: 2 }],
+        { expectedDeliveryFeeCents: 0 },
+      );
+      await recomputeDays(agg, [today]);
+      const afterWeb = await prisma.analyticsDailyMetric.findUniqueOrThrow({
+        where: { tenantId_localDay: { tenantId: A, localDay: new Date(`${today}T00:00:00.000Z`) } },
+        select: { orders: true, orderValueCents: true },
+      });
+      assert.equal(afterWeb.orders, base.orders + 1, "exactly one more website order");
+      assert.equal(
+        afterWeb.orderValueCents,
+        base.orderValueCents + 2000,
+        "and exactly its 2,000 cents. If this is 6,000 the till has been folded into web revenue, " +
+          "which is the refactor this assertion exists to catch.",
+      );
+    });
+
+    await check("the new-order notification sweep ignores a counter sale", async () => {
+      // notificationLinks: { none: {} } announces ANY order with no link, so an Order-shaped
+      // counter sale would have pushed "you have a new order" for a sale the staff member just
+      // rang up in front of the customer. CounterSale has no such relation, which is why.
+      // The expectation is DERIVED from the Order table rather than written as a number: this
+      // suite has placed a real web order by now, which the sweep is supposed to find, and
+      // asserting 0 would only have proved the test ran before the order existed. The sweep is
+      // cross-tenant (withJobBypass), so the count is too.
+      const announceable = await prisma.order.count({
+        where: {
+          status: { not: "CANCELLED" },
+          notificationLinks: { none: {} },
+          createdAt: { gte: new Date(Date.now() - 30 * 60_000) },
+        },
+      });
+      const counterSales = await prisma.counterSale.count({ where: { tenantId: A } });
+      assert.ok(counterSales > 0, "this check is vacuous without a counter sale to ignore");
+
+      const report = await runScheduled([newOrderCatchUp], { log: () => {}, dryRun: true });
+      const stage = report.stages[0];
+      assert.equal(stage?.status, "OK", JSON.stringify(report));
+      assert.equal(
+        stage.items,
+        announceable,
+        `the sweep would announce ${stage.items} but only ${announceable} web order(s) are ` +
+          `pending, with ${counterSales} counter sale(s) in the same store. A counter sale is ` +
+          `not an Order, so it can never appear here — if this number is higher, something has ` +
+          `started writing sales into the Order table.`,
+      );
     });
 
     // ---------------------------------------------------------------------------------------

@@ -371,6 +371,8 @@ export const en = {
   "dashboard.stat.newOrdersHint": "Waiting for you to confirm",
   "dashboard.stat.salesThisMonth": "Sales this month",
   "dashboard.stat.confirmedOrDelivered": "{0} confirmed or delivered",
+  "dashboard.stat.counterSales": "In store this month",
+  "dashboard.stat.counterSalesHint": "{0} counter sales, kept separate from online",
   "dashboard.stat.ordersThisWeek": "Orders this week",
   "dashboard.stat.last7Days": "Last 7 days, not counting cancelled",
   "categories.singular": "category",

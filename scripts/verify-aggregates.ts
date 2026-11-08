@@ -453,6 +453,45 @@ async function aggregateChecks() {
       );
     }
     ok("P4-22", `${both.length} module(s) touch both money figures and none of them sums them`);
+
+    // P4-22b: the same rule for the till. In-store takings are a third money figure, and the
+    // reason they must never be added to the other two is the same reason those two are kept
+    // apart — one number covering several channels makes the web conversion rate and the
+    // pilot's order reconciliation meaningless. Generalised over the pairs rather than written
+    // out a third time, so a FOURTH figure is one array entry away from being covered.
+    const MONEY_FIGURES = [
+      "orderValueCents",
+      "whatsappPotentialValueCents",
+      "counterSalesThisMonthCents",
+      "salesThisMonthCents",
+    ];
+    // Whitespace is squashed and the search is literal, rather than a built regular expression:
+    // the names are long and a generated pattern is one escaping mistake away from matching
+    // nothing at all, which is the failure mode a check like this must not have.
+    const sums: string[] = [];
+    for (const left of MONEY_FIGURES) {
+      for (const file of gitGrepFiles(left)) {
+        const squashed = readFileSync(file, "utf8").replace(/\s+/g, "");
+        for (const right of MONEY_FIGURES) {
+          if (left === right) continue;
+          let from = squashed.indexOf(`${left}+`);
+          while (from !== -1) {
+            // A short window, so `a + b` is caught and `a + c, and later b` is not.
+            if (squashed.slice(from, from + left.length + right.length + 8).includes(right)) {
+              sums.push(`${file}: ${left} + ${right}`);
+              break;
+            }
+            from = squashed.indexOf(`${left}+`, from + 1);
+          }
+        }
+      }
+    }
+    assert.deepEqual(
+      sums,
+      [],
+      `these add two money figures that belong to different channels: ${sums.join(", ")}`,
+    );
+    ok("P4-22b", `no module adds any two of ${MONEY_FIGURES.length} channel money figures`);
   } finally {
     await prisma.tenant.deleteMany({ where: { id: T } });
     await prisma.user.deleteMany({ where: { id: user.id } });

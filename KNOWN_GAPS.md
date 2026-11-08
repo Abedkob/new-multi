@@ -135,6 +135,16 @@ Newest sections at the bottom; delete an item when it's fixed.
 
 ## Testing and ops
 
+- **The till's query COUNTS are not asserted, only its latency.** `pnpm measure:counter` reports
+  p50/p95 for the four till operations and prints the plans for the two statements that could
+  degrade, which is what the index decision was made from. What it does not do is assert "this
+  operation issues exactly N queries", which is the assertion that would catch an N+1 appearing
+  later. The shared Prisma client in `lib/prisma.ts` is not configured with query events, and
+  instrumenting a separate client for the test would measure a different client than the one the
+  application uses — so the honest options were a weaker check or a misleading one. Latency at a
+  realistic catalogue is the weaker check, chosen deliberately: an N+1 in the search would show
+  up as latency scaling with the number of variants returned, which this script would surface.
+
 - **The runbooks' container commands are only checked by shape, not by execution.**
   `pnpm verify:container-commands` is static: it proves the Dockerfile's runtime stage copies the
   entrypoints the runbooks name, that no fenced command runs the scheduled command through
