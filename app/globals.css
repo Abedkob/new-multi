@@ -206,3 +206,34 @@
 @media (prefers-reduced-motion: reduce) {
   .muse-unveil, .muse-zoom, .muse-word, .muse-fade, .muse-spin { animation: none; }
 }
+
+/* ---- Printing -------------------------------------------------------------------------------
+   One screen in this product is meant for paper: a counter sale's receipt, which the cashier
+   hands to the customer. Rather than teach the admin shell to hide itself, the receipt marks the
+   one element worth printing and everything else is made invisible.
+
+   `visibility`, not `display`: collapsing the shell's layout would drag the receipt out of the
+   printed page box in Chrome. Everything inside the marked element is made visible again, since
+   `visibility` inherits. */
+@media print {
+  body * {
+    visibility: hidden;
+  }
+  [data-print-area],
+  [data-print-area] * {
+    visibility: visible;
+  }
+  [data-print-area] {
+    position: absolute;
+    top: 0;
+    inset-inline-start: 0;
+    width: 100%;
+    border: 0;
+    padding: 0;
+  }
+  /* A control on paper is noise, and a border that survives into print wastes toner on a
+     thermal roll. */
+  [data-print-hide] {
+    display: none !important;
+  }
+}

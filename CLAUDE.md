@@ -307,6 +307,21 @@ operator switches it on per store.
   can have no variant left to credit — `voidRestoredLines` records how many were actually
   restored, because a variant deleted *after* the void would make a later read conclude the
   opposite.
+- **A reduction is held as the text the cashier typed, not as cents.** A controlled money field
+  that re-formats itself on every keystroke cannot be typed into: `2` becomes `2.00`, so the `.`
+  of `2.50` lands after it and the line is charged **2.01**. That shipped, because the browser
+  leg used `fill`, which sets the whole value in one event. `e2e:counter` now types the figure
+  one character at a time. Both rules the database enforces — the role's ceiling and a reason for
+  any reduction — are checked on screen as well, so a refusal never arrives after the money is in
+  the drawer, and a line over the ceiling shows its **full** price rather than a capped total
+  nobody chose.
+- **The receipt prints, and only the receipt does.** One `[data-print-area]` on
+  `/admin/counter/[id]` and one `@media print` block in `app/globals.css` that makes everything
+  outside it invisible — so the paper carries the shop's name, the lines, the total, the payment
+  and the seller, and never the sidebar, the back link or the Void control (`data-print-hide`).
+  No PDF and no printer protocol: a counter's thermal printer is installed as a system printer,
+  so the browser's own dialog is the whole feature. `visibility`, not `display`, because
+  collapsing the admin shell's layout drags the receipt out of Chrome's printed page box.
 - **Money is explainable or refused.** A CHECK enforces
   `priceCentsSnapshot = regular - automatic - manual`, so no code path can charge an arbitrary
   number or drive a line negative; another requires a reason for any manual reduction. Staff are

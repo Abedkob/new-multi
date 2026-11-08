@@ -93,9 +93,34 @@ async function main() {
     ok("the same variant added twice is one line of two");
 
     // A reduction, with its reason. The owner is uncapped, so $2.50 off each is allowed.
-    await page.locator('[data-testid="till-line"] input').nth(0).fill("2.50");
-    await page.locator('[data-testid="till-line"] input').nth(1).fill("chipped handle");
+    const amount = page.locator('[data-testid="till-line"] input').nth(0);
+    const reason = page.locator('[data-testid="till-line"] input').nth(1);
+    const complete = page.locator('[data-testid="till-complete"]');
+
+    // Typed one character at a time, NOT filled. `fill` sets the whole value in one event, which
+    // is precisely what hid this: the field used to re-format itself to "2.00" after the "2", so
+    // the "." of "2.50" landed after it and a human could never enter a decimal.
+    await amount.click();
+    await amount.pressSequentially("2.50", { delay: 20 });
+    assert.equal(
+      await amount.inputValue(),
+      "2.50",
+      "the reduction field must keep what was typed — a money input that re-formats on every " +
+        "keystroke cannot be typed into at all",
+    );
+    ok("the reduction field can be typed into one character at a time");
+
+    assert.equal(
+      await complete.isDisabled(),
+      true,
+      "a reduction with no reason must be refused on screen, not by a database CHECK after the " +
+        "cashier has taken the money",
+    );
+    ok("a reduction with no reason blocks the sale on screen");
+
+    await reason.fill("chipped handle");
     await page.locator('[data-testid="till-total"]').getByText("$25.00").waitFor();
+    assert.equal(await complete.isDisabled(), false, "with a reason it may go through");
     ok("a reduction with a reason changes the total on screen");
 
     // The cart must survive a search: this is the interaction the whole screen is shaped around.
@@ -124,6 +149,26 @@ async function main() {
     // ---- the receipt, and the void ---------------------------------------------------------
     await page.goto(`${BASE}/admin/counter/${sale.id}`, { waitUntil: "load" });
     assert.equal(await page.locator('[data-testid="receipt-total"]').innerText(), "$25.00");
+
+    // What goes on paper. `@media print` leaves only [data-print-area] visible, so the assertion
+    // is about what is inside that element rather than about the rendered page: the customer gets
+    // the shop's name and the total, and never a control they could not use anyway.
+    const printArea = page.locator("[data-print-area]");
+    assert.equal(await printArea.count(), 1, "the receipt must mark exactly one printable area");
+    const printed = (await printArea.textContent()) ?? "";
+    assert.ok(
+      printed.includes(store.tenant.name),
+      "a printed receipt must name the shop — paper has no page header to say which store it is",
+    );
+    assert.ok(printed.includes("$25.00"), "and must carry the total");
+    assert.equal(
+      await printArea.locator('[data-testid="counter-void"]').count(),
+      0,
+      "the void control must sit outside the printed area",
+    );
+    await page.getByRole("button", { name: "Print receipt" }).waitFor();
+    ok("the receipt has a print control and prints the shop, the lines and the total");
+
     await page.fill("#void-reason", "rang up by mistake");
     await page.locator('[data-testid="counter-void"]').click();
     await page.getByRole("button", { name: "Void this sale", exact: true }).last().click();
@@ -138,6 +183,27 @@ async function main() {
     await staffPage.fill("#till-search", "Counter Mug");
     await staffPage.locator('[data-testid="till-result"]').first().waitFor();
     await staffPage.locator('[data-testid="till-add"]').first().click();
+
+    // The staff ceiling, held on screen as well as in the action. A $15.00 line caps at $3.00
+    // (STAFF_MAX_MANUAL_DISCOUNT_PERCENT), so $5.00 must not be completable — a staff member
+    // should not discover the limit from a refusal with a customer standing there.
+    const staffAmount = staffPage.locator('[data-testid="till-line"] input').nth(0);
+    await staffAmount.fill("5.00");
+    await staffPage.locator('[data-testid="till-line"] input').nth(1).fill("looks worn");
+    assert.equal(
+      await staffPage.locator('[data-testid="till-complete"]').isDisabled(),
+      true,
+      "a staff reduction over the ceiling must be refused on screen",
+    );
+    assert.equal(
+      await staffPage.locator('[data-testid="till-total"]').innerText(),
+      "$15.00",
+      "and the total must show the full price, not a capped amount nobody chose",
+    );
+    ok("a staff reduction over the ceiling blocks the sale and does not invent a total");
+
+    await staffAmount.fill("");
+    await staffPage.locator('[data-testid="till-line"] input').nth(1).fill("");
     await staffPage.locator('[data-testid="till-complete"]').click();
     await staffPage.locator('[data-testid="till-recorded"]').waitFor();
     assert.equal(await stockOf(variantId), 11, "a staff member can sell");

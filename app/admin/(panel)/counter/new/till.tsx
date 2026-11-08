@@ -3,12 +3,12 @@
 import { useEffect, useRef, useState, useTransition } from "react";
 import Link from "next/link";
 import { Minus, Plus, Trash2 } from "lucide-react";
-import { Badge } from "@/components/ui/badge";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Segmented } from "@/components/segmented";
 import { useT } from "@/lib/i18n/context";
 import { formatPrice } from "@/lib/format";
+import { maxManualDiscountCents } from "@/lib/counter-sales";
 import type { TillItem } from "@/lib/data/counter-sales";
 import type { AdminRole } from "@/lib/roles";
 import { recordCounterSaleAction, searchTillItemsAction } from "../actions";
@@ -16,7 +16,7 @@ import { recordCounterSaleAction, searchTillItemsAction } from "../actions";
 /**
  * The whole till, in one screen and one client component.
  *
- * Two decisions worth knowing:
+ * Three decisions worth knowing:
  *
  *  1. The search goes through a server action, not a `?q=` URL param. The products list uses the
  *     param and is right to — but here a server-component re-render would remount this component
@@ -25,6 +25,12 @@ import { recordCounterSaleAction, searchTillItemsAction } from "../actions";
  *  2. The submission id is minted once per cart and only replaced after a sale is recorded. A
  *     double tap, or a retry after the network dropped on a request that actually committed,
  *     reaches the server with the same id and is answered with the same sale.
+ *  3. A reduction is held as the TEXT the cashier typed, not as cents. Re-formatting a controlled
+ *     money field on every keystroke makes it impossible to type: "2" becomes "2.00", so the "."
+ *     of "2.50" lands after it and the field never leaves 2. The cents are derived on read, and
+ *     the two rules the server and the database enforce — a ceiling by role, and a reason for any
+ *     reduction — are checked here too, so a refusal does not arrive after the money is in the
+ *     drawer.
  */
 
 type Line = {
@@ -35,9 +41,17 @@ type Line = {
   regularPriceCents: number;
   stock: number;
   quantity: number;
-  reduceCents: number;
+  /** What the cashier typed, in whole currency units. "" means no reduction. */
+  reduceText: string;
   reduceReason: string;
 };
+
+/** The typed reduction in cents. Anything that is not a positive number is no reduction. */
+function parseCents(text: string): number {
+  const value = Number.parseFloat(text.trim().replace(",", "."));
+  if (!Number.isFinite(value) || value <= 0) return 0;
+  return Math.round(value * 100);
+}
 
 function newSubmissionId() {
   // crypto.randomUUID needs a secure context. Admin is https in production, but this project has
@@ -62,7 +76,9 @@ export function Till({ role }: { role: AdminRole }) {
   const [submissionId, setSubmissionId] = useState(newSubmissionId);
   const [pending, setPending] = useState(false);
   const [errorKey, setErrorKey] = useState<string | null>(null);
-  const [recorded, setRecorded] = useState<{ saleId: string } | null>(null);
+  /** What the server said about the refusal, in numbers, so the screen need not guess. */
+  const [errorNote, setErrorNote] = useState<string | null>(null);
+  const [recorded, setRecorded] = useState<{ saleId: string; totalCents: number } | null>(null);
   const searchBox = useRef<HTMLInputElement>(null);
 
   // Debounced, so a cashier typing a product name does not spend a query per keystroke.
@@ -85,13 +101,35 @@ export function Till({ role }: { role: AdminRole }) {
   // search returned.
   const visible = search.trim() ? results : null;
 
-  const total = lines.reduce(
-    (sum, l) => sum + Math.max(0, l.unitPriceCents - l.reduceCents) * l.quantity,
-    0,
-  );
+  /** Each line with its reduction resolved and judged. The cart's one source of truth. */
+  const priced = lines.map((line) => {
+    const cap = maxManualDiscountCents(role, line.unitPriceCents);
+    const wanted = parseCents(line.reduceText);
+    const overCap = wanted > cap;
+    const needsReason = wanted > 0 && line.reduceReason.trim() === "";
+    // Over the cap, the line is shown at its full price: the sale cannot be completed in that
+    // state, so quietly charging the capped amount would be inventing a total nobody chose.
+    const reduceCents = overCap ? 0 : wanted;
+    return {
+      line,
+      cap,
+      overCap,
+      needsReason,
+      reduceCents,
+      lineTotalCents: Math.max(0, line.unitPriceCents - reduceCents) * line.quantity,
+    };
+  });
+
+  const total = priced.reduce((sum, p) => sum + p.lineTotalCents, 0);
+  const blocked = priced.some((p) => p.overCap || p.needsReason);
+
+  function clearError() {
+    setErrorKey(null);
+    setErrorNote(null);
+  }
 
   function addItem(item: TillItem) {
-    setErrorKey(null);
+    clearError();
     setLines((current) => {
       // The same variant twice is one line with a bigger quantity, which is what the server does
       // with it too — so what the cashier sees matches what is recorded.
@@ -99,7 +137,7 @@ export function Till({ role }: { role: AdminRole }) {
       if (existing) {
         return current.map((l) =>
           l.variantId === item.variantId
-            ? { ...l, quantity: Math.min(99, l.quantity + 1) }
+            ? { ...l, quantity: Math.min(99, Math.min(l.stock, l.quantity + 1)) }
             : l,
         );
       }
@@ -113,7 +151,7 @@ export function Till({ role }: { role: AdminRole }) {
           regularPriceCents: item.regularPriceCents,
           stock: item.stock,
           quantity: 1,
-          reduceCents: 0,
+          reduceText: "",
           reduceReason: "",
         },
       ];
@@ -127,26 +165,36 @@ export function Till({ role }: { role: AdminRole }) {
   }
 
   async function complete() {
-    if (lines.length === 0 || pending) return;
+    if (lines.length === 0 || pending || blocked) return;
     setPending(true);
-    setErrorKey(null);
+    clearError();
     const result = await recordCounterSaleAction({
       submissionId,
       payment,
-      lines: lines.map((l) => ({
-        variantId: l.variantId,
-        quantity: l.quantity,
-        manualDiscountCents: l.reduceCents,
-        manualDiscountReason: l.reduceReason || null,
+      lines: priced.map((p) => ({
+        variantId: p.line.variantId,
+        quantity: p.line.quantity,
+        manualDiscountCents: p.reduceCents,
+        manualDiscountReason: p.line.reduceReason.trim() || null,
       })),
       expectedTotalCents: total,
     });
     setPending(false);
     if (result.ok) {
-      setRecorded({ saleId: result.saleId });
+      setRecorded({ saleId: result.saleId, totalCents: result.totalCents });
       return;
     }
     setErrorKey(result.errorKey);
+    // The action already carries the figures behind a refusal. Saying "not enough stock" without
+    // the number leaves the cashier to guess at the shelf with a customer waiting.
+    const detail = result.detail;
+    if (detail?.available !== undefined) {
+      setErrorNote(`${t("counter.error.stockLeft")} ${detail.available}`);
+    } else if (detail?.actualCents !== undefined) {
+      setErrorNote(`${t("counter.error.newTotal")} ${formatPrice(detail.actualCents)}`);
+    } else {
+      setErrorNote(null);
+    }
   }
 
   function startAnother() {
@@ -157,7 +205,7 @@ export function Till({ role }: { role: AdminRole }) {
     // A new cart is a new submission. Until this point a retry is the SAME sale.
     setSubmissionId(newSubmissionId());
     setRecorded(null);
-    setErrorKey(null);
+    clearError();
     searchBox.current?.focus();
   }
 
@@ -165,7 +213,8 @@ export function Till({ role }: { role: AdminRole }) {
     return (
       <div data-testid="till-recorded" className="grid max-w-md gap-4 rounded-lg border p-6">
         <p className="text-lg font-medium">{t("counter.new.recorded")}</p>
-        <p className="text-3xl font-semibold tabular-nums">{formatPrice(total)}</p>
+        {/* The server's figure, not the cart's: what was charged is what it recorded. */}
+        <p className="text-3xl font-semibold tabular-nums">{formatPrice(recorded.totalCents)}</p>
         <div className="flex flex-wrap gap-2">
           <Button onClick={startAnother}>{t("counter.new.another")}</Button>
           <Link
@@ -193,6 +242,14 @@ export function Till({ role }: { role: AdminRole }) {
             autoComplete="off"
             placeholder={t("counter.new.searchPlaceholder")}
             onChange={(e) => setSearch(e.target.value)}
+            onKeyDown={(e) => {
+              // A barcode scanner is out of scope, but a cashier who typed a name and sees one
+              // row expects Enter to take it. Nothing else on this screen uses Enter.
+              if (e.key !== "Enter") return;
+              e.preventDefault();
+              const first = visible?.find((item) => item.stock > 0);
+              if (first) addItem(first);
+            }}
           />
         </label>
 
@@ -242,15 +299,26 @@ export function Till({ role }: { role: AdminRole }) {
       </section>
 
       {/* ---- sell it ---- */}
-      <section className="grid content-start gap-3">
-        <h2 className="text-sm font-medium">{t("counter.new.cart")}</h2>
+      <section className="grid content-start gap-3 md:sticky md:top-4">
+        <h2 className="text-sm font-medium">
+          {t("counter.new.cart")}
+          {lines.length > 0 && (
+            <span className="ms-1 font-normal text-muted-foreground tabular-nums">
+              ({lines.length})
+            </span>
+          )}
+        </h2>
         {lines.length === 0 && (
           <p className="text-sm text-muted-foreground">{t("counter.new.cartEmpty")}</p>
         )}
 
         <ul className="grid gap-3">
-          {lines.map((line) => (
-            <li key={line.variantId} data-testid="till-line" className="grid gap-2 rounded-lg border p-3">
+          {priced.map(({ line, cap, overCap, needsReason, reduceCents, lineTotalCents }) => (
+            <li
+              key={line.variantId}
+              data-testid="till-line"
+              className="grid gap-2 rounded-lg border p-3"
+            >
               <div className="flex items-start justify-between gap-2">
                 <p className="min-w-0 truncate text-sm font-medium">
                   {line.productName}
@@ -269,7 +337,11 @@ export function Till({ role }: { role: AdminRole }) {
               </div>
 
               <div className="flex flex-wrap items-center gap-2">
-                <div className="flex items-center gap-1" role="group" aria-label={t("counter.new.quantity")}>
+                <div
+                  className="flex items-center gap-1"
+                  role="group"
+                  aria-label={t("counter.new.quantity")}
+                >
                   <Button
                     size="icon"
                     variant="outline"
@@ -290,9 +362,7 @@ export function Till({ role }: { role: AdminRole }) {
                     <Plus className="size-4" />
                   </Button>
                 </div>
-                <span className="ms-auto text-sm tabular-nums">
-                  {formatPrice(Math.max(0, line.unitPriceCents - line.reduceCents) * line.quantity)}
-                </span>
+                <span className="ms-auto text-sm tabular-nums">{formatPrice(lineTotalCents)}</span>
               </div>
 
               <div className="grid gap-2 sm:grid-cols-[8rem_minmax(0,1fr)]">
@@ -300,12 +370,11 @@ export function Till({ role }: { role: AdminRole }) {
                   {t("counter.new.reduceAmount")}
                   <Input
                     inputMode="decimal"
-                    value={line.reduceCents === 0 ? "" : (line.reduceCents / 100).toFixed(2)}
+                    aria-invalid={overCap || undefined}
+                    value={line.reduceText}
                     onChange={(e) => {
-                      const value = Number.parseFloat(e.target.value);
-                      update(line.variantId, {
-                        reduceCents: Number.isFinite(value) ? Math.max(0, Math.round(value * 100)) : 0,
-                      });
+                      clearError();
+                      update(line.variantId, { reduceText: e.target.value });
                     }}
                   />
                 </label>
@@ -314,15 +383,27 @@ export function Till({ role }: { role: AdminRole }) {
                   <Input
                     value={line.reduceReason}
                     maxLength={200}
+                    aria-invalid={needsReason || undefined}
                     placeholder={t("counter.new.reduceReasonPlaceholder")}
-                    onChange={(e) => update(line.variantId, { reduceReason: e.target.value })}
+                    onChange={(e) => {
+                      clearError();
+                      update(line.variantId, { reduceReason: e.target.value });
+                    }}
                   />
                 </label>
               </div>
-              {line.reduceCents > 0 && (
-                <p className="text-xs text-muted-foreground">
-                  {t("counter.sale.was")} {formatPrice(line.unitPriceCents)}
+              {overCap ? (
+                <p className="text-xs text-destructive">
+                  {t("counter.new.reduceTooMuch")} {formatPrice(cap)}
                 </p>
+              ) : needsReason ? (
+                <p className="text-xs text-destructive">{t("counter.new.reduceNeedsReason")}</p>
+              ) : (
+                reduceCents > 0 && (
+                  <p className="text-xs text-muted-foreground">
+                    {t("counter.sale.was")} {formatPrice(line.unitPriceCents)}
+                  </p>
+                )
               )}
             </li>
           ))}
@@ -348,25 +429,25 @@ export function Till({ role }: { role: AdminRole }) {
                 {formatPrice(total)}
               </span>
             </div>
-            {errorKey && (
-              <p role="alert" className="text-sm text-destructive">
-                {t(errorKey as Parameters<typeof t>[0])}
-              </p>
-            )}
-            <Button size="lg" data-testid="till-complete" onClick={complete} disabled={pending}>
-              {pending ? t("counter.new.recording") : t("counter.new.record")}
-            </Button>
           </>
         )}
-        {lines.length === 0 && errorKey && (
+
+        {errorKey && (
           <p role="alert" className="text-sm text-destructive">
             {t(errorKey as Parameters<typeof t>[0])}
+            {errorNote ? ` ${errorNote}` : ""}
           </p>
         )}
+
         {lines.length > 0 && (
-          <Badge variant="secondary" className="justify-self-start">
-            {lines.length}
-          </Badge>
+          <Button
+            size="lg"
+            data-testid="till-complete"
+            onClick={complete}
+            disabled={pending || blocked}
+          >
+            {pending ? t("counter.new.recording") : t("counter.new.record")}
+          </Button>
         )}
       </section>
     </div>

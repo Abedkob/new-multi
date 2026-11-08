@@ -1045,6 +1045,8 @@ export const en = {
   "counter.new.reduceAmount": "Off each one",
   "counter.new.reduceReason": "Why",
   "counter.new.reduceReasonPlaceholder": "Chipped, display model…",
+  "counter.new.reduceTooMuch": "More than you may take off this line. Most you can:",
+  "counter.new.reduceNeedsReason": "Say why, and this reduction can go through.",
   "counter.new.reduceCapOwner": "You can reduce a line by any amount.",
   "counter.new.reduceCapStaff": "You can reduce a line by up to a fifth of its price.",
   "counter.new.total": "Total",
@@ -1062,6 +1064,8 @@ export const en = {
   "counter.sale.was": "Was",
   "counter.sale.reduction": "Reduction",
   "counter.sale.back": "Back to the till",
+  "counter.sale.print": "Print receipt",
+  "counter.sale.thanks": "Thank you.",
   "counter.sale.void": "Void this sale",
   "counter.sale.voidReason": "Why are you voiding it?",
   "counter.sale.voiding": "Voiding…",
@@ -1070,6 +1074,10 @@ export const en = {
   "counter.sale.stockReturned": "The stock went back on the shelf.",
   "counter.sale.stockPartlyReturned": "Some of the stock could not go back: those options no longer exist in your catalogue.",
   "counter.error.generic": "That did not work. Try again.",
+  // Appended to a refusal with the figure the server sent back, so nobody has to guess at the
+  // shelf or at the new price with a customer waiting.
+  "counter.error.stockLeft": "On the shelf now:",
+  "counter.error.newTotal": "The total is now",
   "counter.error.EMPTY": "Add something to the sale first.",
   "counter.error.INVALID": "Check the quantities and try again.",
   "counter.error.FEATURE_OFF": "The till is switched off for this store.",
