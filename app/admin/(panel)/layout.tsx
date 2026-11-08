@@ -4,6 +4,7 @@ import { countOrdersByStatus } from "@/lib/data/orders";
 import { getTenantById } from "@/lib/data/tenants";
 import { requireTenantMember } from "@/lib/session";
 import { CAPABILITIES, can } from "@/lib/permissions";
+import { hasCounterSaleHistory } from "@/lib/counter-sales";
 import { getStoreUrl } from "@/lib/store-url";
 
 export default async function AdminLayout({
@@ -19,7 +20,20 @@ export default async function AdminLayout({
     countOrdersByStatus(member.tenantId, "PENDING"),
   ]);
   if (!tenant) notFound();
-  const allowed = CAPABILITIES.filter((capability) => can(member.role, capability));
+  // `allowed` already means exactly "which links to draw", so the store's own facts belong here
+  // too: both counter capabilities are held by both roles in EVERY store, and without this a
+  // shop with no till would be offered one. "This store has a till" is not a viewer fact, so it
+  // is filtered here rather than by adding a second concept to AdminNav.
+  //
+  // The two questions are deliberately different. History stays reachable once a store has ever
+  // had a till, so an owner never loses sight of takings they already recorded; selling needs the
+  // switch to be on right now. Neither costs a query — both are columns on the row above.
+  const allowed = CAPABILITIES.filter((capability) => {
+    if (!can(member.role, capability)) return false;
+    if (capability === "counter:read") return hasCounterSaleHistory(tenant);
+    if (capability === "counter:sell") return tenant.counterSalesEnabled;
+    return true;
+  });
 
   return (
     <div className="flex flex-1 flex-col bg-muted/40 md:flex-row">

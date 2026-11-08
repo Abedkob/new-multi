@@ -67,6 +67,9 @@ export default async function ManageStoreLayout({
                 todo: !status.privacy,
               },
               { href: `${base}/branding`, label: "Favicon" },
+              // No `todo` dot: setupStatus means "what is incomplete", and a store without a
+              // till is not incomplete. It is a commercial arrangement, not a missing step.
+              { href: `${base}/counter`, label: "Counter sales" },
               { href: `${base}/theme`, label: "Theme", external: true },
               { href: `${base}/danger`, label: "Danger zone" },
             ]}

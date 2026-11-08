@@ -14,6 +14,7 @@ import {
   Paintbrush,
   Share2,
   ShoppingBag,
+  Store,
   Truck,
   Megaphone,
   ChartNoAxesColumn,
@@ -46,6 +47,7 @@ function useNavLinks(): {
   return [
     { href: "/admin", label: t("nav.home"), icon: House, capability: "analytics:read" },
     { href: "/admin/orders", label: t("nav.orders"), icon: ShoppingBag, capability: "orders:read", badge: "pending" as const },
+    { href: "/admin/counter", label: t("nav.counter"), icon: Store, capability: "counter:read" },
     { href: "/admin/delivery", label: t("nav.delivery"), icon: Truck, capability: "settings:write" },
     { href: "/admin/products", label: t("nav.products"), icon: Package, capability: "products:read" },
     { href: "/admin/discounts", label: t("nav.discounts"), icon: BadgePercent, capability: "discounts:write" },

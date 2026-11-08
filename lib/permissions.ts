@@ -30,6 +30,23 @@ export const ADMIN_CAPABILITIES = {
    */
   "orders:cancel": ["STORE_OWNER"],
 
+  // ------------------------------------------- the till: a sale rung up at the counter, in person
+  /** See the counter-sale history, one sale's receipt, and the day's takings. */
+  "counter:read": ["STORE_OWNER", "STAFF"],
+  /**
+   * Ring up a counter sale: take the cash or card, deduct the stock, record it. This is the job,
+   * like advancing an order — and it includes reducing a line's price, which is capped for staff
+   * and uncapped for the owner (lib/counter-sales.ts).
+   */
+  "counter:sell": ["STORE_OWNER", "STAFF"],
+  /**
+   * Void a recorded sale. Owner only, for the same reason as `orders:cancel`: it puts stock back,
+   * it is final, and it rewrites a figure for money already settled with a customer. A staff
+   * member who could void their own sale would make the till total stop being evidence of what
+   * was taken, which is the whole point of recording who sold it.
+   */
+  "counter:void": ["STORE_OWNER"],
+
   // ---------------------------------------------------- catalogue: read it, and count the shelf
   /** See the product list and a product's detail. */
   "products:read": ["STORE_OWNER", "STAFF"],

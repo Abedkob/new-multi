@@ -13,6 +13,7 @@ import {
   recordJointController,
   resetOwnerPassword,
   setTenantAnalyticsPaused,
+  setTenantCounterSales,
   setTenantPaused,
   updateTenantPrivacy,
   updateTenantDomain,
@@ -161,6 +162,46 @@ export async function resumeStoreAction(
   await setTenantPaused(tenant.id, null);
   revalidateStore(slug);
   revalidatePath(`/store/${slug}`, "layout");
+  return { ok: true };
+}
+
+/**
+ * The in-store till, switched on and off by the platform.
+ *
+ * Two actions rather than one toggle, matching the pause control: each can refuse the no-op and
+ * say so, which a single toggle cannot. Only the admin surfaces are revalidated — nothing on the
+ * storefront changes, so there is no `/store/<slug>` path to refresh.
+ *
+ * There is no reason field, unlike pausing. A pause is visible to shoppers and needs explaining;
+ * a till switch is an internal commercial arrangement, and the audit trail is the operator id and
+ * the timestamp that `setTenantCounterSales` records.
+ */
+export async function enableCounterSalesAction(
+  slug: string,
+  _prev: FormState,
+  _formData: FormData,
+): Promise<FormState> {
+  const admin = await requirePlatformAdmin();
+  const tenant = await getTenantBySlug(slug);
+  if (!tenant) return { error: "Store not found." };
+  if (tenant.counterSalesEnabled) return { error: "This store already has counter sales." };
+  await setTenantCounterSales(tenant.id, admin.userId);
+  revalidateStore(slug);
+  return { ok: true };
+}
+
+export async function disableCounterSalesAction(
+  slug: string,
+  _prev: FormState,
+  _formData: FormData,
+): Promise<FormState> {
+  await requirePlatformAdmin();
+  const tenant = await getTenantBySlug(slug);
+  if (!tenant) return { error: "Store not found." };
+  if (!tenant.counterSalesEnabled) return { error: "This store does not have counter sales." };
+  // Stops new sales and leaves the history readable: counterSalesFirstEnabledAt is not cleared.
+  await setTenantCounterSales(tenant.id, null);
+  revalidateStore(slug);
   return { ok: true };
 }
 

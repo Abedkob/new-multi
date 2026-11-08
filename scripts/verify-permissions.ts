@@ -214,16 +214,20 @@ function adminCapabilityGuard() {
     CAPABILITIES.filter((cap) => can("STAFF", cap)).sort(),
     [
       "categories:read",
+      "counter:read",
+      "counter:sell",
       "notifications:self",
       "orders:advance",
       "orders:read",
       "products:read",
       "products:stock",
     ],
-    "D73: exactly these six capabilities belong to staff. Changing this list is a product " +
-      "decision, so it is written here as well as in the table.",
+    "D73, plus the till: exactly these eight capabilities belong to staff. Changing this list is " +
+      "a product decision, so it is written here as well as in the table. The two counter rows " +
+      "are the job at a counter; counter:void is deliberately NOT among them, for the same " +
+      "reason orders:cancel is not.",
   );
-  ok(`staff hold exactly 6 of ${CAPABILITIES.length} capabilities, and the owner holds all of them`);
+  ok(`staff hold exactly 8 of ${CAPABILITIES.length} capabilities, and the owner holds all of them`);
 }
 
 function staticActionGuard() {

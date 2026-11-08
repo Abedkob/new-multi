@@ -33,12 +33,13 @@ export async function createStoreAction(
     defaultLocale: formData.get("defaultLocale"),
     analyticsTimezone: formData.get("analyticsTimezone"),
     jointControllerAccepted: formData.get("jointControllerAccepted"),
+    counterSalesEnabled: formData.get("counterSalesEnabled") ?? undefined,
   });
   if (!parsed.success) {
     return { fieldErrors: z.flattenError(parsed.error).fieldErrors };
   }
 
-  const { storeName, ownerName, ownerEmail, ...privacy } = parsed.data;
+  const { storeName, ownerName, ownerEmail, counterSalesEnabled, ...privacy } = parsed.data;
   const tempPassword = generateTempPassword();
   try {
     const { tenant, user } = await createStoreWithOwner({
@@ -56,6 +57,9 @@ export async function createStoreAction(
         jointControllerRecordedBy: admin.userId,
         jointControllerVersion: JOINT_CONTROLLER_VERSION,
       },
+      // Who enabled the till comes from the authenticated session, never the form — the same
+      // rule as jointControllerRecordedBy just above.
+      counterSales: counterSalesEnabled ? { enabledBy: admin.userId } : undefined,
     });
     return {
       ok: true,

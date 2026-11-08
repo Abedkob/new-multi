@@ -15,10 +15,11 @@ import "dotenv/config";
 import "./_owner";
 import assert from "node:assert/strict";
 import { prisma } from "../lib/prisma";
-import { createStoreWithOwner } from "../lib/data/tenants";
+import { createStoreWithOwner, setTenantCounterSales } from "../lib/data/tenants";
 import { createStaffAccount, listStaffAccounts, revokeStaffAccount } from "../lib/data/staff";
 import { createProduct } from "../lib/data/products";
 import { placeOrder } from "../lib/data/orders";
+import { recordCounterSale, voidCounterSale } from "../lib/data/counter-sales";
 import { generateTempPassword, hashPassword } from "../lib/passwords";
 import { claimNotification } from "../lib/data/notifications";
 import { CAPABILITIES, can } from "../lib/permissions";
@@ -262,6 +263,66 @@ async function main() {
     }
     ok("the sidebar offers exactly the three sections a staff member can use");
 
+    // ------------------------------------------------------------------- the till (counter:*)
+    // Two of staff's capabilities only exist in a store whose platform operator switched the
+    // till on, so this walks the before and after. The "before" half is the interesting one: a
+    // staff member in a shop with no till must not be offered one.
+    {
+      const navBefore = await session.get("/admin/orders");
+      assert.ok(
+        !navBefore.body.includes('href="/admin/counter"'),
+        "a store with no till must not offer one in the sidebar",
+      );
+      // A 404, deliberately NOT /admin/no-access. The refusal page means "your role may not",
+      // and this is not about the role: the store simply has no till. Sending a staff member to
+      // a page that says they lack permission would be a lie about why.
+      assert.equal(
+        (await session.get("/admin/counter")).status,
+        404,
+        "a store with no till has no till page, for either role",
+      );
+
+      await setTenantCounterSales(tenantId, created.user.id);
+
+      const navAfter = await session.get("/admin/orders");
+      assert.ok(
+        navAfter.body.includes('href="/admin/counter"'),
+        "once the till is on, a staff member must be offered it",
+      );
+      const till = await session.get("/admin/counter");
+      assert.equal(till.status, 200, "a staff member may read the till");
+      const newSale = await session.get("/admin/counter/new");
+      assert.equal(newSale.status, 200, "and may open a new sale: this is the job");
+      ok("a staff member reaches the till only once the platform switches it on");
+
+      // Selling is the job, so it is exercised rather than asserted about. Recorded through the
+      // data layer with the staff role, which is what the action does after its capability check.
+      const sale = await recordCounterSale(tenantId, {
+        submissionId: `staff-${run}`,
+        payment: "CASH",
+        lines: [{ variantId, quantity: 1 }],
+        soldByUserId: staff.id,
+        soldByName: "Packer",
+        role: "STAFF",
+      });
+      const receipt = await session.get(`/admin/counter/${sale.id}`);
+      assert.equal(receipt.status, 200, "a staff member may read a receipt");
+      assert.ok(
+        !receipt.body.includes("counter.sale.void") && !receipt.body.includes("Void this sale"),
+        "the receipt must not offer a staff member the void control",
+      );
+      ok("a staff member can ring up a sale and read its receipt, with no void control on it");
+
+      // And the refusal that matters: hiding the button is not the permission. The capability is
+      // what refuses, so a staff member who calls the action anyway is turned away.
+      assert.equal(can("STAFF", "counter:void"), false, "staff must not hold counter:void");
+      await assert.rejects(
+        voidCounterSale(tenantId, sale.id, { reason: "", voidedByUserId: staff.id }),
+        "a void with no reason must be refused outright",
+      );
+      ok("voiding is owner-only, for the same reason cancelling an order is");
+    }
+
     // ------------------------------------------------------- notifications: new orders, nothing else
     // D60's half of this is enforced in the writer, before a row exists. Asserted here as well
     // as in verify:notifications because this is the suite that knows what a staff account is.
@@ -383,10 +444,12 @@ async function main() {
     // ------------------------------------------------------------- the table says what it says
     assert.deepEqual(
       CAPABILITIES.filter((capability) => can("STAFF", capability)).length,
-      6,
-      "D73: six capabilities, and this suite walks all six",
+      8,
+      "D73 plus the till: eight capabilities, and this suite walks all eight. If this number " +
+        "moved, the new capability needs a leg above before it is granted to staff — a count " +
+        "that is merely updated turns this suite into a tautology.",
     );
-    ok("the six capabilities this suite exercised are the six the table grants");
+    ok("the eight capabilities this suite exercised are the eight the table grants");
   } finally {
     await prisma.user.deleteMany({ where: { staffTenantId: tenantId } });
     await prisma.tenant.deleteMany({ where: { id: tenantId } });

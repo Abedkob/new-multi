@@ -80,6 +80,12 @@ export const createStoreSchema = z.object({
   // A checkbox that is not ticked must fail: the recorded timestamp has to mean something.
   jointControllerAccepted: z
     .literal("on", { message: "Confirm the joint-controller terms before creating the store" }),
+  /**
+   * Optional, unlike jointControllerAccepted above — and the contrast is the point. An unticked
+   * HTML checkbox sends nothing at all, so `.optional()` here means "leaving the till off is
+   * fine", while the bare literal above means "unticked must fail".
+   */
+  counterSalesEnabled: z.literal("on").optional(),
 });
 
 export const updateStoreSchema = z.object({

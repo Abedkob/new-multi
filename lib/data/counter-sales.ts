@@ -367,6 +367,16 @@ function getCounterSaleBySubmission(tenantId: string, submissionId: string) {
   );
 }
 
+/**
+ * How many sales a store has recorded, for the platform console's switch page.
+ *
+ * Scoped with withTenant rather than withBypass: the platform admin is asking about ONE store, so
+ * the narrower tool is the right one — nothing here needs to see across tenants.
+ */
+export function countCounterSales(tenantId: string) {
+  return withTenant(tenantId, (db) => db.counterSale.count({ where: { tenantId } }));
+}
+
 export function getCounterSale(tenantId: string, id: string) {
   return withTenant(tenantId, (db) =>
     db.counterSale.findFirst({

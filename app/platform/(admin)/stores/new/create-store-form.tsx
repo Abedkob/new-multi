@@ -128,6 +128,29 @@ export function CreateStoreForm({
         </span>
       </label>
 
+      {/*
+        Hand-rolled like the checkbox above, rather than through a shared primitive: these are
+        the only two checkboxes in the platform console, and inventing a component for a pair is
+        a components refactor wearing a feature's clothes. Unlike the terms above, leaving this
+        unticked is a valid answer — the schema has it optional for exactly that reason.
+      */}
+      <label className="flex items-start gap-3 rounded-lg border p-4 text-sm">
+        <input
+          type="checkbox"
+          name="counterSalesEnabled"
+          value="on"
+          className="mt-0.5 size-4 shrink-0"
+        />
+        <span className="grid gap-1">
+          <span className="font-medium">This store sells over a counter</span>
+          <span className="text-muted-foreground">
+            Adds a till to the owner&apos;s panel, where they and their staff can record cash or
+            card sales made in person. Stock comes out of the same shelf as online orders. You can
+            turn this on or off later from the store&apos;s Counter sales page.
+          </span>
+        </span>
+      </label>
+
       <FormError message={state.error} />
       <div>
         <SubmitButton pendingText="Creating...">Create store</SubmitButton>

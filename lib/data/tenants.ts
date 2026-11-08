@@ -327,6 +327,12 @@ export async function createStoreWithOwner(input: {
   ownerEmail: string;
   passwordHash: string;
   privacy?: TenantPrivacyInput;
+  /**
+   * Switch the in-store till on at creation. Optional for the same reason `privacy` is: the
+   * verification and demo fixtures create stores without it, and the column's own default (false)
+   * is the right answer for every caller that does not care.
+   */
+  counterSales?: { enabledBy: string };
 }) {
   const base = slugify(input.storeName);
 
@@ -385,6 +391,14 @@ export async function createStoreWithOwner(input: {
                   // Stamped here, not passed in: the record of WHEN the terms were recorded
                   // should be the server's clock at the moment of the write.
                   jointControllerRecordedAt: new Date(),
+                }
+              : {}),
+            ...(input.counterSales
+              ? {
+                  counterSalesEnabled: true,
+                  counterSalesEnabledBy: input.counterSales.enabledBy,
+                  // Stamped here from the server's clock, like jointControllerRecordedAt.
+                  counterSalesFirstEnabledAt: new Date(),
                 }
               : {}),
           },
