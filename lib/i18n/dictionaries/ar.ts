@@ -114,7 +114,9 @@ export const ar: Record<DictionaryKey, string> = {
 
   // Product form
   "products.form.basicDetailsTitle": "التفاصيل الأساسية",
-  "products.form.basicDetailsText": "ما يراه المتسوقون أولاً: الاسم والصورة والسعر ووصف قصير.",
+  "products.form.photosTitle": "الصور",
+  "products.form.photosText": "الصورة الرئيسية التي يراها المتسوقون في القائمة، وأي صور إضافية يمكنهم تصفحها.",
+  "products.form.basicDetailsText": "ما هو المنتج وكم سعره. الصور تأتي بعد ذلك.",
   "products.form.nameLabel": "الاسم",
   "products.form.descriptionLabel": "الوصف",
   "products.form.priceLabel": "السعر (دولار أمريكي)",

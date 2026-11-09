@@ -86,6 +86,12 @@ from `app/admin`.
 A nested box inside a panel — a row, a line item, a preview — is `rounded-md border bg-background`
 and is deliberately one step tighter than its parent.
 
+**An optional `icon`** puts a mark in a muted chip beside the title. It earns its place only on a
+long multi-section form, where the icons are what let someone find "photos" again after
+scrolling; the product form is the one screen that has it. A panel that is one of two on a page
+does not need one, and a page where only some panels have icons looks broken. It exists so that a
+long form does not grow a fifth private section header, which is what the product form had.
+
 ## 4. The type scale
 
 Four sizes. Admin was 162 `text-sm` and 116 `text-xs` against 14 uses of everything larger
@@ -274,7 +280,7 @@ greyscale UI the only colour wins whatever its strength.
 
 ## 11. What enforces this
 
-`pnpm verify:admin-ui` — static, no server, no database. Four rules, each one a thing that
+`pnpm verify:admin-ui` — static, no server, no database. Five rules, each one a thing that
 actually happened here rather than a preference:
 
 1. `components/ui/card` is not imported under `app/admin`.
@@ -282,9 +288,15 @@ actually happened here rather than a preference:
    border is exempt**, and the distinction is real: dashed means provisional (an empty-table note,
    a "not measuring yet" placeholder) and it is drawn *inside* a panel, on the surface that panel
    already established. Giving it `bg-card` would stack a second card inside the first.
-3. One `h1` per page — a page under a section layout that already renders `PageHeader` may not add
+3. **A panel is `rounded-lg`** — a bordered or surfaced `rounded-xl`/`2xl`/`3xl` fails.
+   `rounded-md` is not listed, because that is the nested box and is meant to be tighter. **One
+   box opts out**: the content editor's preview frame is drawing a phone around a storefront
+   iframe, so its radius is a picture of a device rather than a surface treatment. It carries
+   `admin-ui-allow-radius:` in the comment immediately above — per occurrence, with a reason,
+   never file-wide, the same idiom `AffixField` uses for its direction classes.
+4. One `h1` per page — a page under a section layout that already renders `PageHeader` may not add
    another.
-4. No physical-direction classes (`ml-`, `pr-`, `left-`).
+5. No physical-direction classes (`ml-`, `pr-`, `left-`).
 
 **`PENDING` is the honest part.** The not-yet-converted screens are listed by name in the script.
 The check asserts that list does not **grow**, and that every entry still earns its place — an
@@ -294,6 +306,15 @@ as screens are converted, and the fix for a new violation is never to add a line
 **Every screen under `app/admin` is on the baseline**, so `PENDING` is empty and a violation is
 now a regression rather than a backlog item. The fix for one is the screen, never a line in that
 list.
+
+**That claim was once broader than the checker.** When `PENDING` was first emptied, the product
+form still had three `rounded-xl border bg-card p-6` panels, its own icon'd section header, its
+own labelled-field markup, its own sticky save row and a `rounded-3xl` preview card — and all
+four rules passed on it, because none of them asked what shape a panel is or whether a field came
+from `components/field.tsx`. Rule 3 above is the half of that gap a machine can hold; the other
+half — "this file re-implements a primitive" — is not something a regex should be trusted to
+judge, so it stays a review question. The lesson is the general one: a green check means the
+rules passed, not that the screen is on the baseline.
 
 One fold is tracked here rather than by the checker, since it needs a server-run suite to
 confirm: `analytics/live-visitors.tsx` is a fifth copy of `StatTile` with one extra state (the

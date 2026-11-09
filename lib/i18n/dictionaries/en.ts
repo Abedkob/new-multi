@@ -115,7 +115,12 @@ export const en = {
 
   // Product form (app/admin/(panel)/products/product-form.tsx)
   "products.form.basicDetailsTitle": "Basic details",
-  "products.form.basicDetailsText": "What shoppers see first: the name, photo, price and a short description.",
+  // One panel holds every image: the main photo used to sit in Basic details, two fields
+  // above a separate More photos panel, so a product's pictures were in two places with
+  // the best-seller switch between them.
+  "products.form.photosTitle": "Photos",
+  "products.form.photosText": "The main photo shoppers see in the list, and any extras they can flip through.",
+  "products.form.basicDetailsText": "What the product is and what it costs. Photos come next.",
   "products.form.nameLabel": "Name",
   "products.form.descriptionLabel": "Description",
   "products.form.priceLabel": "Price (USD)",

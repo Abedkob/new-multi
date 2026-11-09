@@ -16,11 +16,13 @@
  * `rounded-xl`, `overflow-hidden`, its own spacing variable, `font-heading` on the title — a
  * token scoped to a *store's* theme). That stays for /platform and /login.
  */
+import type { LucideIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 export function SectionCard({
   title,
   description,
+  icon: Icon,
   actions,
   footer,
   className,
@@ -33,6 +35,13 @@ export function SectionCard({
 }: Omit<React.ComponentProps<"section">, "title"> & {
   title?: React.ReactNode;
   description?: React.ReactNode;
+  /**
+   * A mark beside the title, in a muted chip. Only earns its place on a long multi-section form
+   * — the product form is the one that has it — where the icons are what let someone find
+   * "photos" again after scrolling. A panel that is one of two on a screen does not need one,
+   * and a screen where only some panels have icons looks broken.
+   */
+  icon?: LucideIcon;
   /** Controls for this panel, on the same line as its title. */
   actions?: React.ReactNode;
   /** A muted strip under the body — totals, a save row, a caveat. */
@@ -52,11 +61,18 @@ export function SectionCard({
             hasBody && "pb-0",
           )}
         >
-          <div className="grid min-w-0 gap-1">
-            {title && <h2 className="text-lg font-medium leading-snug">{title}</h2>}
-            {description && (
-              <p className="max-w-prose text-sm text-muted-foreground">{description}</p>
+          <div className="flex min-w-0 gap-3">
+            {Icon && (
+              <span className="grid size-9 shrink-0 place-items-center rounded-lg bg-muted text-muted-foreground">
+                <Icon className="size-4" aria-hidden />
+              </span>
             )}
+            <div className="grid min-w-0 gap-1">
+              {title && <h2 className="text-lg font-medium leading-snug">{title}</h2>}
+              {description && (
+                <p className="max-w-prose text-sm text-muted-foreground">{description}</p>
+              )}
+            </div>
           </div>
           {actions && <div className="flex flex-wrap items-center gap-2">{actions}</div>}
         </div>

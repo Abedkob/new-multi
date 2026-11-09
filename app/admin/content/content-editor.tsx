@@ -315,6 +315,11 @@ export function ContentEditor({
             <span className="text-xs text-muted-foreground">{t("content.editor.templateColorsNote")}</span>
           </div>
           <div className="flex min-h-0 flex-1 justify-center overflow-auto p-4">
+            {/*
+              admin-ui-allow-radius: this is a device frame around the storefront preview, not a
+              panel. The rounding draws the phone or tablet the owner picked above it, so it
+              follows the device rather than the admin's own radius.
+            */}
             <div
               className="h-full overflow-hidden rounded-xl border bg-background shadow-sm transition-[width] duration-300"
               style={{ width, maxWidth: "100%" }}
