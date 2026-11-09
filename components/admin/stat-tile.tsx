@@ -40,7 +40,9 @@ export function StatTile({
   const direction = delta ? Math.sign(delta.absolute) : 0;
 
   return (
-    <div className="grid gap-1 rounded-lg border p-4">
+    // `bg-card`, because the page shell is `bg-muted/40` and a panel with no surface of its own
+    // shows the grey through it (ADMIN_UI.md §3).
+    <div className="grid gap-1 rounded-lg border bg-card p-4">
       <span className="text-sm text-muted-foreground">{label}</span>
       <span className="text-2xl font-semibold tabular-nums">
         {unmeasured ? <span title={t("reports.unmeasured")}>—</span> : value}

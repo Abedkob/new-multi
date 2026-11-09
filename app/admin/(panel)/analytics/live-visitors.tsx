@@ -15,7 +15,7 @@ import { useT } from "@/lib/i18n/context";
 export function LiveVisitors({ presence }: { presence: { available: true; count: number } | { available: false } }) {
   const t = useT();
   return (
-    <div className="grid gap-1 rounded-lg border p-4" data-testid="live-visitors">
+    <div className="grid gap-1 rounded-lg border bg-card p-4" data-testid="live-visitors">
       <span className="text-sm text-muted-foreground">{t("reports.live.label")}</span>
       {presence.available ? (
         <span className="text-2xl font-semibold tabular-nums">{presence.count}</span>

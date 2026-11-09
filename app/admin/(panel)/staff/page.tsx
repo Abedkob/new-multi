@@ -1,4 +1,5 @@
 import { PageHeader } from "@/components/admin/page-header";
+import { SectionCard } from "@/components/admin/section-card";
 import { listStaffAccounts } from "@/lib/data/staff";
 import { getT } from "@/lib/i18n/locale";
 import { requireCapability } from "@/lib/permissions";
@@ -20,11 +21,12 @@ export default async function StaffPage() {
     <div className="grid gap-4">
       <PageHeader title={t("nav.staff")} description={t("staff.page.description")} />
 
-      <section className="grid gap-2 rounded-md border p-4 text-sm" data-testid="staff-scope">
-        <h2 className="font-medium">{t("staff.what.title")}</h2>
-        <p className="text-muted-foreground">{t("staff.what.can")}</p>
-        <p className="text-muted-foreground">{t("staff.what.cannot")}</p>
-      </section>
+      <SectionCard title={t("staff.what.title")} data-testid="staff-scope">
+        <div className="grid gap-2 text-sm text-muted-foreground">
+          <p>{t("staff.what.can")}</p>
+          <p>{t("staff.what.cannot")}</p>
+        </div>
+      </SectionCard>
 
       <StaffManager
         staff={staff.map((member) => ({

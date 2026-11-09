@@ -6,6 +6,7 @@ import { Minus, Plus, Trash2 } from "lucide-react";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Segmented } from "@/components/segmented";
+import { SectionHeading } from "@/components/admin/section-card";
 import { useT } from "@/lib/i18n/context";
 import { formatPrice } from "@/lib/format";
 import { maxManualDiscountCents } from "@/lib/counter-sales";
@@ -211,7 +212,7 @@ export function Till({ role }: { role: AdminRole }) {
 
   if (recorded) {
     return (
-      <div data-testid="till-recorded" className="grid max-w-md gap-4 rounded-lg border p-6">
+      <div data-testid="till-recorded" className="grid max-w-md gap-4 rounded-lg border bg-card p-6">
         <p className="text-lg font-medium">{t("counter.new.recorded")}</p>
         {/* The server's figure, not the cart's: what was charged is what it recorded. */}
         <p className="text-3xl font-semibold tabular-nums">{formatPrice(recorded.totalCents)}</p>
@@ -232,26 +233,27 @@ export function Till({ role }: { role: AdminRole }) {
     <div className="grid gap-6 md:grid-cols-2">
       {/* ---- find it ---- */}
       <section className="grid content-start gap-3">
-        <label className="grid gap-1.5 text-sm font-medium" htmlFor="till-search">
+        <SectionHeading title={t("counter.new.searchLabel")} />
+        <label className="sr-only" htmlFor="till-search">
           {t("counter.new.searchLabel")}
-          <Input
-            id="till-search"
-            ref={searchBox}
-            value={search}
-            autoFocus
-            autoComplete="off"
-            placeholder={t("counter.new.searchPlaceholder")}
-            onChange={(e) => setSearch(e.target.value)}
-            onKeyDown={(e) => {
-              // A barcode scanner is out of scope, but a cashier who typed a name and sees one
-              // row expects Enter to take it. Nothing else on this screen uses Enter.
-              if (e.key !== "Enter") return;
-              e.preventDefault();
-              const first = visible?.find((item) => item.stock > 0);
-              if (first) addItem(first);
-            }}
-          />
         </label>
+        <Input
+          id="till-search"
+          ref={searchBox}
+          value={search}
+          autoFocus
+          autoComplete="off"
+          placeholder={t("counter.new.searchPlaceholder")}
+          onChange={(e) => setSearch(e.target.value)}
+          onKeyDown={(e) => {
+            // A barcode scanner is out of scope, but a cashier who typed a name and sees one
+            // row expects Enter to take it. Nothing else on this screen uses Enter.
+            if (e.key !== "Enter") return;
+            e.preventDefault();
+            const first = visible?.find((item) => item.stock > 0);
+            if (first) addItem(first);
+          }}
+        />
 
         {searching && <p className="text-sm text-muted-foreground">{t("counter.new.searching")}</p>}
         {!search.trim() && (
@@ -266,7 +268,7 @@ export function Till({ role }: { role: AdminRole }) {
             <li
               key={item.variantId}
               data-testid="till-result"
-              className="flex items-center justify-between gap-3 rounded-lg border p-3"
+              className="flex items-center justify-between gap-3 rounded-md border bg-background p-3"
             >
               <div className="min-w-0">
                 <p className="truncate text-sm font-medium">
@@ -300,14 +302,18 @@ export function Till({ role }: { role: AdminRole }) {
 
       {/* ---- sell it ---- */}
       <section className="grid content-start gap-3 md:sticky md:top-4">
-        <h2 className="text-sm font-medium">
-          {t("counter.new.cart")}
-          {lines.length > 0 && (
-            <span className="ms-1 font-normal text-muted-foreground tabular-nums">
-              ({lines.length})
-            </span>
-          )}
-        </h2>
+        <SectionHeading
+          title={
+            <>
+              {t("counter.new.cart")}
+              {lines.length > 0 && (
+                <span className="ms-1 font-normal text-muted-foreground tabular-nums">
+                  ({lines.length})
+                </span>
+              )}
+            </>
+          }
+        />
         {lines.length === 0 && (
           <p className="text-sm text-muted-foreground">{t("counter.new.cartEmpty")}</p>
         )}
@@ -317,7 +323,7 @@ export function Till({ role }: { role: AdminRole }) {
             <li
               key={line.variantId}
               data-testid="till-line"
-              className="grid gap-2 rounded-lg border p-3"
+              className="grid gap-2 rounded-md border bg-background p-3"
             >
               <div className="flex items-start justify-between gap-2">
                 <p className="min-w-0 truncate text-sm font-medium">

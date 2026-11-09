@@ -1,8 +1,13 @@
 import Link from "next/link";
+import { Receipt } from "lucide-react";
 import { notFound } from "next/navigation";
 import { AdminPageSizeControl } from "@/components/admin-page-size-control";
 import { AdminPagination } from "@/components/admin-pagination";
 import { PageHeader } from "@/components/admin/page-header";
+import { EmptyState } from "@/components/admin/empty-state";
+import { SectionCard } from "@/components/admin/section-card";
+import { StatTile } from "@/components/admin/stat-tile";
+import { StatusFilter, type StatusFilterTab } from "@/components/admin/status-filter";
 import { Badge } from "@/components/ui/badge";
 import { buttonVariants } from "@/components/ui/button";
 import {
@@ -71,8 +76,8 @@ export default async function CounterSalesPage({
   const countOf = (value: CounterSaleStatusValue) =>
     counts.find((row) => row.status === value)?._count._all ?? 0;
   const all = COUNTER_SALE_STATUSES.reduce((n, s) => n + countOf(s), 0);
-  const tabs = [
-    { key: "ALL" as const, label: t("counter.status.all"), count: all, href: "/admin/counter" },
+  const tabs: StatusFilterTab[] = [
+    { key: "ALL", label: t("counter.status.all"), count: all, href: "/admin/counter" },
     ...COUNTER_SALE_STATUSES.map((s) => ({
       key: s,
       label: t(`counter.status.${s}` as const),
@@ -97,48 +102,47 @@ export default async function CounterSalesPage({
       />
 
       {!canSell && (
-        <div className="grid gap-1 rounded-lg border border-dashed p-4">
-          <p className="text-sm font-medium">{t("counter.disabled.title")}</p>
-          <p className="max-w-2xl text-sm text-muted-foreground">{t("counter.disabled.body")}</p>
-        </div>
+        <SectionCard
+          className="border-dashed"
+          title={t("counter.disabled.title")}
+          description={t("counter.disabled.body")}
+        />
       )}
 
-      <section className="grid gap-3 rounded-lg border p-4 sm:grid-cols-3 lg:grid-cols-5">
-        <Figure label={t("counter.takings.total")} value={formatPrice(takings.totalCents)} large />
-        <Figure label={t("counter.takings.cash")} value={formatPrice(takings.cashCents)} />
-        <Figure label={t("counter.takings.card")} value={formatPrice(takings.cardCents)} />
-        <Figure label={t("counter.takings.sales")} value={String(takings.saleCount)} />
-        <Figure
+      <div className="grid gap-3 sm:grid-cols-3 lg:grid-cols-5">
+        <StatTile label={t("counter.takings.total")} value={formatPrice(takings.totalCents)} />
+        <StatTile label={t("counter.takings.cash")} value={formatPrice(takings.cashCents)} />
+        <StatTile label={t("counter.takings.card")} value={formatPrice(takings.cardCents)} />
+        <StatTile label={t("counter.takings.sales")} value={String(takings.saleCount)} />
+        <StatTile
           label={t("counter.takings.discounts")}
           value={formatPrice(takings.manualDiscountCents)}
         />
-      </section>
+      </div>
 
-      <nav
-        aria-label={t("counter.page.filterAriaLabel")}
-        className="-mx-1 flex gap-1 overflow-x-auto px-1 pb-1"
-      >
-        {tabs.map((tab) => (
-          <Link
-            key={tab.key}
-            href={tab.href}
-            aria-current={tab.key === current ? "page" : undefined}
-            className={`shrink-0 rounded-full border px-3 py-1 text-sm ${
-              tab.key === current ? "bg-foreground text-background" : "text-muted-foreground"
-            }`}
-          >
-            {tab.label} ({tab.count})
-          </Link>
-        ))}
-      </nav>
+      <StatusFilter
+        tabs={tabs}
+        current={current}
+        ariaLabel={t("counter.page.filterAriaLabel")}
+      />
 
       {sales.length === 0 ? (
-        <p className="rounded-lg border border-dashed p-6 text-sm text-muted-foreground">
-          {t("counter.page.empty")}
-        </p>
+        <SectionCard bodyClassName="p-0">
+          <EmptyState
+            icon={Receipt}
+            title={t("counter.page.empty")}
+            action={
+              canSell ? (
+                <Link href="/admin/counter/new" className={buttonVariants()}>
+                  {t("counter.page.newSale")}
+                </Link>
+              ) : undefined
+            }
+          />
+        </SectionCard>
       ) : (
         <>
-          <div className="rounded-lg border">
+          <SectionCard bodyClassName="p-0">
             <Table>
               <TableHeader>
                 <TableRow>
@@ -188,7 +192,7 @@ export default async function CounterSalesPage({
                 })}
               </TableBody>
             </Table>
-          </div>
+          </SectionCard>
 
           <div className="flex flex-wrap items-center justify-between gap-3">
             <AdminPageSizeControl
@@ -212,13 +216,3 @@ export default async function CounterSalesPage({
   );
 }
 
-function Figure({ label, value, large }: { label: string; value: string; large?: boolean }) {
-  return (
-    <div className="grid gap-1">
-      <span className="text-xs text-muted-foreground">{label}</span>
-      <span className={`tabular-nums ${large ? "text-2xl font-semibold" : "text-lg"}`}>
-        {value}
-      </span>
-    </div>
-  );
-}

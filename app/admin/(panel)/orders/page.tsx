@@ -5,7 +5,8 @@ import { AdminPagination } from "@/components/admin-pagination";
 import { EmptyState } from "@/components/admin/empty-state";
 import { PageHeader } from "@/components/admin/page-header";
 import { buttonVariants } from "@/components/ui/button";
-import { Card } from "@/components/ui/card";
+import { SectionCard } from "@/components/admin/section-card";
+import { StatusFilter, type StatusFilterTab } from "@/components/admin/status-filter";
 import {
   Table,
   TableBody,
@@ -66,7 +67,7 @@ export default async function OrdersPage({ searchParams }: PageProps<"/admin/ord
     requestedPageSize,
   );
   const all = ORDER_STATUSES.reduce((n, s) => n + (counts[s] ?? 0), 0);
-  const tabs: { key: OrderStatusValue | "ALL"; label: string; count: number; href: string }[] = [
+  const tabs: (StatusFilterTab & { key: OrderStatusValue | "ALL" })[] = [
     {
       key: "ALL",
       label: t("orders.status.all"),
@@ -77,6 +78,7 @@ export default async function OrdersPage({ searchParams }: PageProps<"/admin/ord
       key: s,
       label: t(STATUS_LABEL_KEYS[s]),
       count: counts[s] ?? 0,
+      dotClassName: STATUS_DOT[s],
       href: `/admin/orders?${new URLSearchParams({
         status: s,
         ...(pageSize === 25 ? {} : { perPage: String(pageSize) }),
@@ -92,29 +94,15 @@ export default async function OrdersPage({ searchParams }: PageProps<"/admin/ord
         description={t("orders.page.description")}
       />
 
-      <nav aria-label={t("orders.page.filterAriaLabel")} className="-mx-1 flex gap-1 overflow-x-auto px-1 pb-1">
-        {tabs.map((tab) => (
-          <Link
-            key={tab.key}
-            href={tab.href}
-            aria-current={tab.key === current ? "page" : undefined}
-            className={cn(
-              "inline-flex shrink-0 items-center gap-2 rounded-full border px-3 py-1.5 text-sm transition-colors",
-              tab.key === current
-                ? "border-primary bg-primary text-primary-foreground"
-                : "bg-background text-muted-foreground hover:text-foreground",
-            )}
-          >
-            {tab.key !== "ALL" && <span className={cn("size-2 rounded-full", STATUS_DOT[tab.key])} aria-hidden />}
-            {tab.label}
-            <span className="tabular-nums opacity-70">{tab.count}</span>
-          </Link>
-        ))}
-      </nav>
+      <StatusFilter
+        tabs={tabs}
+        current={current}
+        ariaLabel={t("orders.page.filterAriaLabel")}
+      />
 
       <AdminPageSizeControl page={page} pageSize={pageSize} total={total} noun={t("orders.page.noun")} />
 
-      <Card className="gap-0 overflow-hidden py-0">
+      <SectionCard bodyClassName="p-0">
         {orders.length === 0 ? (
           <EmptyState
             icon={ShoppingBag}
@@ -188,7 +176,7 @@ export default async function OrdersPage({ searchParams }: PageProps<"/admin/ord
             </TableBody>
           </Table>
         )}
-      </Card>
+      </SectionCard>
       <AdminPagination
         basePath="/admin/orders"
         page={page}

@@ -2,7 +2,7 @@ import { notFound } from "next/navigation";
 import { PeriodPicker } from "@/components/admin/period-picker";
 import { InsightList } from "@/components/admin/analytics/insight-list";
 import { SeriesTable } from "@/components/admin/analytics/series-table";
-import { StatTile } from "@/components/admin/analytics/stat-tile";
+import { StatTile } from "@/components/admin/stat-tile";
 import { lastNLocalDays } from "@/lib/analytics/compare";
 import { buildInsights } from "@/lib/analytics/insights";
 import { rangeFromPeriod } from "@/lib/analytics/range";

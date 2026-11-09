@@ -1,6 +1,8 @@
 import { notFound } from "next/navigation";
 import { PageHeader } from "@/components/admin/page-header";
 import { Badge } from "@/components/ui/badge";
+import { Detail, DetailList } from "@/components/admin/detail-list";
+import { SectionCard } from "@/components/admin/section-card";
 import { formatPrice } from "@/lib/format";
 import { getT } from "@/lib/i18n/locale";
 import { can, requireCapability } from "@/lib/permissions";
@@ -65,14 +67,16 @@ export default async function CounterSalePage({ params }: PageProps<"/admin/coun
           )}
         </header>
 
-        <dl className="grid gap-3 rounded-lg border p-4 sm:grid-cols-3 print:hidden">
-          <Pair label={t("counter.sale.when")} value={sale.createdAt.toLocaleString()} />
-          <Pair label={t("counter.sale.soldBy")} value={sale.soldByNameSnapshot} />
-          <Pair
-            label={t("counter.sale.paidBy")}
-            value={t(`counter.payment.${sale.payment}` as const)}
-          />
-        </dl>
+        <SectionCard className="print:hidden">
+          <DetailList>
+            <Detail label={t("counter.sale.when")} value={sale.createdAt.toLocaleString()} />
+            <Detail label={t("counter.sale.soldBy")} value={sale.soldByNameSnapshot} />
+            <Detail
+              label={t("counter.sale.paidBy")}
+              value={t(`counter.payment.${sale.payment}` as const)}
+            />
+          </DetailList>
+        </SectionCard>
 
         <ul className="grid gap-2 print:gap-1">
           {sale.items.map((item) => {
@@ -81,7 +85,7 @@ export default async function CounterSalePage({ params }: PageProps<"/admin/coun
             return (
               <li
                 key={item.id}
-                className="grid gap-1 rounded-lg border p-3 print:rounded-none print:border-0 print:p-0"
+                className="grid gap-1 rounded-md border bg-background p-3 print:rounded-none print:border-0 print:bg-transparent print:p-0"
               >
                 <div className="flex items-start justify-between gap-3">
                   <p className="min-w-0 text-sm font-medium">
@@ -132,7 +136,7 @@ export default async function CounterSalePage({ params }: PageProps<"/admin/coun
       </section>
 
       {sale.status === "VOIDED" ? (
-        <div data-print-hide className="grid gap-1 rounded-lg border border-dashed p-4 text-sm">
+        <div data-print-hide className="grid gap-1 rounded-lg border border-dashed bg-card p-4 text-sm">
           <p className="font-medium">
             {t("counter.sale.voidedOn")} {sale.voidedAt?.toLocaleString()}
           </p>
@@ -159,11 +163,3 @@ export default async function CounterSalePage({ params }: PageProps<"/admin/coun
   );
 }
 
-function Pair({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="grid gap-0.5">
-      <dt className="text-xs text-muted-foreground">{label}</dt>
-      <dd className="text-sm">{value}</dd>
-    </div>
-  );
-}

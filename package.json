@@ -65,6 +65,7 @@
     "build:job": "node scripts/build-job.mjs",
     "verify:container-commands": "tsx scripts/verify-container-commands.ts",
     "verify:rollout": "tsx scripts/verify-rollout.ts",
+    "verify:admin-ui": "tsx scripts/verify-admin-ui.ts",
     "verify:counter": "tsx scripts/verify-counter-sales.ts",
     "measure:counter": "tsx scripts/measure-counter.ts",
     "e2e:counter": "tsx scripts/e2e/counter.ts"
