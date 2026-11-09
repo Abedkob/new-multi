@@ -195,7 +195,69 @@ title. The dashboard's tiles came down a step for this.
 Money from two channels is **never summed into one figure** — online and in-store are separate
 tiles. `verify:aggregates`' P4-22b fails if anything adds them.
 
-## 8. Arabic, RTL, and the phone
+## 8. The journey: how the sidebar is grouped
+
+Thirteen destinations in one flat column is not a menu, it is a list — and the order had drifted
+into none at all. Delivery sat fourth, between the till and the catalogue; Social links sat
+ninth. Both are `settings:write`, and there was no Settings anywhere, so the two screens that set
+the store's own word to shoppers were top-level siblings of Orders. Categories sat below
+Discounts, splitting the catalogue in half around pricing. Home and Analytics — the same
+capability, `analytics:read` — were at positions 1 and 11.
+
+`components/admin/admin-nav.tsx` now groups them by **what the person is doing**, which is the
+only ordering that survives someone adding a fourteenth screen:
+
+| Group | What it holds | Why |
+|---|---|---|
+| **Daily** | Home, Orders, Till | What the panel is opened to do. The dashboard is a report screen too, but it is also where the day starts |
+| **Catalogue** | Products, Categories, Discounts | Categories is the other half of Products, so pricing follows both instead of splitting them |
+| **Storefront** | Store content, Delivery, Social links | Everything a shopper reads as the store's own word |
+| **Insight** | Analytics, Marketing | The screens that only report |
+| **Your account** | Notifications, Staff, Change password | Drawn in the footer with the e-mail, the language switch and Log out — the things about the *person*, which used to be at positions 12, 13 and the footer |
+
+- **A group with nothing in it is not drawn.** That is what makes a staff member's sidebar read
+  as a short job description rather than as a stripped-down owner's: they see Daily and
+  Catalogue, each labelled, not four links with no shape.
+- **The capability still decides the link**, exactly as before (D72). A group is presentation; it
+  grants nothing, and `verify:staff` still asserts the sidebar offers exactly what the role may
+  open.
+- **The phone gets one Menu button, not a strip.** All thirteen destinations used to be a
+  horizontally scrolling row, which put most of the product off-screen with nothing saying so —
+  and no amount of reordering fixes a strip whose end you cannot see. The disclosure shows the
+  whole structure at once. The pending-order count stays in the header with the menu shut,
+  because that is the one thing the strip said at a glance.
+- **"Open" is derived from the path, not closed by an effect.** The menu stores the path it was
+  opened at and compares during render, so a navigation closes it with no second render — and
+  the back button, which changes the path without going through a link, closes it too.
+
+## 9. Colour
+
+The palette was `oklch(L 0 0)` on **every** token, chroma exactly zero, `--chart-1` to
+`--chart-5` included. The admin was achromatic by construction, and `--primary` was near-black,
+so the active nav item and a primary button were the same black. The only chroma on a screen was
+the amber pending badge and the destructive tint — which is why six quiet `bg-destructive/10`
+Delete buttons read as the loudest thing on the products list. They were never a solid red; in a
+greyscale UI the only colour wins whatever its strength.
+
+- **One accent, hue 265 (indigo).** `--primary`, `--ring` and the two `--sidebar-*` equivalents,
+  in `:root` and `.dark`. It carries the active nav item, primary buttons and focus rings.
+- **White text in both modes**, which is the opposite of what dark mode used to do (a near-white
+  primary with dark text). Light is `oklch(0.52 0.17 265)` and dark `oklch(0.55 0.17 265)` —
+  **measured**, not estimated: white-on-accent is 5.47:1 light and 4.82:1 dark. The dark value
+  started at `0.58` and gave 4.20:1, under the 4.5 line, which arithmetic on paper had said was
+  fine.
+- **The neutrals carry a whisper of the same hue** (chroma 0.003–0.005) so the accent reads as
+  part of the palette rather than bolted onto grey.
+- **`--destructive` is unchanged**, and so is the `destructive` button variant. It was already
+  the quiet treatment: a 10% tint with coloured text. Once an accent exists it stops being the
+  only colour, and the ranking fixes itself.
+- **This cannot reach a storefront.** `ThemeScope` (`components/theme-scope.tsx`) sets
+  `--primary`, `--ring`, `--background`, `--border` and the rest **inline** on a wrapper div, and
+  `app/store/[slug]/layout.tsx` wraps every store route in it — so a store's own colours shadow
+  `:root` inside that subtree, and both previews with it. `:root` is effectively the tool's
+  palette: the admin, the platform console and the login page.
+
+## 10. Arabic, RTL, and the phone
 
 - Logical properties only: `ms-*`/`me-*`, `ps-*`/`pe-*`, `start-*`/`end-*`. Never `ml-*`, `pr-*`,
   `left-*`. A directional icon gets `rtl:rotate-180` (`PageHeader`'s back arrow is the example).
@@ -210,7 +272,7 @@ tiles. `verify:aggregates`' P4-22b fails if anything adds them.
 - Every screen is usable at phone width with no horizontal page scroll. A two-column screen is
   one column below `md`, and the column a person acts in comes first.
 
-## 9. What enforces this
+## 11. What enforces this
 
 `pnpm verify:admin-ui` — static, no server, no database. Four rules, each one a thing that
 actually happened here rather than a preference:

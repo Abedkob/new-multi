@@ -3,6 +3,16 @@
 export const en = {
   // Nav shell (components/admin/admin-nav.tsx)
   "nav.ariaLabel": "Store admin",
+  // The sidebar's four groups. They name what the person is DOING, not what the data is
+  // called, which is why "Storefront" covers content, delivery and social links alike: all
+  // three are things a shopper ends up seeing.
+  "nav.group.daily": "Daily",
+  "nav.group.catalogue": "Catalogue",
+  "nav.group.storefront": "Storefront",
+  "nav.group.insight": "Insight",
+  "nav.group.account": "Your account",
+  "nav.menu": "Menu",
+  "nav.closeMenu": "Close menu",
   "nav.home": "Home",
   "nav.orders": "Orders",
   "nav.counter": "Till",

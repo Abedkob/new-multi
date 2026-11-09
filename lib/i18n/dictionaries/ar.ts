@@ -5,6 +5,13 @@ import type { DictionaryKey } from "./en";
 export const ar: Record<DictionaryKey, string> = {
   // Nav shell (components/admin/admin-nav.tsx)
   "nav.ariaLabel": "لوحة تحكم المتجر",
+  "nav.group.daily": "العمل اليومي",
+  "nav.group.catalogue": "الكتالوج",
+  "nav.group.storefront": "واجهة المتجر",
+  "nav.group.insight": "التقارير",
+  "nav.group.account": "حسابك",
+  "nav.menu": "القائمة",
+  "nav.closeMenu": "إغلاق القائمة",
   "nav.home": "الرئيسية",
   "nav.orders": "الطلبات",
   "nav.counter": "الصندوق",
