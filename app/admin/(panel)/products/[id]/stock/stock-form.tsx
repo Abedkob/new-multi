@@ -45,7 +45,7 @@ function StockField({ row, saveLabel }: { row: StockRow; saveLabel: string }) {
   }
 
   return (
-    <div className="flex flex-wrap items-end gap-3 rounded-md border p-3">
+    <div className="flex flex-wrap items-end gap-3 rounded-md border bg-background p-3">
       <div className="grid gap-1">
         <Label htmlFor={`stock-${row.id}`} className="text-xs">
           {row.label}

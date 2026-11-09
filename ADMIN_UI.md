@@ -199,9 +199,13 @@ The check asserts that list does not **grow**, and that every entry still earns 
 entry that is already clean *fails*, so the list cannot rot into a permanent exemption. It shrinks
 as screens are converted, and the fix for a new violation is never to add a line to it.
 
-**Still to convert** (16 files, in the script's `PENDING`): the dashboard, products, categories,
-discounts and coupons, the order detail, delivery, social links, marketing integrations,
-change-password, and the staff manager. One fold is tracked here rather than by the checker, since
+**Converted so far:** the till's three screens, the orders list, the staff page, the dashboard,
+the products list and the stock screen.
+
+**Still to convert** (13 files, in the script's `PENDING`): categories, discounts and coupons, the
+order detail, delivery, social links, marketing integrations, change-password, and the staff
+manager — most of them forms, which is where `Field` being used twice in 84 files actually costs
+something. One fold is tracked here rather than by the checker, since
 it needs a server-run suite to confirm: `analytics/live-visitors.tsx` is a fifth copy of `StatTile`
 with one extra state (the live source being unreachable), and folding it in means giving `StatTile`
 that state and re-running `verify:report-states`.

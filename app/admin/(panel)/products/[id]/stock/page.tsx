@@ -1,5 +1,6 @@
 import { notFound } from "next/navigation";
 import { PageHeader } from "@/components/admin/page-header";
+import { SectionCard } from "@/components/admin/section-card";
 import { getProduct } from "@/lib/data/products";
 import { getT } from "@/lib/i18n/locale";
 import { requireCapability } from "@/lib/permissions";
@@ -36,8 +37,9 @@ export default async function ProductStockPage({ params }: PageProps<"/admin/pro
         back={{ href: "/admin/products", label: t("nav.products") }}
         description={t("products.stock.description")}
       />
-      <p className="text-sm font-medium">{product.name}</p>
-      <StockForm rows={rows} />
+      <SectionCard title={product.name}>
+        <StockForm rows={rows} />
+      </SectionCard>
     </div>
   );
 }

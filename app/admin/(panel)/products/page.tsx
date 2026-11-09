@@ -7,7 +7,8 @@ import { PageHeader } from "@/components/admin/page-header";
 import { StockBadge } from "@/components/admin/stock-badge";
 import { Thumb } from "@/components/admin/thumb";
 import { buttonVariants } from "@/components/ui/button";
-import { Card } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { SectionCard } from "@/components/admin/section-card";
 import {
   Table,
   TableBody,
@@ -64,20 +65,20 @@ export default async function ProductsPage({ searchParams }: PageProps<"/admin/p
         <form method="get" className="relative max-w-sm" role="search">
           {pageSize !== 25 && <input type="hidden" name="perPage" value={pageSize} />}
           <Search className="pointer-events-none absolute top-1/2 start-3 size-4 -translate-y-1/2 text-muted-foreground" aria-hidden />
-          <input
+          <Input
             type="search"
             name="q"
             defaultValue={q}
             placeholder={t("products.page.searchPlaceholder")}
             aria-label={t("products.page.searchAriaLabel")}
-            className="h-9 w-full rounded-lg border border-input bg-background pe-3 ps-9 text-sm shadow-xs outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50"
+            className="ps-9"
           />
         </form>
       )}
 
       <AdminPageSizeControl page={page} pageSize={pageSize} total={total} noun={t("products.page.noun")} />
 
-      <Card className="gap-0 overflow-hidden py-0">
+      <SectionCard bodyClassName="p-0">
         {products.length === 0 ? (
           q ? (
             <EmptyState icon={Search} title={`${t("products.page.noMatchPrefix")} "${q}"`}>
@@ -199,7 +200,7 @@ export default async function ProductsPage({ searchParams }: PageProps<"/admin/p
             </TableBody>
           </Table>
         )}
-      </Card>
+      </SectionCard>
       <AdminPagination
         basePath="/admin/products"
         page={page}

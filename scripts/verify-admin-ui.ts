@@ -39,7 +39,6 @@ function fail(name: string, detail: string) {
 
 /** Files still carrying pre-baseline markup. Shrinks; never grows. */
 const PENDING = new Set<string>([
-  "(panel)/page.tsx",
   "(panel)/categories/page.tsx",
   "(panel)/delivery/delivery-settings-form.tsx",
   "(panel)/discounts/page.tsx",
@@ -50,8 +49,6 @@ const PENDING = new Set<string>([
   "(panel)/discounts/coupons/coupon-form.tsx",
   "(panel)/marketing/integrations/integrations-form.tsx",
   "(panel)/orders/[id]/page.tsx",
-  "(panel)/products/page.tsx",
-  "(panel)/products/[id]/stock/stock-form.tsx",
   "(panel)/social-links/social-links-form.tsx",
   "(panel)/staff/staff-manager.tsx",
   "change-password/page.tsx",
