@@ -2,7 +2,12 @@
  * The admin panel's UI baseline, checked statically. ADMIN_UI.md is the prose; this is the part a
  * machine can hold down. No server, no database, no browser.
  *
- * Five rules, each one a thing that actually happened in this codebase rather than a style
+ * **Two scopes**, because there are two tools: the merchant panel (`app/admin`) and the platform
+ * console (`app/platform`). They share every primitive and every rule below, and they each keep
+ * their own pending list — the panel's is empty and must stay that way, so a console backlog
+ * cannot be parked in it and quietly weaken the stronger promise.
+ *
+ * Six rules, each one a thing that actually happened in this codebase rather than a style
  * preference:
  *
  *   1. **`components/ui/card` is not imported under `app/admin`.** It is a different object from
@@ -18,6 +23,10 @@
  *      what shape it is.
  *   5. **No physical-direction classes.** `ml-`, `pr-`, `left-` break Arabic. Logical properties
  *      only.
+ *   6. **The console is monochrome** (console scope only). `.console-neutral` takes the chroma
+ *      out of every token for `/platform`, which a hardcoded `text-amber-700` walks straight
+ *      past — four of them did. `--destructive` is exempt: it is the one hue the console keeps,
+ *      so red means "irreversible" on a screen with no other colour.
  *
  * `PENDING` is the honest part: the screens not yet converted. The check asserts the list does not
  * **grow** and that every entry still earns its place — an entry that is already clean fails, so
@@ -51,7 +60,36 @@ function fail(name: string, detail: string) {
  */
 const PENDING = new Set<string>([]);
 
-const ADMIN = "app/admin";
+/**
+ * The console's pending list. Also empty: `/platform` was converted in one pass rather than
+ * parked here, so this exists to be the place a future console screen is NOT parked.
+ */
+const PENDING_CONSOLE = new Set<string>([]);
+
+type Scope = {
+  /** Directory walked, relative to the repo root. */
+  dir: string;
+  label: string;
+  pending: Set<string>;
+  /**
+   * Key prefix of the subtree `.console-neutral` covers, which rule 6 applies to. A prefix and
+   * not a boolean because the two are not the same tree: the theme editor lives at
+   * app/platform/stores/[slug]/theme, OUTSIDE the `(admin)` group and therefore outside the
+   * monochrome scope — deliberately, since its whole subject is a store's colours and a rule
+   * banning hue there would ban the feature. It is still held to rules 1-5.
+   */
+  monochrome?: string;
+};
+
+const SCOPES: Scope[] = [
+  { dir: "app/admin", label: "the merchant panel", pending: PENDING },
+  {
+    dir: "app/platform",
+    label: "the platform console",
+    pending: PENDING_CONSOLE,
+    monochrome: "(admin)/",
+  },
+];
 
 function walk(dir: string, out: string[] = []): string[] {
   for (const entry of readdirSync(dir)) {
@@ -62,13 +100,26 @@ function walk(dir: string, out: string[] = []): string[] {
   return out;
 }
 
-const files = walk(ADMIN).map((f) => ({
-  path: f,
-  key: relative(ADMIN, f).split("\\").join("/"),
-  source: readFileSync(f, "utf8"),
-}));
+type File = {
+  path: string;
+  key: string;
+  source: string;
+  scope: Scope;
+};
 
-console.log(`\nThe admin UI baseline (ADMIN_UI.md), over ${files.length} files under ${ADMIN}/\n`);
+const files: File[] = SCOPES.flatMap((scope) =>
+  walk(scope.dir).map((f) => ({
+    path: f,
+    key: relative(scope.dir, f).split("\\").join("/"),
+    source: readFileSync(f, "utf8"),
+    scope,
+  })),
+);
+
+console.log(
+  `\nThe admin UI baseline (ADMIN_UI.md), over ${files.length} files under ` +
+    `${SCOPES.map((s) => `${s.dir}/`).join(" and ")}\n`,
+);
 
 /** Strips comments and string-literal noise so a rule reads markup, not prose about markup. */
 const markup = (source: string) =>
@@ -79,12 +130,12 @@ const markup = (source: string) =>
 type Rule = {
   name: string;
   /** Returns the offending excerpts in a file, or an empty array. */
-  violations: (file: { key: string; source: string }) => string[];
+  violations: (file: { key: string; source: string; scope: Scope }) => string[];
 };
 
 const RULES: Rule[] = [
   {
-    name: "components/ui/card is not used in /admin (SectionCard is the panel)",
+    name: "components/ui/card is not used in either tool (SectionCard is the panel)",
     violations: ({ source }) => {
       const m = markup(source).match(/^.*from "@\/components\/ui\/card".*$/m);
       return m ? [m[0].trim()] : [];
@@ -161,6 +212,28 @@ const RULES: Rule[] = [
     },
   },
   {
+    // The platform console is monochrome (ADMIN_UI.md §12). `.console-neutral` neutralises the
+    // TOKENS, which is why `SectionCard`, `Button` and `SectionTabs` need no console branch —
+    // but a hardcoded palette class is not a token and sails past it. Four did: a DNS check in
+    // green and amber, a saved-settings line in emerald, an amber "needs setup" dot and an
+    // amber panel border, all of them still coloured on a console with no other colour.
+    //
+    // `--destructive` is deliberately not covered: it is a token (so it stays red by choice,
+    // not by accident) and red is the console's one hue, which is what makes the Danger zone
+    // and a failed DNS lookup legible at a glance.
+    name: "the console is monochrome (hue comes from --destructive or not at all)",
+    violations: ({ key, source, scope }) => {
+      if (scope.monochrome === undefined || !key.startsWith(scope.monochrome)) return [];
+      const found = new Set<string>();
+      for (const m of markup(source).matchAll(
+        /\b(?:bg|text|border|ring|from|via|to|decoration|outline|shadow|fill|stroke|accent|caret|divide|placeholder)-(red|orange|amber|yellow|lime|green|emerald|teal|cyan|sky|blue|indigo|violet|purple|fuchsia|pink|rose)-\d{2,3}\b/g,
+      )) {
+        found.add(m[0]);
+      }
+      return [...found];
+    },
+  },
+  {
     name: "no physical-direction classes (Arabic reads the other way)",
     violations: ({ source }) => {
       const found: string[] = [];
@@ -178,73 +251,102 @@ const RULES: Rule[] = [
 
 for (const rule of RULES) {
   const offenders = files
-    .map((f) => ({ key: f.key, hits: rule.violations(f) }))
+    .map((f) => ({ key: f.key, scope: f.scope, hits: rule.violations(f) }))
     .filter((r) => r.hits.length > 0);
 
-  const unexpected = offenders.filter((r) => !PENDING.has(r.key));
+  // A file's exemption comes from ITS OWN scope's list. Checking both would let a console file
+  // be excused by an entry in the panel's list, which is the one thing the split is for.
+  const unexpected = offenders.filter((r) => !r.scope.pending.has(r.key));
   if (unexpected.length === 0) {
     ok(`${rule.name}${offenders.length ? ` (${offenders.length} pending file(s))` : ""}`);
   } else {
     fail(
       rule.name,
       unexpected
-        .map((r) => `${r.key}\n          ${r.hits.slice(0, 3).join("\n          ")}`)
+        .map(
+          (r) =>
+            `${r.scope.dir}/${r.key}\n          ${r.hits.slice(0, 3).join("\n          ")}`,
+        )
         .join("\n        "),
     );
   }
 }
 
-// One h1 per document: a page under a section layout must not add a second one.
+// One h1 per document: a page under a section layout must not add a second one. Computed per
+// scope, since a layout only owns the heading for pages in its own tree — and the console's
+// store section (app/platform/(admin)/stores/[slug]/layout.tsx) is now one of these, so its
+// nine pages are held to the rule that Analytics and Marketing were already held to.
 {
-  const sectionDirs = files
-    .filter((f) => f.key.endsWith("layout.tsx") && f.source.includes("PageHeader"))
-    .map((f) => f.key.replace(/layout\.tsx$/, ""))
-    .filter((d) => d !== "(panel)/");
-  const offenders = files.filter(
-    (f) =>
-      f.key.endsWith("page.tsx") &&
-      sectionDirs.some((d) => f.key.startsWith(d)) &&
-      (/\<h1[\s>]/.test(f.source) || /PageHeader/.test(f.source)),
-  );
+  const offenders: File[] = [];
+  let sections = 0;
+  for (const scope of SCOPES) {
+    const mine = files.filter((f) => f.scope === scope);
+    const sectionDirs = mine
+      .filter((f) => f.key.endsWith("layout.tsx") && f.source.includes("PageHeader"))
+      .map((f) => f.key.replace(/layout\.tsx$/, ""))
+      // The scope's own root layout is not a section: every page is under it, and the page is
+      // where that heading belongs.
+      .filter((d) => d !== "(panel)/" && d !== "(admin)/" && d !== "");
+    sections += sectionDirs.length;
+    offenders.push(
+      ...mine.filter(
+        (f) =>
+          f.key.endsWith("page.tsx") &&
+          sectionDirs.some((d) => f.key.startsWith(d)) &&
+          (/\<h1[\s>]/.test(f.source) || /PageHeader/.test(f.source)),
+      ),
+    );
+  }
   if (offenders.length === 0) {
-    ok(`one h1 per page (${sectionDirs.length} section layout(s) own theirs)`);
+    ok(`one h1 per page (${sections} section layout(s) own theirs)`);
   } else {
     fail(
       "one h1 per page",
       `these sit under a section layout that already renders a PageHeader:\n        ` +
-        offenders.map((f) => f.key).join("\n        "),
+        offenders.map((f) => `${f.scope.dir}/${f.key}`).join("\n        "),
     );
   }
 }
 
 // The pending list must not rot: an entry that no longer violates anything has to come off it.
 {
-  const stillDirty = new Set(
-    files
-      .filter((f) => RULES.some((r) => r.violations(f).length > 0))
-      .map((f) => f.key),
-  );
-  const stale = [...PENDING].filter((key) => !stillDirty.has(key));
+  const stale: string[] = [];
+  let exempt = 0;
+  for (const scope of SCOPES) {
+    const stillDirty = new Set(
+      files
+        .filter((f) => f.scope === scope && RULES.some((r) => r.violations(f).length > 0))
+        .map((f) => f.key),
+    );
+    exempt += scope.pending.size;
+    stale.push(
+      ...[...scope.pending]
+        .filter((key) => !stillDirty.has(key))
+        .map((key) => `${scope.dir}/${key}`),
+    );
+  }
   if (stale.length === 0) {
     ok(
-      PENDING.size === 0
-        ? "nothing is exempt: PENDING is empty"
-        : `every one of the ${PENDING.size} pending files still needs converting`,
+      exempt === 0
+        ? "nothing is exempt: both pending lists are empty"
+        : `every one of the ${exempt} pending files still needs converting`,
     );
   } else {
     fail(
-      "the pending list has stale entries",
-      `these are clean now — remove them from PENDING:\n        ` + stale.join("\n        "),
+      "a pending list has stale entries",
+      `these are clean now — remove them from their scope's list:\n        ` +
+        stale.join("\n        "),
     );
   }
 }
 
+const left = PENDING.size + PENDING_CONSOLE.size;
 console.log(
   `\n${checks - failures}/${checks} baseline checks passed` +
     (failures
       ? ` — ${failures} FAILED\n`
-      : PENDING.size === 0
-        ? ", every admin screen on the baseline\n"
-        : `, ${PENDING.size} file(s) left to convert\n`),
+      : left === 0
+        ? ", every screen in the panel and the console on the baseline\n"
+        : `, ${left} file(s) left to convert\n`),
 );
 if (failures) process.exitCode = 1;

@@ -40,7 +40,9 @@ export function StoreNav({ items }: { items: StoreNavItem[] }) {
               >
                 <span className="flex-1">{item.label}</span>
                 {item.todo && (
-                  <span className="size-1.5 rounded-full bg-amber-500" aria-label="needs setup" />
+                  // Ink, not amber: on a monochrome nav a filled dot beside four bare labels is
+                  // already the thing your eye goes to.
+                  <span className="size-1.5 rounded-full bg-foreground" aria-label="needs setup" />
                 )}
                 {item.external && <span aria-hidden>↗</span>}
               </Link>

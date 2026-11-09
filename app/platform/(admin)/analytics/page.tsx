@@ -3,6 +3,7 @@ import { recordPlatformConsoleView } from "@/lib/analytics/audit";
 import { rangeFromPeriod, REPORT_PERIODS } from "@/lib/analytics/range";
 import { platformConsole, type StoreLine } from "@/lib/data/platform-analytics";
 import { formatPrice } from "@/lib/format";
+import { PageHeader } from "@/components/admin/page-header";
 import { requirePlatformAdmin } from "@/lib/session";
 
 /**
@@ -51,13 +52,10 @@ export default async function PlatformConsolePage({
 
   return (
     <div className="grid gap-8">
-      <header className="grid gap-2">
-        <h1 className="text-2xl font-semibold">Analytics across all stores</h1>
-        <p className="max-w-3xl text-sm text-muted-foreground">
-          Aggregate figures only. Visitor histories and raw events are not reachable from here,
-          for anyone. Every visit to this page is recorded in the analytics audit log with your
-          email address and the period you were looking at.
-        </p>
+      <PageHeader
+        title="Analytics across all stores"
+        description="Aggregate figures only. Visitor histories and raw events are not reachable from here, for anyone. Every visit to this page is recorded in the analytics audit log with your email address and the period you were looking at."
+      >
         <nav aria-label="Period" className="flex flex-wrap gap-1 pt-1">
           {REPORT_PERIODS.map((option) => (
             <Link
@@ -78,7 +76,7 @@ export default async function PlatformConsolePage({
           {range.from} to {range.to}, in {timeZone}. Compared with {report.comparedWith.from} to{" "}
           {report.comparedWith.to}.
         </p>
-      </header>
+      </PageHeader>
 
       <section className="grid gap-3">
         <h2 className="text-sm font-semibold">Totals</h2>
@@ -239,7 +237,10 @@ export default async function PlatformConsolePage({
 
 function Figure({ label, value, note }: { label: string; value: string; note?: string }) {
   return (
-    <div className="grid gap-1 rounded-lg border p-4">
+    // The panel treatment by hand, and `SectionCard` cannot be used here: these figures live
+    // inside a <dl>, where a <section> between the list and its <dt> would be invalid markup.
+    // Same classes as `StatTile`, which is a hand-rolled div for the same reason.
+    <div className="grid gap-1 rounded-lg border bg-card p-4">
       <dt className="text-sm text-muted-foreground">{label}</dt>
       <dd className="text-2xl font-semibold tabular-nums">{value}</dd>
       {note ? <dd className="text-xs text-muted-foreground">{note}</dd> : null}

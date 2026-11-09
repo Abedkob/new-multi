@@ -117,6 +117,45 @@
   --sidebar-ring: oklch(0.58 0.14 265);
 }
 
+/* The platform console is monochrome, and that is a decision rather than an omission.
+
+   `:root` above carries the merchant panel's indigo accent. The console is a different tool for
+   a different person: it configures stores it does not belong to, and every store it configures
+   has colours of its own. An accent here would be a fourth brand on screen beside whichever
+   store is being previewed in an iframe two panels away — so this scope takes the chroma out of
+   every token and leaves black, white and grey.
+
+   Scoped as a class on the console's own wrapper, not a media query or a second `:root`, for the
+   same reason `components/theme-scope.tsx` shadows these tokens inline: a subtree override is
+   the only mechanism that keeps one palette out of another's way in a single document. The
+   token NAMES are unchanged, which is the point — `SectionCard`, `Button` and `SectionTabs` are
+   the same components here as in /admin and need no console-specific branch.
+
+   `--primary` inverts between the schemes (near-black on white, near-white on black) because a
+   monochrome accent has nowhere else to go: it has to be the far end of the lightness axis to
+   read as emphasis at all. `--destructive` is deliberately NOT neutralised — see ADMIN_UI.md. */
+.console-neutral {
+  --primary: oklch(0.205 0 0);
+  --primary-foreground: oklch(0.985 0 0);
+  --secondary: oklch(0.97 0 0);
+  --muted: oklch(0.97 0 0);
+  --accent: oklch(0.97 0 0);
+  --border: oklch(0.922 0 0);
+  --input: oklch(0.922 0 0);
+  --ring: oklch(0.556 0 0);
+}
+
+.dark .console-neutral {
+  --primary: oklch(0.985 0 0);
+  --primary-foreground: oklch(0.205 0 0);
+  --secondary: oklch(0.269 0 0);
+  --muted: oklch(0.269 0 0);
+  --accent: oklch(0.269 0 0);
+  --border: oklch(1 0 0 / 10%);
+  --input: oklch(1 0 0 / 15%);
+  --ring: oklch(0.708 0 0);
+}
+
 @layer base {
   * {
     @apply border-border outline-ring/50;

@@ -39,9 +39,13 @@ function diagnose(r: HostDnsReport, expectedIp: string | null): Line[] {
   return lines;
 }
 
+// Monochrome, because the console is (app/globals.css, `.console-neutral`) — and it costs
+// nothing here: the glyph below already distinguishes the four tones, so the green and amber
+// were a second encoding of what ✓ and ! were saying. `bad` keeps `text-destructive`, the one
+// hue the console allows, for the same reason the Danger zone does.
 const TONE: Record<Line["tone"], string> = {
-  ok: "text-green-700 dark:text-green-500",
-  warn: "text-amber-700 dark:text-amber-500",
+  ok: "text-foreground",
+  warn: "font-medium text-foreground",
   bad: "text-destructive",
   info: "text-muted-foreground",
 };
@@ -74,7 +78,7 @@ export function DnsCheck({ initialDomain }: { initialDomain: string }) {
               r.aaaa.length === 0 &&
               (!state.expectedIp || r.a.every((ip) => ip === state.expectedIp));
             return (
-              <div key={r.hostname} className="grid content-start gap-1.5 rounded-lg border p-3">
+              <div key={r.hostname} className="grid content-start gap-1.5 rounded-md border bg-background p-3">
                 <div className="flex items-center justify-between gap-2">
                   <span className="truncate font-mono text-sm">{r.hostname}</span>
                   <span className={cn("text-xs font-medium", good ? TONE.ok : TONE.bad)}>

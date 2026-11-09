@@ -1,4 +1,5 @@
 import { env } from "@/lib/env";
+import { PageHeader } from "@/components/admin/page-header";
 import { requirePlatformAdmin } from "@/lib/session";
 import { describeTimeZone, listTimeZones } from "@/lib/time-zones";
 import { CreateStoreForm } from "./create-store-form";
@@ -13,12 +14,11 @@ export default async function NewStorePage() {
   }));
   return (
     <div className="grid gap-6">
-      <div>
-        <h1 className="text-2xl font-semibold">New store</h1>
-        <p className="text-muted-foreground">
-          Creates the store and its owner account with a one-time password.
-        </p>
-      </div>
+      <PageHeader
+        title="New store"
+        description="Creates the store and its owner account with a one-time password."
+        back={{ href: "/platform/stores", label: "All stores" }}
+      />
       <CreateStoreForm
         timeZones={timeZones}
         defaultTimeZone={env.PLATFORM_TIMEZONE}

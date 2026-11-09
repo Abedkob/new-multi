@@ -10,13 +10,7 @@ import {
 import { Field, FormError } from "@/components/field";
 import { SubmitButton } from "@/components/submit-button";
 import { Button, buttonVariants } from "@/components/ui/button";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
+import { SectionCard } from "@/components/admin/section-card";
 import { cn } from "@/lib/utils";
 
 export function CreateStoreForm({
@@ -62,7 +56,7 @@ export function CreateStoreForm({
       {/* The store's privacy identity. Required at creation because a storefront that measures
         * visitors has to name a controller and a contact on its privacy page, and a store with
         * these blank cannot be put into the analytics rollout. */}
-      <fieldset className="grid gap-4 rounded-lg border p-4">
+      <fieldset className="grid gap-4 rounded-md border bg-background p-4">
         <legend className="px-1 text-sm font-medium">Privacy and reporting</legend>
         <Field
           label="Responsible business name"
@@ -108,7 +102,7 @@ export function CreateStoreForm({
         />
       </fieldset>
 
-      <label className="flex items-start gap-3 rounded-lg border p-4 text-sm">
+      <label className="flex items-start gap-3 rounded-md border bg-background p-4 text-sm">
         <input
           type="checkbox"
           name="jointControllerAccepted"
@@ -134,7 +128,7 @@ export function CreateStoreForm({
         a components refactor wearing a feature's clothes. Unlike the terms above, leaving this
         unticked is a valid answer — the schema has it optional for exactly that reason.
       */}
-      <label className="flex items-start gap-3 rounded-lg border p-4 text-sm">
+      <label className="flex items-start gap-3 rounded-md border bg-background p-4 text-sm">
         <input
           type="checkbox"
           name="counterSalesEnabled"
@@ -236,62 +230,58 @@ function Credentials({
   const storeUrl = () => `${window.location.origin}/store/${slug}`;
   const loginUrl = () => `${window.location.origin}/login`;
   return (
-    <Card className="max-w-lg">
-      <CardHeader>
-        <CardTitle>Store &ldquo;{storeName}&rdquo; created</CardTitle>
-        <CardDescription>
-          Copy these credentials now. The password is stored only as a hash and
-          cannot be shown again once you leave this screen.
-        </CardDescription>
-      </CardHeader>
-      <CardContent className="grid gap-4">
-        <dl className="grid gap-3 text-sm">
-          <div>
-            <dt className="text-muted-foreground">Store URL</dt>
-            <dd>
-              <Link
-                href={`/store/${slug}`}
-                target="_blank"
-                className="font-mono underline underline-offset-4"
-              >
-                /store/{slug}
-              </Link>
-            </dd>
-          </div>
-          <div>
-            <dt className="text-muted-foreground">Owner email</dt>
-            <dd className="font-mono">{ownerEmail}</dd>
-          </div>
-          <div>
-            <dt className="text-muted-foreground">Temporary password</dt>
-            <dd
-              data-testid="temp-password"
-              className="font-mono text-base select-all"
+    <SectionCard
+      className="max-w-lg"
+      title={<>Store &ldquo;{storeName}&rdquo; created</>}
+      description="Copy these credentials now. The password is stored only as a hash and cannot be shown again once you leave this screen."
+      bodyClassName="grid gap-4"
+    >
+      <dl className="grid gap-3 text-sm">
+        <div>
+          <dt className="text-muted-foreground">Store URL</dt>
+          <dd>
+            <Link
+              href={`/store/${slug}`}
+              target="_blank"
+              className="font-mono underline underline-offset-4"
             >
-              {tempPassword}
-            </dd>
-          </div>
-        </dl>
-        <p className="text-sm text-muted-foreground">
-          The owner must change this password on first login.
-        </p>
-        <div className="flex flex-wrap gap-2">
-          <CopyButton getText={() => tempPassword}>Copy password</CopyButton>
-          <CopyButton
-            getText={() =>
-              `Store: ${storeUrl()}\nLogin: ${loginUrl()}\nEmail: ${ownerEmail}\nTemporary password: ${tempPassword}`
-            }
-          >
-            Copy all credentials
-          </CopyButton>
-          <Link
-            href="/platform/stores"
-            className={cn(buttonVariants({ variant: "ghost", size: "sm" }))}
-          >
-            Done, back to stores
-          </Link>
+              /store/{slug}
+            </Link>
+          </dd>
         </div>
-      </CardContent>
-    </Card>
+        <div>
+          <dt className="text-muted-foreground">Owner email</dt>
+          <dd className="font-mono">{ownerEmail}</dd>
+        </div>
+        <div>
+          <dt className="text-muted-foreground">Temporary password</dt>
+          <dd
+            data-testid="temp-password"
+            className="font-mono text-base select-all"
+          >
+            {tempPassword}
+          </dd>
+        </div>
+      </dl>
+      <p className="text-sm text-muted-foreground">
+        The owner must change this password on first login.
+      </p>
+      <div className="flex flex-wrap gap-2">
+        <CopyButton getText={() => tempPassword}>Copy password</CopyButton>
+        <CopyButton
+          getText={() =>
+            `Store: ${storeUrl()}\nLogin: ${loginUrl()}\nEmail: ${ownerEmail}\nTemporary password: ${tempPassword}`
+          }
+        >
+          Copy all credentials
+        </CopyButton>
+        <Link
+          href="/platform/stores"
+          className={cn(buttonVariants({ variant: "ghost", size: "sm" }))}
+        >
+          Done, back to stores
+        </Link>
+      </div>
+    </SectionCard>
   );
 }

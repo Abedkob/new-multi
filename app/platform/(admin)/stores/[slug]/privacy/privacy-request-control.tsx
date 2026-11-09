@@ -73,7 +73,7 @@ export function PrivacyRequestControl({
       </form>
 
       {summary?.found ? (
-        <div className="grid gap-3 rounded-md border border-border p-4" data-testid="privacy-request-summary">
+        <div className="grid gap-3 rounded-md border bg-background p-4" data-testid="privacy-request-summary">
           <dl className="grid gap-1 text-sm sm:grid-cols-2">
             <div>
               <dt className="text-muted-foreground">First seen</dt>
@@ -137,7 +137,7 @@ export function PrivacyRequestControl({
       ) : null}
 
       {showErase && summary?.found ? (
-        <form action={erase} className="grid max-w-xl gap-3 rounded-md border border-destructive/40 p-4">
+        <form action={erase} className="grid max-w-xl gap-3 rounded-md border border-destructive/40 bg-background p-4">
           <p className="text-sm">
             This deletes {summary.events} event(s) and {summary.sessions} session(s) and cannot be
             undone. {summary.linkedOrders} order(s) will be detached and kept. Daily totals do not

@@ -80,7 +80,7 @@ export function StorePrivacyForm({
         errors={state.fieldErrors?.analyticsTimezone}
       />
       <FormError message={state.error} />
-      {state.ok && <p className="text-sm text-emerald-600">Privacy settings saved.</p>}
+      {state.ok && <p className="text-sm font-medium">Privacy settings saved.</p>}
       <div>
         <SubmitButton pendingText="Saving...">Save privacy settings</SubmitButton>
       </div>

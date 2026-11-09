@@ -2,6 +2,7 @@ import { IphoneGuide } from "@/components/admin/notifications/iphone-guide";
 import { ensurePlatformPreferences } from "@/lib/data/notification-preferences";
 import { listDevices } from "@/lib/data/push-subscriptions";
 import { pushConfigured, vapidPublicKey } from "@/lib/push/keys";
+import { PageHeader } from "@/components/admin/page-header";
 import { requirePlatformAdmin } from "@/lib/session";
 import { PlatformNotificationSections } from "./platform-sections";
 
@@ -22,14 +23,10 @@ export default async function PlatformNotificationsPage() {
 
   return (
     <div className="grid gap-4">
-      <header className="grid gap-2">
-        <h1 className="text-2xl font-semibold">Notifications</h1>
-        <p className="max-w-3xl text-sm text-muted-foreground">
-          Alerts about the platform itself: stores going quiet or declining, ingestion and
-          aggregation health, Redis, and push delivery. Store names appear; customer and order
-          data never does.
-        </p>
-      </header>
+      <PageHeader
+        title="Notifications"
+        description="Alerts about the platform itself: stores going quiet or declining, ingestion and aggregation health, Redis, and push delivery. Store names appear; customer and order data never does."
+      />
 
       {!pushConfigured() ? (
         <p

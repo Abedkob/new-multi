@@ -1,12 +1,6 @@
 import Link from "next/link";
 import { buttonVariants } from "@/components/ui/button";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
+import { SectionCard } from "@/components/admin/section-card";
 import { Separator } from "@/components/ui/separator";
 import { cn } from "@/lib/utils";
 import { DuplicateStoreForm } from "./duplicate-store-form";
@@ -75,121 +69,114 @@ export default async function StoreOverviewPage({
 
   return (
     <>
-      <Card>
-        <CardHeader>
-          <CardTitle>Store</CardTitle>
-          <CardDescription>
+      <SectionCard
+        title="Store"
+        description={
+          <>
             {tenant._count.products} products · {tenant._count.orders} orders · created{" "}
             {tenant.createdAt.toLocaleDateString("en-US")}
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="grid gap-4">
-          <UpdateStoreForm slug={tenant.slug} initialName={tenant.name} />
-        </CardContent>
-      </Card>
+          </>
+        }
+      >
+        <UpdateStoreForm slug={tenant.slug} initialName={tenant.name} />
+      </SectionCard>
 
-      <Card className={tenant.isPaused ? "border-destructive/50" : undefined}>
-        <CardHeader>
-          <CardTitle>Store availability</CardTitle>
-          <CardDescription>
-            Pausing stops the public storefront and checkout. The owner can still sign in to manage
-            the store, and you can resume it here.
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <StorePauseControl
-            slug={tenant.slug}
-            isPaused={tenant.isPaused}
-            pausedAt={tenant.pausedAt}
-            pauseReason={tenant.pauseReason}
-          />
-        </CardContent>
-      </Card>
+      <SectionCard
+        className={tenant.isPaused ? "border-destructive/50" : undefined}
+        title="Store availability"
+        description="Pausing stops the public storefront and checkout. The owner can still sign in to manage the store, and you can resume it here."
+      >
+        <StorePauseControl
+          slug={tenant.slug}
+          isPaused={tenant.isPaused}
+          pausedAt={tenant.pausedAt}
+          pauseReason={tenant.pauseReason}
+        />
+      </SectionCard>
 
-      <Card>
-        <CardHeader>
-          <CardTitle>Store license</CardTitle>
-          <CardDescription>
-            License keys and activation tokens are kept encrypted on the server. A configured
-            license must remain active, including its provider-reported offline grace period.
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <StoreLicenseControl slug={tenant.slug} license={tenant.license} />
-        </CardContent>
-      </Card>
+      <SectionCard
+        title="Store license"
+        description="License keys and activation tokens are kept encrypted on the server. A configured license must remain active, including its provider-reported offline grace period."
+      >
+        <StoreLicenseControl slug={tenant.slug} license={tenant.license} />
+      </SectionCard>
 
-      <Card>
-        <CardHeader>
-          <CardTitle>Setup checklist</CardTitle>
-          <CardDescription>What&apos;s done, and what&apos;s left to do for this store.</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <ul className="grid gap-3" data-testid="setup-checklist">
-            {checklist.map((item) => (
-              <li key={item.label} className="flex items-start gap-3">
-                <span
-                  aria-label={item.done ? "done" : "to do"}
-                  className={cn(
-                    "mt-0.5 grid size-5 shrink-0 place-items-center rounded-full border text-xs",
-                    item.done
-                      ? "border-transparent bg-primary text-primary-foreground"
-                      : "border-border text-transparent",
-                  )}
-                >
-                  ✓
-                </span>
-                <div className="grid flex-1 gap-0.5">
-                  <Link href={item.href} className="text-sm font-medium hover:underline">
-                    {item.label}
-                  </Link>
-                  <span className="text-xs text-muted-foreground">{item.detail}</span>
-                </div>
-              </li>
-            ))}
-          </ul>
-        </CardContent>
-      </Card>
+      <SectionCard
+        title="Setup checklist"
+        description="What's done, and what's left to do for this store."
+      >
+        <ul className="grid gap-3" data-testid="setup-checklist">
+          {checklist.map((item) => (
+            <li key={item.label} className="flex items-start gap-3">
+              {/* A filled tick, not a green one: `bg-primary` is near-black in this subtree, so
+                  "done" reads as ink against an empty outline rather than as a hue. */}
+              <span
+                aria-label={item.done ? "done" : "to do"}
+                className={cn(
+                  "mt-0.5 grid size-5 shrink-0 place-items-center rounded-full border text-xs",
+                  item.done
+                    ? "border-transparent bg-primary text-primary-foreground"
+                    : "border-border text-transparent",
+                )}
+              >
+                ✓
+              </span>
+              <div className="grid flex-1 gap-0.5">
+                <Link href={item.href} className="text-sm font-medium hover:underline">
+                  {item.label}
+                </Link>
+                <span className="text-xs text-muted-foreground">{item.detail}</span>
+              </div>
+            </li>
+          ))}
+        </ul>
+      </SectionCard>
 
-      <Card>
-        <CardHeader>
-          <CardTitle>Owner</CardTitle>
-          <CardDescription>
+      <SectionCard
+        title="Owner"
+        description={
+          <>
             {tenant.owner.name} &middot; {tenant.owner.email}
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="grid gap-4">
+          </>
+        }
+      >
+        <div className="grid gap-4">
           <p className="text-sm text-muted-foreground">
             Owners manage their products, categories, orders and page content from their own
             dashboard. Template, colors, domain, search and analytics are managed here.
           </p>
           <Separator />
           <ResetPasswordButton slug={tenant.slug} ownerEmail={tenant.owner.email} />
-        </CardContent>
-      </Card>
+        </div>
+      </SectionCard>
 
-      <div>
+      {/* Was a bare button floating between six panels, which read as a stray control rather
+          than a section. The editor is a separate full-screen page, so it gets a panel that
+          says what it is before it sends you there. */}
+      <SectionCard
+        title="Template & theme"
+        description="The store's template, colours and layout, with a live preview. Opens as its own full-screen editor."
+      >
         <Link
           href={`${base}/theme`}
           className={cn(buttonVariants({ variant: "outline", size: "sm" }))}
         >
           Open template &amp; theme editor ↗
         </Link>
-      </div>
+      </SectionCard>
 
-      <Card>
-        <CardHeader>
-          <CardTitle>Duplicate this store</CardTitle>
-          <CardDescription>
+      <SectionCard
+        title="Duplicate this store"
+        description={
+          <>
             Copies the template, theme, content, {tenant._count.products} products and every
             category into a brand-new store with its own owner. Orders, the domain, license and
             analytics/ads ids never carry over.
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <DuplicateStoreForm slug={tenant.slug} storeName={tenant.name} />
-        </CardContent>
-      </Card>
+          </>
+        }
+      >
+        <DuplicateStoreForm slug={tenant.slug} storeName={tenant.name} />
+      </SectionCard>
     </>
   );
 }

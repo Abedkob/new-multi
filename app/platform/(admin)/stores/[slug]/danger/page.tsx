@@ -1,10 +1,4 @@
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
+import { SectionCard } from "@/components/admin/section-card";
 import { DeleteStoreButton } from "../delete-store-button";
 import { loadStore } from "../load";
 
@@ -15,10 +9,14 @@ export default async function StoreDangerPage({
   const tenant = await loadStore(slug);
 
   return (
-    <Card className="border-destructive/50">
-      <CardHeader>
-        <CardTitle>Delete store</CardTitle>
-        <CardDescription>
+    // The one red edge in a monochrome console, and the reason `--destructive` keeps its chroma
+    // (ADMIN_UI.md §12): on a screen with no other colour, red means "this is irreversible" and
+    // nothing else can.
+    <SectionCard
+      className="border-destructive/50"
+      title="Delete store"
+      description={
+        <>
           Permanently deletes this store, its {tenant._count.products} products,{" "}
           {tenant._count.orders} orders and the owner account. This cannot be undone.
           {tenant.domain && (
@@ -28,16 +26,15 @@ export default async function StoreDangerPage({
               afterwards.
             </>
           )}
-        </CardDescription>
-      </CardHeader>
-      <CardContent>
-        <DeleteStoreButton
-          slug={tenant.slug}
-          storeName={tenant.name}
-          productCount={tenant._count.products}
-          orderCount={tenant._count.orders}
-        />
-      </CardContent>
-    </Card>
+        </>
+      }
+    >
+      <DeleteStoreButton
+        slug={tenant.slug}
+        storeName={tenant.name}
+        productCount={tenant._count.products}
+        orderCount={tenant._count.orders}
+      />
+    </SectionCard>
   );
 }

@@ -62,7 +62,7 @@ export function FaviconForm({
             <span className="truncate text-xs">{storeName}</span>
           </div>
           {/* eslint-disable-next-line @next/next/no-img-element -- admin preview of an arbitrary icon URL */}
-          <img src={shown} alt="Favicon preview" className="size-16 rounded-xl border object-contain" />
+          <img src={shown} alt="Favicon preview" className="size-16 rounded-md border bg-background object-contain" />
         </div>
       </div>
 

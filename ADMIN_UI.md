@@ -1,12 +1,12 @@
 # The admin panel's UI baseline
 
-One rule per pattern, for every screen under `app/admin`. The point is not taste — it is that a
-merchant who learns one screen can read the next one, and that a new screen is quick to build
-because the decision is already made.
+One rule per pattern, for every screen under `app/admin` and `app/platform`. The point is not
+taste — it is that a merchant who learns one screen can read the next one, and that a new screen
+is quick to build because the decision is already made.
 
-**Scope.** `/admin` (store owner and staff). `/platform` is not covered yet and still uses
-`components/ui/card`; nothing here is admin-specific in implementation, so the console can adopt
-it later. The storefront is a different product with 13 templates and is explicitly out of scope.
+**Scope.** Both tools: `/admin` (store owner and staff) and `/platform` (the platform operator).
+They share every primitive in this document and differ in exactly one thing, their palette — see
+§10. The storefront is a different product with 13 templates and is explicitly out of scope.
 
 **What this replaced.** The audit that produced it, over all 84 files under `app/admin`:
 
@@ -260,10 +260,49 @@ greyscale UI the only colour wins whatever its strength.
 - **This cannot reach a storefront.** `ThemeScope` (`components/theme-scope.tsx`) sets
   `--primary`, `--ring`, `--background`, `--border` and the rest **inline** on a wrapper div, and
   `app/store/[slug]/layout.tsx` wraps every store route in it — so a store's own colours shadow
-  `:root` inside that subtree, and both previews with it. `:root` is effectively the tool's
-  palette: the admin, the platform console and the login page.
+  `:root` inside that subtree, and both previews with it.
+- **It does not reach the platform console either**, which is monochrome on purpose (§10). So
+  `:root` is now the merchant panel's palette and the login page's, and nothing else.
 
-## 10. Arabic, RTL, and the phone
+## 10. The platform console: same shapes, no colour
+
+The console is a different tool for a different person. It configures stores it does not own, and
+every store it configures has colours of its own — the theme editor puts one on screen in an
+iframe. An indigo accent there would be a fourth brand competing with whichever store is being
+previewed, so the console keeps the shapes and drops the hue.
+
+- **`.console-neutral`** (`app/globals.css`) redefines `--primary`, `--secondary`, `--muted`,
+  `--accent`, `--border`, `--input` and `--ring` with chroma 0, in both schemes. It is applied
+  once, on the wrapper in `app/platform/(admin)/layout.tsx`, so a new console screen cannot be
+  added without it.
+- **A subtree class, not a second `:root`.** The same mechanism `ThemeScope` uses, for the same
+  reason: a subtree override is the only way to keep one palette out of another's way in a single
+  document. The token *names* are unchanged, which is the whole point — the shared components are
+  the same components here, with no console branch.
+- **`--primary` inverts between the schemes**: `oklch(0.205 0 0)` on white, `oklch(0.985 0 0)` on
+  black. A monochrome accent has nowhere else to go — it has to be the far end of the lightness
+  axis to read as emphasis. Measured in the browser: every console token resolves to chroma **0**
+  in both schemes, while `:root`'s `--primary` keeps its indigo, so the scope leaks in neither
+  direction.
+- **`--destructive` keeps its red, deliberately.** On a screen with no other colour, red means
+  "this is irreversible" and nothing else can. It is the Danger zone's border and a failed DNS
+  lookup; it is a *token*, so it stays red by choice rather than by accident.
+- **Emphasis is weight and surface.** The active nav item is `bg-muted font-medium`, a completed
+  checklist item is a filled near-black tick, and the "needs setup" dot in `StoreNav` is
+  `bg-foreground` where it used to be amber. The DNS check lost its green and amber and lost
+  nothing with them: its glyphs already said the same thing twice.
+- **The theme editor is outside the scope, on purpose.** It lives at
+  `app/platform/stores/[slug]/theme`, outside the `(admin)` group, because its entire subject is
+  a store's colours. A rule banning hue there would ban the feature. It is still held to every
+  other rule.
+
+**What the console looked like before.** Ten files importing `components/ui/card`; eight bordered
+boxes with no surface, on a page that had no shell colour either, so a panel showed as a bare
+border; five `h1`s where a section layout already owned one; a top bar whose five links were all
+the same grey with no current-section state, and a create action sitting among them as a sixth
+link; and four hardcoded palette colours that `.console-neutral` would have sailed straight past.
+
+## 11. Arabic, RTL, and the phone
 
 - Logical properties only: `ms-*`/`me-*`, `ps-*`/`pe-*`, `start-*`/`end-*`. Never `ml-*`, `pr-*`,
   `left-*`. A directional icon gets `rtl:rotate-180` (`PageHeader`'s back arrow is the example).
@@ -278,12 +317,14 @@ greyscale UI the only colour wins whatever its strength.
 - Every screen is usable at phone width with no horizontal page scroll. A two-column screen is
   one column below `md`, and the column a person acts in comes first.
 
-## 11. What enforces this
+## 12. What enforces this
 
-`pnpm verify:admin-ui` — static, no server, no database. Five rules, each one a thing that
+`pnpm verify:admin-ui` — static, no server, no database. It walks **both** `app/admin` and
+`app/platform`, with a separate pending list for each, so a console backlog can never be parked
+in the panel's list and quietly weaken the stronger promise. Six rules, each one a thing that
 actually happened here rather than a preference:
 
-1. `components/ui/card` is not imported under `app/admin`.
+1. `components/ui/card` is not imported under either tool.
 2. Every panel names its surface — a solid `rounded-* border` with no `bg-*` fails. **A dashed
    border is exempt**, and the distinction is real: dashed means provisional (an empty-table note,
    a "not measuring yet" placeholder) and it is drawn *inside* a panel, on the surface that panel
@@ -297,15 +338,19 @@ actually happened here rather than a preference:
 4. One `h1` per page — a page under a section layout that already renders `PageHeader` may not add
    another.
 5. No physical-direction classes (`ml-`, `pr-`, `left-`).
+6. **The console is monochrome** — a hardcoded palette class (`text-amber-700`, `bg-emerald-500`)
+   under `app/platform/(admin)` fails. Scoped to that group, not the whole of `/platform`, because
+   the theme editor sits outside it (§10). `--destructive` is not covered: it is a token, and red
+   is the console's one deliberate hue.
 
 **`PENDING` is the honest part.** The not-yet-converted screens are listed by name in the script.
 The check asserts that list does not **grow**, and that every entry still earns its place — an
 entry that is already clean *fails*, so the list cannot rot into a permanent exemption. It shrinks
 as screens are converted, and the fix for a new violation is never to add a line to it.
 
-**Every screen under `app/admin` is on the baseline**, so `PENDING` is empty and a violation is
-now a regression rather than a backlog item. The fix for one is the screen, never a line in that
-list.
+**Every screen in both tools is on the baseline**, so both pending lists are empty and a
+violation is now a regression rather than a backlog item. The fix for one is the screen, never a
+line in either list.
 
 **That claim was once broader than the checker.** When `PENDING` was first emptied, the product
 form still had three `rounded-xl border bg-card p-6` panels, its own icon'd section header, its
@@ -315,6 +360,11 @@ from `components/field.tsx`. Rule 3 above is the half of that gap a machine can 
 half — "this file re-implements a primitive" — is not something a regex should be trusted to
 judge, so it stays a review question. The lesson is the general one: a green check means the
 rules passed, not that the screen is on the baseline.
+
+**The same was true of the scope.** For as long as the checker walked only `app/admin`, it
+reported "every admin screen on the baseline" while ten console files imported
+`components/ui/card` — true as written, and misleading. Rules 1-5 found eight unsurfaced panels,
+an `ml-auto` and a `rounded-xl` the moment the walk was widened, none of which were new.
 
 One fold is tracked here rather than by the checker, since it needs a server-run suite to
 confirm: `analytics/live-visitors.tsx` is a fifth copy of `StatTile` with one extra state (the

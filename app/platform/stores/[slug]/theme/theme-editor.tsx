@@ -176,7 +176,7 @@ export function ThemeEditor({
         </Link>
         <h1 className="font-semibold">{storeName}</h1>
         <span className="text-sm text-muted-foreground">Template &amp; theme</span>
-        <div className="ml-auto flex items-center gap-3">
+        <div className="ms-auto flex items-center gap-3">
           {dirty && !pending && (
             <span className="text-sm text-amber-600 dark:text-amber-400">Unsaved changes</span>
           )}
@@ -288,7 +288,7 @@ export function ThemeEditor({
                           (c) => (
                             <span
                               key={c}
-                              className="-ml-1 size-3 rounded-full border first:ml-0"
+                              className="-ms-1 size-3 rounded-full border first:ms-0"
                               style={{ background: c }}
                             />
                           ),
@@ -391,6 +391,12 @@ export function ThemeEditor({
 
         {/* live preview */}
         <main className="flex min-w-0 flex-1 justify-center overflow-auto p-4">
+          {/*
+            admin-ui-allow-radius: a device frame around the storefront preview, not a panel.
+            The rounding draws the phone or tablet picked in the toolbar above, so it follows
+            the device rather than the console's own radius — the same case as the content
+            editor's preview in /admin.
+          */}
           <div
             className="h-full overflow-hidden rounded-xl border bg-background shadow-sm transition-[width] duration-300"
             style={{ width, maxWidth: "100%" }}

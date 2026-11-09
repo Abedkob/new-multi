@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { PageHeader } from "@/components/admin/page-header";
 import { Badge } from "@/components/ui/badge";
 import { buttonVariants } from "@/components/ui/button";
 import { getStoreUrl } from "@/lib/store-url";
@@ -18,30 +19,32 @@ export default async function ManageStoreLayout({
 
   return (
     <div className="grid gap-6">
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div className="grid gap-1">
+      {/* This layout owns the h1 for every page in the section, so none of them renders one —
+          the same rule as /admin's Analytics and Marketing layouts, and the one `verify:admin-ui`
+          checks. The back link, the title and the actions were a hand-rolled copy of PageHeader
+          with its own class list; the arrow it drew by hand did not flip in Arabic, which the
+          console does not use today but the component handles anyway. */}
+      <PageHeader
+        title={tenant.name}
+        back={{ href: "/platform/stores", label: "All stores" }}
+        actions={
           <Link
-            href="/platform/stores"
-            className="text-sm text-muted-foreground hover:text-foreground"
+            href={getStoreUrl(tenant)}
+            target="_blank"
+            className={cn(buttonVariants({ variant: "outline", size: "sm" }))}
           >
-            ← All stores
+            View store ↗
           </Link>
-          <h1 className="text-2xl font-semibold">{tenant.name}</h1>
-          <div className="flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
-            <span>{tenant.domain ?? `/store/${tenant.slug}`}</span>
-            <Badge variant={tenant.domain ? "default" : "secondary"}>
-              {tenant.domain ? "Custom domain" : "Platform URL"}
-            </Badge>
-          </div>
+        }
+        className="mb-0"
+      >
+        <div className="flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
+          <span>{tenant.domain ?? `/store/${tenant.slug}`}</span>
+          <Badge variant={tenant.domain ? "default" : "secondary"}>
+            {tenant.domain ? "Custom domain" : "Platform URL"}
+          </Badge>
         </div>
-        <Link
-          href={getStoreUrl(tenant)}
-          target="_blank"
-          className={cn(buttonVariants({ variant: "outline", size: "sm" }))}
-        >
-          View store ↗
-        </Link>
-      </div>
+      </PageHeader>
 
       {/* minmax(0, …) columns: the phone nav strip scrolls inside its own box instead of
           stretching the column (and the whole page) to its full width. */}

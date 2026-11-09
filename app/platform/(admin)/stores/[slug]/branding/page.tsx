@@ -1,10 +1,4 @@
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
+import { SectionCard } from "@/components/admin/section-card";
 import { letterFavicon } from "@/lib/favicon";
 import { parseThemeOverrides, resolveTheme } from "@/lib/theme";
 import { TEMPLATE_META, normalizeTemplateId } from "@/templates/meta";
@@ -23,22 +17,16 @@ export default async function StoreBrandingPage({
   );
 
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle>Favicon</CardTitle>
-        <CardDescription>
-          The icon in the browser tab, bookmarks and history for this store. Only you can change
-          it; the store owner doesn&apos;t see this setting.
-        </CardDescription>
-      </CardHeader>
-      <CardContent>
-        <FaviconForm
-          slug={tenant.slug}
-          storeName={tenant.name}
-          initial={tenant.faviconUrl}
-          fallback={letterFavicon(tenant.name, colors.primaryColor)}
-        />
-      </CardContent>
-    </Card>
+    <SectionCard
+      title="Favicon"
+      description="The icon in the browser tab, bookmarks and history for this store. Only you can change it; the store owner doesn't see this setting."
+    >
+      <FaviconForm
+        slug={tenant.slug}
+        storeName={tenant.name}
+        initial={tenant.faviconUrl}
+        fallback={letterFavicon(tenant.name, colors.primaryColor)}
+      />
+    </SectionCard>
   );
 }
