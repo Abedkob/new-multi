@@ -27,7 +27,10 @@ export function SectionCard({
   bodyClassName,
   children,
   ...props
-}: React.ComponentProps<"section"> & {
+  // `title` is omitted from the element's own props: <section> has an HTML title attribute of
+  // type string, and intersecting it with a ReactNode prop yields `string & ReactNode`, which
+  // nothing can satisfy. The compiler caught this the first time a title held an element.
+}: Omit<React.ComponentProps<"section">, "title"> & {
   title?: React.ReactNode;
   description?: React.ReactNode;
   /** Controls for this panel, on the same line as its title. */

@@ -2,7 +2,8 @@ import { notFound } from "next/navigation";
 import { Check, MapPin, MessageCircle, Phone, X } from "lucide-react";
 import { PageHeader } from "@/components/admin/page-header";
 import { buttonVariants } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Detail, DetailList } from "@/components/admin/detail-list";
+import { SectionCard } from "@/components/admin/section-card";
 import {
   Table,
   TableBody,
@@ -82,8 +83,7 @@ export default async function OrderDetailPage({ params }: PageProps<"/admin/orde
       />
 
       {/* Progress: Placed -> Confirmed -> Delivered (or a cancelled note). */}
-      <Card>
-        <CardContent className="grid gap-5">
+      <SectionCard bodyClassName="grid gap-5">
           {order.status === "CANCELLED" ? (
             <div className="flex items-center gap-3 text-sm">
               <span className="grid size-8 place-items-center rounded-full bg-muted text-muted-foreground">
@@ -123,15 +123,14 @@ export default async function OrderDetailPage({ params }: PageProps<"/admin/orde
             </p>
             <StatusControl id={order.id} status={order.status} />
           </div>
-        </CardContent>
-      </Card>
+      </SectionCard>
 
       <div className="grid gap-6 lg:grid-cols-5">
-        <Card className="lg:col-span-2">
-          <CardHeader>
-            <CardTitle>{t("orders.detail.customerTitle")}</CardTitle>
-          </CardHeader>
-          <CardContent className="grid gap-4">
+        <SectionCard
+          className="lg:col-span-2"
+          title={t("orders.detail.customerTitle")}
+          bodyClassName="grid gap-4"
+        >
             <div>
               <p className="font-medium">{order.customerName}</p>
               <a href={`tel:${phoneDigits}`} className="text-sm text-muted-foreground underline underline-offset-4">
@@ -157,32 +156,27 @@ export default async function OrderDetailPage({ params }: PageProps<"/admin/orde
                 </a>
               )}
             </div>
-            <dl className="grid gap-3 text-sm">
-              <div>
-                <dt className="text-muted-foreground">{t("orders.detail.address")}</dt>
-                <dd className="whitespace-pre-line">{order.customerAddress}</dd>
-              </div>
-              <div>
-                <dt className="text-muted-foreground">{t("orders.detail.deliveryLocation")}</dt>
-                {/* A map link opens from the "Open map" button above. */}
-                <dd className="break-words">{order.deliveryLocation}</dd>
-              </div>
-              {order.notes && (
-                <div>
-                  <dt className="text-muted-foreground">{t("orders.detail.notes")}</dt>
-                  <dd className="rounded-md bg-amber-50 px-3 py-2 whitespace-pre-line text-amber-900 dark:bg-amber-950 dark:text-amber-200">
-                    {order.notes}
-                  </dd>
-                </div>
-              )}
-            </dl>
-          </CardContent>
-        </Card>
+          <DetailList className="sm:grid-cols-1">
+            <Detail label={t("orders.detail.address")}>
+              <span className="whitespace-pre-line">{order.customerAddress}</span>
+            </Detail>
+            {/* A map link opens from the "Open map" button above. */}
+            <Detail label={t("orders.detail.deliveryLocation")} value={order.deliveryLocation} />
+            {order.notes && (
+              <Detail label={t("orders.detail.notes")}>
+                <span className="block rounded-md bg-amber-50 px-3 py-2 whitespace-pre-line text-amber-900 dark:bg-amber-950 dark:text-amber-200">
+                  {order.notes}
+                </span>
+              </Detail>
+            )}
+          </DetailList>
+        </SectionCard>
 
-        <Card className="gap-0 overflow-hidden pb-0 lg:col-span-3">
-          <CardHeader className="pb-4">
-            <CardTitle>{t("orders.detail.itemsTitle")}</CardTitle>
-          </CardHeader>
+        <SectionCard
+          className="lg:col-span-3"
+          title={t("orders.detail.itemsTitle")}
+          bodyClassName="p-0"
+        >
           <Table>
             <TableHeader>
               <TableRow className="bg-muted/50">
@@ -246,7 +240,7 @@ export default async function OrderDetailPage({ params }: PageProps<"/admin/orde
               </TableRow>
             </TableBody>
           </Table>
-        </Card>
+        </SectionCard>
       </div>
     </div>
   );

@@ -3,11 +3,11 @@
 import Link from "next/link";
 import { useState, useTransition } from "react";
 import type { DiscountActionState } from "./actions";
+import { AffixField, Field, FormActions, SelectField, SwitchField } from "@/components/field";
+import { SectionCard } from "@/components/admin/section-card";
 import { Button, buttonVariants } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Switch } from "@/components/ui/switch";
 import { formatPrice } from "@/lib/format";
 import { resolveMessage, useT } from "@/lib/i18n/context";
 import { applyDiscount } from "@/lib/pricing";
@@ -43,6 +43,7 @@ export function DiscountForm({
   const [startsAt, setStartsAt] = useState(localDateTime(defaults.startsAt));
   const [endsAt, setEndsAt] = useState(localDateTime(defaults.endsAt));
   const errors = state.fieldErrors ?? {};
+  const resolve = (messages?: string[]) => messages?.map((m) => resolveMessage(t, m));
   const previewValue = type === "PERCENTAGE" ? Number(value) : Math.round(Number(value) * 100);
   const preview = Number.isFinite(previewValue) && previewValue > 0
     ? applyDiscount(10_000, {
@@ -81,103 +82,125 @@ export function DiscountForm({
       }}
       className="grid gap-5"
     >
-      <Card>
-        <CardHeader>
-          <CardTitle>{t("discounts.form.title")}</CardTitle>
-        </CardHeader>
-        <CardContent className="grid gap-4 sm:grid-cols-2">
-          <div className="grid gap-1.5 sm:col-span-2">
-            <Label htmlFor="discount-name">{t("discounts.form.internalNameLabel")}</Label>
-            <Input
-              id="discount-name"
-              value={name}
-              onChange={(event) => setName(event.target.value)}
-              placeholder={t("discounts.form.namePlaceholder")}
-              maxLength={120}
-              aria-invalid={!!errors.name?.length}
-            />
-            <p className="text-xs text-muted-foreground">{t("discounts.form.nameHelp")}</p>
-            {errors.name?.map((message) => <p key={message} className="text-sm text-destructive">{resolveMessage(t, message)}</p>)}
-          </div>
-          <div className="grid gap-1.5">
-            <Label htmlFor="discount-type">{t("discounts.form.typeLabel")}</Label>
-            <select
-              id="discount-type"
-              value={type}
-              onChange={(event) => {
-                setType(event.target.value as Defaults["type"]);
-                setValue("");
-              }}
-              className="h-9 rounded-lg border border-input bg-background px-3 text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50"
-            >
-              <option value="PERCENTAGE">{t("discounts.form.typePercentage")}</option>
-              <option value="FIXED_AMOUNT">{t("discounts.form.typeFixed")}</option>
-            </select>
-          </div>
-          <div className="grid gap-1.5">
-            <Label htmlFor="discount-value">
-              {type === "PERCENTAGE" ? t("discounts.form.percentageOffLabel") : t("discounts.form.amountOffLabel")}
-            </Label>
-            {/* Currency/number formatting is out of scope for i18n (see plan's non-goals) — the $/%
-                affixes intentionally stay LTR-positioned regardless of locale. */}
-            <div className="relative">
-              {type === "FIXED_AMOUNT" && <span className="absolute top-1/2 left-3 -translate-y-1/2 text-sm text-muted-foreground">$</span>}
-              <Input
-                id="discount-value"
-                inputMode={type === "PERCENTAGE" ? "numeric" : "decimal"}
-                value={value}
-                onChange={(event) => setValue(event.target.value)}
-                className={type === "FIXED_AMOUNT" ? "pl-7" : "pr-8"}
-                placeholder={type === "PERCENTAGE" ? "20" : "5.00"}
-                aria-invalid={!!errors.value?.length}
-              />
-              {type === "PERCENTAGE" && <span className="absolute top-1/2 right-3 -translate-y-1/2 text-sm text-muted-foreground">%</span>}
-            </div>
-            {errors.value?.map((message) => <p key={message} className="text-sm text-destructive">{resolveMessage(t, message)}</p>)}
-          </div>
-          <div className="rounded-lg border bg-muted/30 p-4 sm:col-span-2">
-            <p className="text-xs font-medium text-muted-foreground">{t("discounts.form.exampleOn100")}</p>
-            <p className="mt-1 flex items-baseline gap-2 text-lg font-semibold tabular-nums">
-              {preview < 10_000 && <span className="text-sm font-normal text-muted-foreground line-through">$100.00</span>}
-              {formatPrice(preview)}
+      <SectionCard title={t("discounts.form.title")} bodyClassName="grid gap-4 sm:grid-cols-2">
+        <Field
+          label={t("discounts.form.internalNameLabel")}
+          name="discount-name"
+          value={name}
+          onChange={(event) => setName(event.target.value)}
+          placeholder={t("discounts.form.namePlaceholder")}
+          maxLength={120}
+          hint={t("discounts.form.nameHelp")}
+          errors={resolve(errors.name)}
+          fieldClassName="sm:col-span-2"
+        />
+        <SelectField
+          label={t("discounts.form.typeLabel")}
+          name="discount-type"
+          value={type}
+          onChange={(event) => {
+            setType(event.target.value as Defaults["type"]);
+            setValue("");
+          }}
+          options={[
+            { value: "PERCENTAGE", label: t("discounts.form.typePercentage") },
+            { value: "FIXED_AMOUNT", label: t("discounts.form.typeFixed") },
+          ]}
+        />
+        {/* The $/% affix is positioned LTR in both locales; AffixField holds that exemption and
+            its reason, so this form carries no direction classes of its own. */}
+        <AffixField
+          label={
+            type === "PERCENTAGE"
+              ? t("discounts.form.percentageOffLabel")
+              : t("discounts.form.amountOffLabel")
+          }
+          name="discount-value"
+          inputMode={type === "PERCENTAGE" ? "numeric" : "decimal"}
+          value={value}
+          onChange={(event) => setValue(event.target.value)}
+          prefix={type === "FIXED_AMOUNT" ? "$" : undefined}
+          suffix={type === "PERCENTAGE" ? "%" : undefined}
+          placeholder={type === "PERCENTAGE" ? "20" : "5.00"}
+          errors={resolve(errors.value)}
+        />
+        <div className="rounded-md border bg-background p-4 sm:col-span-2">
+          <p className="text-xs font-medium text-muted-foreground">
+            {t("discounts.form.exampleOn100")}
+          </p>
+          <p className="mt-1 flex items-baseline gap-2 text-lg font-semibold tabular-nums">
+            {preview < 10_000 && (
+              <span className="text-sm font-normal text-muted-foreground line-through">
+                $100.00
+              </span>
+            )}
+            {formatPrice(preview)}
+          </p>
+        </div>
+      </SectionCard>
+
+      <SectionCard
+        title={t("discounts.form.scheduleTitle")}
+        bodyClassName="grid gap-4 sm:grid-cols-2"
+      >
+        <div className="grid gap-1.5">
+          <Label htmlFor="discount-start">{t("discounts.form.startsLabel")}</Label>
+          <Input
+            id="discount-start"
+            type="datetime-local"
+            value={startsAt}
+            onChange={(event) => setStartsAt(event.target.value)}
+            aria-invalid={!!errors.startsAt?.length || undefined}
+          />
+          <p className="text-xs text-muted-foreground">{t("discounts.form.startsHelp")}</p>
+          {resolve(errors.startsAt)?.map((message) => (
+            <p key={message} className="text-sm text-destructive">
+              {message}
             </p>
-          </div>
-        </CardContent>
-      </Card>
+          ))}
+        </div>
+        <div className="grid gap-1.5">
+          <Label htmlFor="discount-end">{t("discounts.form.endsLabel")}</Label>
+          <Input
+            id="discount-end"
+            type="datetime-local"
+            value={endsAt}
+            onChange={(event) => setEndsAt(event.target.value)}
+            aria-invalid={!!errors.endsAt?.length || undefined}
+          />
+          <p className="text-xs text-muted-foreground">{t("discounts.form.endsHelp")}</p>
+          {resolve(errors.endsAt)?.map((message) => (
+            <p key={message} className="text-sm text-destructive">
+              {message}
+            </p>
+          ))}
+        </div>
+        <p className="text-xs text-muted-foreground sm:col-span-2">
+          {t("discounts.form.timezoneNote")}
+        </p>
+        <SwitchField
+          label={t("discounts.form.enableLabel")}
+          name="discount-enabled"
+          hint={t("discounts.form.enableHelp")}
+          checked={isEnabled}
+          onCheckedChange={setEnabled}
+          aria-label={t("discounts.form.enableLabel")}
+          className="sm:col-span-2"
+        />
+      </SectionCard>
 
-      <Card>
-        <CardHeader>
-          <CardTitle>{t("discounts.form.scheduleTitle")}</CardTitle>
-        </CardHeader>
-        <CardContent className="grid gap-4 sm:grid-cols-2">
-          <div className="grid gap-1.5">
-            <Label htmlFor="discount-start">{t("discounts.form.startsLabel")}</Label>
-            <Input id="discount-start" type="datetime-local" value={startsAt} onChange={(event) => setStartsAt(event.target.value)} aria-invalid={!!errors.startsAt?.length} />
-            <p className="text-xs text-muted-foreground">{t("discounts.form.startsHelp")}</p>
-            {errors.startsAt?.map((message) => <p key={message} className="text-sm text-destructive">{resolveMessage(t, message)}</p>)}
-          </div>
-          <div className="grid gap-1.5">
-            <Label htmlFor="discount-end">{t("discounts.form.endsLabel")}</Label>
-            <Input id="discount-end" type="datetime-local" value={endsAt} onChange={(event) => setEndsAt(event.target.value)} aria-invalid={!!errors.endsAt?.length} />
-            <p className="text-xs text-muted-foreground">{t("discounts.form.endsHelp")}</p>
-            {errors.endsAt?.map((message) => <p key={message} className="text-sm text-destructive">{resolveMessage(t, message)}</p>)}
-          </div>
-          <p className="text-xs text-muted-foreground sm:col-span-2">{t("discounts.form.timezoneNote")}</p>
-          <div className="flex items-center justify-between gap-4 rounded-lg border p-4 sm:col-span-2">
-            <div>
-              <Label htmlFor="discount-enabled">{t("discounts.form.enableLabel")}</Label>
-              <p className="mt-1 text-xs text-muted-foreground">{t("discounts.form.enableHelp")}</p>
-            </div>
-            <Switch id="discount-enabled" checked={isEnabled} onCheckedChange={setEnabled} aria-label={t("discounts.form.enableLabel")} />
-          </div>
-        </CardContent>
-      </Card>
-
-      <div className="flex flex-wrap items-center gap-3 rounded-xl border bg-background px-4 py-3 sm:sticky sm:bottom-3 sm:z-10 sm:-mx-1 sm:bg-background/95 sm:shadow-lg sm:backdrop-blur">
-        <Button type="submit" disabled={pending}>{pending ? t("discounts.form.saving") : submitLabel}</Button>
-        <Link href="/admin/discounts" className={buttonVariants({ variant: "ghost" })}>{t("common.cancel")}</Link>
-        {state.error && <p role="alert" className="text-sm text-destructive">{resolveMessage(t, state.error)}</p>}
-      </div>
+      {/*
+        This form drives a transition rather than a server action, so `useFormStatus` reports
+        nothing and `SubmitButton` would never show its pending label (ADMIN_UI.md §5).
+      */}
+      <FormActions error={state.error && resolveMessage(t, state.error)}>
+        <Button type="submit" disabled={pending}>
+          {pending ? t("discounts.form.saving") : submitLabel}
+        </Button>
+        <Link href="/admin/discounts" className={buttonVariants({ variant: "ghost" })}>
+          {t("common.cancel")}
+        </Link>
+      </FormActions>
     </form>
   );
 }

@@ -5,7 +5,7 @@ import { AdminPagination } from "@/components/admin-pagination";
 import { EmptyState } from "@/components/admin/empty-state";
 import { PageHeader } from "@/components/admin/page-header";
 import { buttonVariants } from "@/components/ui/button";
-import { Card } from "@/components/ui/card";
+import { SectionCard } from "@/components/admin/section-card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { listDiscountsPage } from "@/lib/data/discounts";
 import { getT } from "@/lib/i18n/locale";
@@ -68,7 +68,7 @@ export default async function DiscountsPage({
         </Link>
       </nav>
       <AdminPageSizeControl page={page} pageSize={pageSize} total={total} noun={t("discounts.page.noun")} />
-      <Card className="gap-0 overflow-hidden py-0">
+      <SectionCard bodyClassName="p-0">
         {items.length === 0 ? (
           <EmptyState
             icon={BadgePercent}
@@ -144,7 +144,7 @@ export default async function DiscountsPage({
             </div>
           </>
         )}
-      </Card>
+      </SectionCard>
       <AdminPagination
         basePath="/admin/discounts"
         page={page}

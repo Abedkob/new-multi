@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useActionState, useState } from "react";
 import type { CategoryFormState } from "./actions";
-import { Field, FormError } from "@/components/field";
+import { Field, FormError, SelectField } from "@/components/field";
 import { ImageField } from "@/components/image-field";
 import { SubmitButton } from "@/components/submit-button";
 import { buttonVariants } from "@/components/ui/button";
@@ -61,30 +61,22 @@ export function CategoryForm({
         errors={errors.name?.map((e) => resolveMessage(t, e))}
       />
       <CategoryImageField defaultValue={v.imageUrl || ""} errors={errors.imageUrl} />
-      <div className="grid gap-1.5">
-        <Label htmlFor="parentId">{t("categories.form.parentLabel")}</Label>
-        <select
-          id="parentId"
-          name="parentId"
-          defaultValue={v.parentId}
-          className="h-8 w-full rounded-lg border border-input bg-transparent px-2.5 text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50"
-        >
-          <option value="">{t("categories.form.noneTopLevel")}</option>
-          {parents.map((p) => (
-            <option key={p.id} value={p.id}>
-              {"   ".repeat(p.depth)}
-              {p.depth > 0 ? "└ " : ""}
-              {p.label}
-            </option>
-          ))}
-        </select>
-        <p className="text-xs text-muted-foreground">{t("categories.form.nestHelp")}</p>
-        {errors.parentId?.map((e) => (
-          <p key={e} className="text-sm text-destructive">
-            {resolveMessage(t, e)}
-          </p>
+      <SelectField
+        label={t("categories.form.parentLabel")}
+        name="parentId"
+        defaultValue={v.parentId}
+        hint={t("categories.form.nestHelp")}
+        errors={errors.parentId?.map((e) => resolveMessage(t, e))}
+      >
+        <option value="">{t("categories.form.noneTopLevel")}</option>
+        {parents.map((p) => (
+          <option key={p.id} value={p.id}>
+            {"   ".repeat(p.depth)}
+            {p.depth > 0 ? "└ " : ""}
+            {p.label}
+          </option>
         ))}
-      </div>
+      </SelectField>
       <FormError message={state.error && resolveMessage(t, state.error)} />
       <div className="flex gap-2">
         <SubmitButton>{submitLabel}</SubmitButton>

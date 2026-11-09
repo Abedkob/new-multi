@@ -4,7 +4,7 @@ import { useState } from "react";
 import { useFormStatus } from "react-dom";
 import { Thumb } from "@/components/admin/thumb";
 import { Button } from "@/components/ui/button";
-import { Card } from "@/components/ui/card";
+import { SectionCard } from "@/components/admin/section-card";
 import { formatPrice } from "@/lib/format";
 import { resolveMessage, useT } from "@/lib/i18n/context";
 import { encodeMessage } from "@/lib/i18n/types";
@@ -63,7 +63,7 @@ export function DiscountProductPicker({
         </div>
       </div>
 
-      <Card className="gap-0 overflow-hidden py-0">
+      <SectionCard bodyClassName="p-0">
         <div className="divide-y">
           {items.map((item) => {
             const checked = selected.has(item.id);
@@ -107,7 +107,7 @@ export function DiscountProductPicker({
             );
           })}
         </div>
-      </Card>
+      </SectionCard>
 
       <div className="flex flex-wrap items-center gap-3">
         <SaveSelectionButton />

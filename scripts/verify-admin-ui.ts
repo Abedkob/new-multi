@@ -38,21 +38,14 @@ function fail(name: string, detail: string) {
 }
 
 /** Files still carrying pre-baseline markup. Shrinks; never grows. */
-const PENDING = new Set<string>([
-  "(panel)/categories/page.tsx",
-  "(panel)/delivery/delivery-settings-form.tsx",
-  "(panel)/discounts/page.tsx",
-  "(panel)/discounts/discount-form.tsx",
-  "(panel)/discounts/discount-product-picker.tsx",
-  "(panel)/discounts/coupons/page.tsx",
-  "(panel)/discounts/[id]/edit/page.tsx",
-  "(panel)/discounts/coupons/coupon-form.tsx",
-  "(panel)/marketing/integrations/integrations-form.tsx",
-  "(panel)/orders/[id]/page.tsx",
-  "(panel)/social-links/social-links-form.tsx",
-  "(panel)/staff/staff-manager.tsx",
-  "change-password/page.tsx",
-]);
+/**
+ * Files still carrying pre-baseline markup. **Empty, and it stays that way**: every admin screen
+ * has been converted, so a violation is now a regression rather than a backlog item, and the fix
+ * is the screen, never a line here. The stale-entry check below is what stopped this list from
+ * becoming an exemption while it was being worked down — it fails on an entry that no longer
+ * violates anything.
+ */
+const PENDING = new Set<string>([]);
 
 const ADMIN = "app/admin";
 
@@ -177,7 +170,11 @@ for (const rule of RULES) {
   );
   const stale = [...PENDING].filter((key) => !stillDirty.has(key));
   if (stale.length === 0) {
-    ok(`every one of the ${PENDING.size} pending files still needs converting`);
+    ok(
+      PENDING.size === 0
+        ? "nothing is exempt: PENDING is empty"
+        : `every one of the ${PENDING.size} pending files still needs converting`,
+    );
   } else {
     fail(
       "the pending list has stale entries",
@@ -188,6 +185,10 @@ for (const rule of RULES) {
 
 console.log(
   `\n${checks - failures}/${checks} baseline checks passed` +
-    (failures ? ` — ${failures} FAILED\n` : `, ${PENDING.size} file(s) left to convert\n`),
+    (failures
+      ? ` — ${failures} FAILED\n`
+      : PENDING.size === 0
+        ? ", every admin screen on the baseline\n"
+        : `, ${PENDING.size} file(s) left to convert\n`),
 );
 if (failures) process.exitCode = 1;

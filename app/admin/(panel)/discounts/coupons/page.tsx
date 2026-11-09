@@ -5,7 +5,7 @@ import { AdminPagination } from "@/components/admin-pagination";
 import { EmptyState } from "@/components/admin/empty-state";
 import { PageHeader } from "@/components/admin/page-header";
 import { buttonVariants } from "@/components/ui/button";
-import { Card } from "@/components/ui/card";
+import { SectionCard } from "@/components/admin/section-card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { listCouponsPage } from "@/lib/data/coupons";
 import { getT } from "@/lib/i18n/locale";
@@ -36,12 +36,12 @@ export default async function CouponsPage({ searchParams }: { searchParams: Prom
       <Link href={archived ? "/admin/discounts/coupons" : "/admin/discounts/coupons?archived=1"} className="text-sm font-medium underline underline-offset-4">{archived ? t("coupons.page.viewCurrent") : t("coupons.page.viewArchived")}</Link>
     </div>
     <AdminPageSizeControl page={page} pageSize={pageSize} total={total} noun={t("coupons.page.noun")} />
-    <Card className="gap-0 overflow-hidden py-0">
+    <SectionCard bodyClassName="p-0">
       {!items.length ? <EmptyState icon={TicketPercent} title={archived ? t("coupons.empty.archived") : t("coupons.empty.title")} action={archived ? undefined : createButton}>{t("coupons.empty.body")}</EmptyState> : <>
         <div className="divide-y md:hidden">{items.map((coupon) => <article key={coupon.id} className="grid gap-4 p-4"><div className="flex items-start justify-between gap-3"><div className="min-w-0"><Link href={coupon.archivedAt ? "#" : `/admin/discounts/coupons/${coupon.id}/edit`} className="font-medium hover:underline">{coupon.name || coupon.code}</Link>{coupon.name && <p dir="ltr" className="text-xs text-muted-foreground">{coupon.code}</p>}<p className="mt-1 text-sm"><CouponOfferLabel coupon={coupon} products={coupon._count.products} /></p></div><CouponStatusBadge coupon={coupon} at={now} /></div><p className="text-xs text-muted-foreground"><CouponScheduleLabel startsAt={coupon.startsAt?.toISOString() ?? null} endsAt={coupon.endsAt?.toISOString() ?? null} /></p><p className="text-sm"><CouponAnnouncementState coupon={coupon} at={now} /></p><CouponActions id={coupon.id} code={coupon.code} archived={!!coupon.archivedAt} enabled={coupon.isEnabled} /></article>)}</div>
         <div className="hidden md:block"><Table><TableHeader><TableRow className="bg-muted/50"><TableHead className="ps-4">{t("coupons.table.coupon")}</TableHead><TableHead>{t("coupons.table.offer")}</TableHead><TableHead>{t("coupons.table.status")}</TableHead><TableHead>{t("coupons.table.announcement")}</TableHead><TableHead className="pe-4 text-end"><span className="sr-only">{t("common.actionsSr")}</span></TableHead></TableRow></TableHeader><TableBody>{items.map((coupon) => <TableRow key={coupon.id}><TableCell className="ps-4"><Link href={coupon.archivedAt ? "#" : `/admin/discounts/coupons/${coupon.id}/edit`} className="font-medium hover:underline">{coupon.name || coupon.code}</Link>{coupon.name && <p dir="ltr" className="text-xs text-muted-foreground">{coupon.code}</p>}</TableCell><TableCell><CouponOfferLabel coupon={coupon} products={coupon._count.products} /></TableCell><TableCell><CouponStatusBadge coupon={coupon} at={now} /><p className="mt-1 text-xs text-muted-foreground"><CouponScheduleLabel startsAt={coupon.startsAt?.toISOString() ?? null} endsAt={coupon.endsAt?.toISOString() ?? null} /></p></TableCell><TableCell className="text-sm"><CouponAnnouncementState coupon={coupon} at={now} /></TableCell><TableCell className="pe-4"><CouponActions id={coupon.id} code={coupon.code} archived={!!coupon.archivedAt} enabled={coupon.isEnabled} /></TableCell></TableRow>)}</TableBody></Table></div>
       </>}
-    </Card>
+    </SectionCard>
     <AdminPagination basePath="/admin/discounts/coupons" page={page} pages={pages} total={total} noun={t("coupons.page.noun")} params={{ ...(archived ? { archived: "1" } : {}), ...(pageSize === 25 ? {} : { perPage: String(pageSize) }) }} />
   </div>;
 }

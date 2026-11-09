@@ -6,7 +6,7 @@ import { EmptyState } from "@/components/admin/empty-state";
 import { PageHeader } from "@/components/admin/page-header";
 import { Thumb } from "@/components/admin/thumb";
 import { buttonVariants } from "@/components/ui/button";
-import { Card } from "@/components/ui/card";
+import { SectionCard } from "@/components/admin/section-card";
 import {
   Table,
   TableBody,
@@ -48,7 +48,7 @@ export default async function CategoriesPage({ searchParams }: PageProps<"/admin
         actions={addButton}
       />
       <AdminPageSizeControl page={page} pageSize={pageSize} total={total} noun={t("categories.page.noun")} />
-      <Card className="gap-0 overflow-hidden py-0">
+      <SectionCard bodyClassName="p-0">
         {tree.length === 0 ? (
           <EmptyState icon={FolderTree} title={t("categories.empty.title")} action={addButton}>
             {t("categories.empty.body")}
@@ -102,7 +102,7 @@ export default async function CategoriesPage({ searchParams }: PageProps<"/admin
             </TableBody>
           </Table>
         )}
-      </Card>
+      </SectionCard>
       <AdminPagination
         basePath="/admin/categories"
         page={page}

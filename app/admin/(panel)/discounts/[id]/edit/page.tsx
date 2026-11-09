@@ -4,6 +4,7 @@ import { Search } from "lucide-react";
 import { AdminPagination } from "@/components/admin-pagination";
 import { PageHeader } from "@/components/admin/page-header";
 import { buttonVariants } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { getDiscount, listDiscountProductsPage } from "@/lib/data/discounts";
 import { getT } from "@/lib/i18n/locale";
 import { encodeMessage, resolveMessage } from "@/lib/i18n/types";
@@ -127,13 +128,13 @@ export default async function EditDiscountPage({
           <form method="get" className="relative max-w-sm" role="search">
             <input type="hidden" name="section" value="products" />
             <Search className="pointer-events-none absolute top-1/2 start-3 size-4 -translate-y-1/2 text-muted-foreground" aria-hidden />
-            <input
+            <Input
               name="q"
               type="search"
               defaultValue={q}
               placeholder={t("products.page.searchPlaceholder")}
               aria-label={t("products.page.searchAriaLabel")}
-              className="h-9 w-full rounded-lg border border-input bg-background pe-3 ps-9 text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50"
+              className="ps-9"
             />
           </form>
 
@@ -142,7 +143,7 @@ export default async function EditDiscountPage({
           )}
 
           {products.items.length === 0 ? (
-            <div className="grid justify-items-center gap-2 rounded-xl border px-6 py-12 text-center">
+            <div className="grid justify-items-center gap-2 rounded-lg border border-dashed px-6 py-12 text-center">
               <p className="font-medium">{t("discounts.products.noMatch")}</p>
               <Link href={productsHref} className="text-sm underline underline-offset-4">
                 {t("products.page.showAllProducts")}

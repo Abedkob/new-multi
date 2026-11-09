@@ -3,10 +3,9 @@
 import { useActionState } from "react";
 import { ExternalLink } from "lucide-react";
 import { saveOwnerIntegrationsAction } from "./actions";
+import { Field, FormActions } from "@/components/field";
 import { SubmitButton } from "@/components/submit-button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
+import { SectionCard } from "@/components/admin/section-card";
 import { resolveMessage, useLocale, useT } from "@/lib/i18n/context";
 import { INTEGRATION_GUIDES } from "@/lib/integrations-guide";
 import type { IntegrationKey } from "@/lib/integrations";
@@ -46,26 +45,25 @@ export function IntegrationsForm({
 
   return (
     <form action={action} className="grid max-w-3xl gap-4">
-      <Card>
-        <CardHeader>
-          <CardTitle>{t("integrations.page.title")}</CardTitle>
-          <CardDescription>{t("integrations.page.description")}</CardDescription>
-        </CardHeader>
-        <CardContent className="grid gap-3 text-sm text-muted-foreground">
-          <p>{t("integrations.paste.hint")}</p>
-          <p>{t("integrations.consent.notice")}</p>
-          <p>{t("integrations.verification.notice")}</p>
-          <p>{t("integrations.audit.notice")}</p>
-        </CardContent>
-      </Card>
+      <SectionCard
+        title={t("integrations.page.title")}
+        description={t("integrations.page.description")}
+        bodyClassName="grid gap-3 p-4 text-sm text-muted-foreground"
+      >
+        <p>{t("integrations.paste.hint")}</p>
+        <p>{t("integrations.consent.notice")}</p>
+        <p>{t("integrations.verification.notice")}</p>
+        <p>{t("integrations.audit.notice")}</p>
+      </SectionCard>
 
       {INTEGRATION_GUIDES.map((guide) => {
         const errors = state.fieldErrors?.[guide.key];
         const value = values[guide.key] ?? "";
         return (
-          <Card key={guide.key}>
-            <CardHeader>
-              <CardTitle className="flex flex-wrap items-center gap-2">
+          <SectionCard
+            key={guide.key}
+            title={
+              <span className="flex flex-wrap items-center gap-2">
                 {t(guide.labelKey)}
                 <span
                   className={
@@ -76,10 +74,11 @@ export function IntegrationsForm({
                 >
                   {value ? t("integrations.status.on") : t("integrations.status.off")}
                 </span>
-              </CardTitle>
-              <CardDescription>{t(guide.purposeKey)}</CardDescription>
-            </CardHeader>
-            <CardContent className="grid gap-4">
+              </span>
+            }
+            description={t(guide.purposeKey)}
+            bodyClassName="grid gap-4 p-4"
+          >
               <div className="grid gap-1.5">
                 <p className="text-sm font-medium">{t("integrations.guide.heading")}</p>
                 <ol className="ms-4 grid list-decimal gap-1 text-sm text-muted-foreground">
@@ -98,31 +97,18 @@ export function IntegrationsForm({
                 )}
               </div>
 
-              <div className="grid gap-1.5">
-                <Label htmlFor={guide.key}>{t(guide.labelKey)}</Label>
-                <Input
-                  id={guide.key}
-                  name={guide.key}
-                  defaultValue={value}
-                  placeholder={guide.placeholder}
-                  autoComplete="off"
-                  spellCheck={false}
-                  dir="ltr"
-                  aria-invalid={!!errors?.length}
-                  aria-describedby={errors?.length ? `${guide.key}-error` : `${guide.key}-hint`}
-                />
-                {errors?.length ? (
-                  errors.map((message) => (
-                    <p id={`${guide.key}-error`} key={message} className="text-sm text-destructive">
-                      {resolveMessage(t, message)}
-                    </p>
-                  ))
-                ) : (
-                  <p id={`${guide.key}-hint`} className="text-xs text-muted-foreground">
-                    {t("integrations.clearHint")}
-                  </p>
-                )}
-              </div>
+              <Field
+                label={t(guide.labelKey)}
+                name={guide.key}
+                defaultValue={value}
+                placeholder={guide.placeholder}
+                autoComplete="off"
+                spellCheck={false}
+                // A measurement id is Latin-script and never reads right-to-left.
+                dir="ltr"
+                hint={t("integrations.clearHint")}
+                errors={errors?.map((message) => resolveMessage(t, message))}
+              />
 
               {/* Who touched this field last. The audit log is the source, and this is the only
                   part of it the owner can see: an actor and a time, for this field, newest
@@ -160,18 +146,16 @@ export function IntegrationsForm({
                   <ExternalLink className="size-3.5" aria-hidden />
                 </a>
               </div>
-            </CardContent>
-          </Card>
+          </SectionCard>
         );
       })}
 
-      <div className="flex flex-wrap items-center gap-3">
+      <FormActions
+        status={state.ok ? t("integrations.saved") : undefined}
+        error={state.error && resolveMessage(t, state.error)}
+      >
         <SubmitButton>{t("integrations.save")}</SubmitButton>
-        {state.ok && <p className="text-sm text-muted-foreground">{t("integrations.saved")}</p>}
-        {state.error && (
-          <p className="text-sm text-destructive">{resolveMessage(t, state.error)}</p>
-        )}
-      </div>
+      </FormActions>
     </form>
   );
 }

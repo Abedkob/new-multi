@@ -15,7 +15,7 @@ it later. The storefront is a different product with 13 templates and is explici
 | A boxed panel had four spellings | `rounded-lg border` ×33, `rounded-md border` ×14, `rounded-xl border` ×12, plus `Card` ×28 |
 | Files using `Card` **and** a hand-rolled panel on the same screen | 9 |
 | Bordered panels declaring **no** surface colour, on a `bg-muted/40` page | 23 of 33 — transparent panels beside opaque ones |
-| `Field` imports | 2 files of 84, with forms on a dozen screens |
+| `Field` imports | 2 files of 84 in `/admin` — while `/platform` used it in 15. See §5 for why |
 | Private copies of "a figure with a label" | 4 (`Stat`, `Figure`, `Pair`, plus `StatTile` itself) |
 | `text-sm` / `text-xs` | 162 / 116 — against 14 uses of every larger size combined |
 
@@ -108,22 +108,47 @@ look calmer; three greys stacked on each other means nothing on the screen has w
 
 ## 5. Forms
 
-`Field` (`components/field.tsx`) for every labelled input, and `FormError` for the form's own
-failure. No hand-rolled `<label>` + `<Input>` pair: label-to-input spacing, where the hint sits,
-where the error sits and `aria-invalid` are decided once.
+**Why the admin had `Field` in 2 files while the platform console had it in 15.** `Field` wrapped
+`<Input>` and nothing else. The console's forms are all plain text inputs, so it fitted; every
+admin form has a `<select>`, a `Textarea`, a `Switch` or an affixed number somewhere, and a form
+drops out of `Field` at the first one — after which the remaining fields get hand-rolled too, for
+consistency *inside that file*. The category form is the proof: it used `Field` for the name and
+hand-rolled the parent `<select>` directly underneath.
+
+Worse, the hand-rolled versions were **better**: they wired `aria-describedby` to the hint and the
+error, which `Field` did not. Adopting it was an accessibility downgrade.
+
+So `components/field.tsx` is now one member per kind of control, all over one `FieldShell`:
+
+| | |
+|---|---|
+| `Field` | a text input |
+| `AffixField` | a number with a `$` or `%` affix |
+| `TextareaField` | a textarea |
+| `SelectField` | a `<select>`, styled exactly as `Input` (it had three different spellings) |
+| `SwitchField` | a switch with its label and explanation beside it, not above it |
+| `FormError` | the form's own failure |
+| `FormActions` | the row a form ends with (four files carried it verbatim, one had drifted) |
+
+The shell decides four things once: the label is bound to the control by id; the hint and the error
+are bound by `aria-describedby`; a hint and an error never show together; and `aria-invalid`
+follows the errors rather than a separate flag that can disagree with them.
 
 ```tsx
 <form action={action} className="grid gap-4">
-  <Field label={t("product.name")} name="name" errors={state?.errors?.name} hint={…} />
-  <FormError message={state?.message} />
-  <SubmitButton>{t("common.save")}</SubmitButton>
+  <Field label={t("common.name")} name="name" errors={resolve(state.fieldErrors?.name)} hint={…} />
+  <FormActions status={state.ok ? t("saved") : undefined} error={…}>
+    <SubmitButton>{t("common.save")}</SubmitButton>
+  </FormActions>
 </form>
 ```
 
-- A hint and an error never show together — `Field` already suppresses the hint when there is an
-  error, so the field never gives advice and a complaint at once.
-- `SubmitButton` disables itself through `useFormStatus`. Every submitting control uses it, so a
-  double submit is prevented in one place.
+- `errors` are **already-resolved strings**. The caller holds the dictionary, because this module
+  has no hooks and must stay renderable from a Server Component.
+- `SubmitButton` disables itself through `useFormStatus`, so **a form with an `action` always uses
+  it**. A form that drives a `useTransition` instead (the discount and coupon forms) keeps its own
+  `Button disabled={pending}` — `useFormStatus` reports nothing there, so `SubmitButton` would
+  never show its pending label. Say which, in a comment, when it is the second kind.
 - A money input holds **the text the person typed**, never a re-formatted number. A controlled
   field that reformats on each keystroke cannot be typed into: `2` becomes `2.00`, the `.` of
   `2.50` lands after it, and the value silently settles on `2.01`. That shipped once, in the till.
@@ -174,6 +199,11 @@ tiles. `verify:aggregates`' P4-22b fails if anything adds them.
 
 - Logical properties only: `ms-*`/`me-*`, `ps-*`/`pe-*`, `start-*`/`end-*`. Never `ml-*`, `pr-*`,
   `left-*`. A directional icon gets `rtl:rotate-180` (`PageHeader`'s back arrow is the example).
+  **The one exemption is `AffixField`**, where a `$` or `%` stays on the LTR side in both
+  languages: numeric formatting is a stated non-goal, so figures render in Latin digits with a
+  leading `$` either way and flipping only the affix would read as a bug. Two forms used to carry
+  those classes themselves; now neither does, and the exemption is written down once, in the
+  component, next to the classes it excuses.
 - Every string comes from `lib/i18n/dictionaries/{en,ar}.ts`. Both files, in the same commit.
 - A number is `tabular-nums` wherever it can change — a total that shifts width as it updates
   reads as a glitch.
@@ -199,15 +229,18 @@ The check asserts that list does not **grow**, and that every entry still earns 
 entry that is already clean *fails*, so the list cannot rot into a permanent exemption. It shrinks
 as screens are converted, and the fix for a new violation is never to add a line to it.
 
-**Converted so far:** the till's three screens, the orders list, the staff page, the dashboard,
-the products list and the stock screen.
+**Every screen under `app/admin` is on the baseline**, so `PENDING` is empty and a violation is
+now a regression rather than a backlog item. The fix for one is the screen, never a line in that
+list.
 
-**Still to convert** (13 files, in the script's `PENDING`): categories, discounts and coupons, the
-order detail, delivery, social links, marketing integrations, change-password, and the staff
-manager — most of them forms, which is where `Field` being used twice in 84 files actually costs
-something. One fold is tracked here rather than by the checker, since
-it needs a server-run suite to confirm: `analytics/live-visitors.tsx` is a fifth copy of `StatTile`
-with one extra state (the live source being unreachable), and folding it in means giving `StatTile`
-that state and re-running `verify:report-states`.
+One fold is tracked here rather than by the checker, since it needs a server-run suite to
+confirm: `analytics/live-visitors.tsx` is a fifth copy of `StatTile` with one extra state (the
+live source being unreachable), and folding it in means giving `StatTile` that state and
+re-running `verify:report-states`.
+
+Two things found while converting and deliberately **not** fixed here, because neither is a UI
+decision: `staffAccountSchema` (`lib/validation.ts`) returns plain English strings where every
+other schema returns dictionary keys, so those two field errors do not translate; and
+`SubmitButton`'s default `pendingText` is the hardcoded English `"Saving…"`.
 
 It cannot check whether a screen is *good*. That is still a person looking at it.

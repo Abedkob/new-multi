@@ -1,10 +1,11 @@
 "use client";
 
 import { useActionState, useState } from "react";
+import { Users } from "lucide-react";
+import { EmptyState } from "@/components/admin/empty-state";
+import { SectionCard } from "@/components/admin/section-card";
+import { Field, FormError } from "@/components/field";
 import { Button } from "@/components/ui/button";
-import { Card } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { useT } from "@/lib/i18n/context";
 import type { DictionaryKey } from "@/lib/i18n/dictionaries/en";
 import { addStaffAction, resetStaffPasswordAction, revokeStaffAction } from "./actions";
@@ -36,47 +37,44 @@ export function StaffManager({ staff }: { staff: StaffRow[] }) {
 
   return (
     <div className="grid gap-4">
-      <Card className="grid gap-4 p-4">
-        <h2 className="text-sm font-medium">{t("staff.add.title")}</h2>
+      <SectionCard title={t("staff.add.title")} bodyClassName="grid gap-4">
         <form action={addFormAction} className="grid gap-3 sm:grid-cols-[1fr_1fr_auto] sm:items-end">
-          <div className="grid gap-1">
-            <Label htmlFor="name">{t("common.name")}</Label>
-            <Input id="name" name="name" required defaultValue={addState.values?.name ?? ""} />
-            {addState.fieldErrors?.name && (
-              <span className="text-xs text-destructive">{addState.fieldErrors.name[0]}</span>
-            )}
-          </div>
-          <div className="grid gap-1">
-            <Label htmlFor="email">{t("staff.add.email")}</Label>
-            <Input
-              id="email"
-              name="email"
-              type="email"
-              required
-              defaultValue={addState.values?.email ?? ""}
-            />
-            {addState.fieldErrors?.email && (
-              <span className="text-xs text-destructive">{addState.fieldErrors.email[0]}</span>
-            )}
-          </div>
+          {/*
+            These messages come from `staffAccountSchema` as plain English strings rather than
+            dictionary keys, so they are passed straight through. Every other form in the admin
+            encodes its errors and resolves them; this schema has not been converted yet.
+          */}
+          <Field
+            label={t("common.name")}
+            name="name"
+            required
+            defaultValue={addState.values?.name ?? ""}
+            errors={addState.fieldErrors?.name}
+          />
+          <Field
+            label={t("staff.add.email")}
+            name="email"
+            type="email"
+            required
+            defaultValue={addState.values?.email ?? ""}
+            errors={addState.fieldErrors?.email}
+          />
           <Button type="submit" disabled={adding}>
             {t("staff.add.submit")}
           </Button>
         </form>
-        {addState.error && (
-          <p className="text-sm text-destructive">{error(addState.error)}</p>
-        )}
+        <FormError message={error(addState.error) ?? undefined} />
         {addState.firstPassword && (
           <FirstPassword password={addState.firstPassword} heading={t("staff.password.heading")} note={t("staff.password.note")} />
         )}
-      </Card>
+      </SectionCard>
 
       {staff.length === 0 ? (
-        <p className="rounded-md border border-dashed p-6 text-sm text-muted-foreground">
-          {t("staff.list.empty")}
-        </p>
+        <SectionCard bodyClassName="p-0">
+          <EmptyState icon={Users} title={t("staff.list.empty")} />
+        </SectionCard>
       ) : (
-        <Card className="grid gap-3 p-4" data-testid="staff-list">
+        <SectionCard bodyClassName="grid gap-3" data-testid="staff-list">
           {staff.map((member) => (
             <div key={member.id} className="grid gap-2 border-b pb-3 last:border-0 last:pb-0">
               <div className="flex flex-wrap items-center justify-between gap-2">
@@ -119,7 +117,7 @@ export function StaffManager({ staff }: { staff: StaffRow[] }) {
               )}
             </div>
           ))}
-        </Card>
+        </SectionCard>
       )}
     </div>
   );
