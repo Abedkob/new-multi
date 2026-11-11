@@ -197,7 +197,15 @@ export function ContentEditor({
       </header>
 
       <div className="flex min-h-0 flex-1">
-        <aside className="w-[26rem] shrink-0 overflow-y-auto border-e bg-background">
+        {/* One pane on a phone, two from `lg`. A fixed 26rem form pane beside a preview pane put
+            603px of layout in a 375px viewport, so the whole editor slid sideways under the
+            thumb — the only screen in either tool that still did, and the one place a static
+            check was never going to notice, because a fixed width is a perfectly good class.
+            The preview is hidden rather than stacked: it is an iframe of a storefront inside a
+            device frame, and shrinking that to 343px shows a phone drawn inside a phone. The
+            owner's own storefront is one tap away on the real device, which is the better
+            preview anyway. */}
+        <aside className="w-full shrink-0 overflow-y-auto border-e bg-background lg:w-[26rem]">
           <p className="border-b p-4 text-xs text-muted-foreground">{t("content.editor.sidebarIntro")}</p>
           {sections.map((s, i) => {
             const open = openId === s.id;
@@ -294,7 +302,7 @@ export function ContentEditor({
           })}
         </aside>
 
-        <main className="flex min-w-0 flex-1 flex-col">
+        <main className="hidden min-w-0 flex-1 flex-col lg:flex">
           <div className="flex flex-wrap items-center gap-3 border-b bg-background px-4 py-2">
             <span className="text-sm font-medium">{t("content.editor.livePreview")}</span>
             <Segmented

@@ -13,7 +13,7 @@ export default async function NewStorePage() {
     label: describeTimeZone(value),
   }));
   return (
-    <div className="grid gap-6">
+    <div className="grid max-w-3xl gap-6">
       <PageHeader
         title="New store"
         description="Creates the store and its owner account with a one-time password."

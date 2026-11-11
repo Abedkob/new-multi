@@ -53,7 +53,15 @@ export function SectionCard({
   const hasBody = children !== undefined && children !== null && children !== false;
 
   return (
-    <section className={cn("rounded-lg border bg-card", className)} {...props}>
+    // `min-w-0` is load-bearing, not tidiness. A panel is almost always a grid item, and a grid
+    // item's `min-width` defaults to `auto` — its min-content. So a panel holding a table grew to
+    // the table's natural width, every ancestor grew with it, and `components/ui/table`'s own
+    // `overflow-x-auto` never fired because its `w-full` container was never narrower than its
+    // contents. The result was the PAGE scrolling sideways instead of the table: /admin/products
+    // measured 984px of document at a 375px viewport, /admin/orders 538px. §11 says no
+    // horizontal page scroll, and no class name on any of those screens was wrong, which is why
+    // the static check could not see it.
+    <section className={cn("min-w-0 rounded-lg border bg-card", className)} {...props}>
       {(title || actions) && (
         <div
           className={cn(

@@ -22,7 +22,7 @@ export default async function PlatformNotificationsPage() {
   ]);
 
   return (
-    <div className="grid gap-4">
+    <div className="grid max-w-3xl gap-4">
       <PageHeader
         title="Notifications"
         description="Alerts about the platform itself: stores going quiet or declining, ingestion and aggregation health, Redis, and push delivery. Store names appear; customer and order data never does."

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useEffect, useState, useTransition } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
@@ -175,18 +175,73 @@ function LanguageToggleButton() {
   );
 }
 
-/** A group heading. Small, quiet and uppercase: it has to separate without competing with the
- * destinations underneath it, which are the things people actually aim at. */
+/**
+ * A group heading. Quiet, sentence case, and deliberately **not** a tracked-out capital label.
+ *
+ * It was `text-[0.6875rem] font-semibold uppercase tracking-wider`, which is wrong in both
+ * languages for different reasons. In Arabic `text-transform: uppercase` does nothing — the
+ * script has no case — while `letter-spacing: 0.55px` very much does something: it pushes apart
+ * letters that are supposed to join, so `العمل اليومي` was being set with its cursive broken.
+ * Measured in the browser, not assumed. In English it is the house style of every generated
+ * admin, five of them stacked down one column.
+ *
+ * So: the same size as the meta step, medium rather than semibold, and no transform. It still
+ * separates — the gap between groups and the weight of the destinations do that — and it now
+ * says the same thing in both scripts.
+ */
 function GroupHeading({ children }: { children: React.ReactNode }) {
   return (
-    <p className="truncate px-3 pt-1 text-[0.6875rem] font-semibold uppercase tracking-wider text-muted-foreground/70">
+    <p className="truncate px-3 pb-0.5 pt-2 text-xs font-medium text-muted-foreground">
       {children}
     </p>
   );
 }
 
-/** One destination. The active item is the only filled thing in the sidebar, so "where am I" is
- * answered before anything else is read. */
+/**
+ * Orders waiting, in the one colour on this screen that means "something needs you".
+ *
+ * It was `bg-amber-500 text-white`, in two places — the sidebar item and the phone header, each
+ * with its own copy of the classes. White on amber-500 measures **2.15:1**, less than half the
+ * 4.5 line, on the single element in the product whose entire job is to be read at a glance
+ * across a room. Amber-950 on amber-400 measures 8.97:1 and is *louder*, not quieter: the chip
+ * keeps its colour and gains its number back.
+ *
+ * One component now, so the two places cannot drift again — which is how one of them ended up
+ * with a different border radius already.
+ */
+function PendingBadge({
+  count,
+  active = false,
+  label,
+}: {
+  count: number;
+  /** On the active (filled) nav item, where the amber would sit on the accent. */
+  active?: boolean;
+  label: string;
+}) {
+  return (
+    <span
+      className={cn(
+        "rounded-full px-1.5 text-xs leading-5 font-semibold tabular-nums",
+        active ? "bg-primary-foreground text-primary" : "bg-amber-400 text-amber-950",
+      )}
+      aria-label={`${count} ${label}`}
+    >
+      {count}
+    </span>
+  );
+}
+
+/**
+ * One destination. The active item is the only filled thing in the sidebar, so "where am I" is
+ * answered before anything else is read.
+ *
+ * An inactive destination is `text-foreground`, not `text-muted-foreground`. Every one of the
+ * thirteen used to be muted, which made the whole menu read as disabled and left the group
+ * headings — themselves muted — competing with the things people actually aim at. A destination
+ * is the point of a navigation; it gets the text colour of something you can use. The ICON stays
+ * muted, which is what keeps the column calm at a glance.
+ */
 function NavItem({
   link,
   active,
@@ -207,25 +262,22 @@ function NavItem({
       onClick={onNavigate}
       aria-current={active ? "page" : undefined}
       className={cn(
-        "flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors",
+        "group/nav flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors",
+        "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1 focus-visible:ring-offset-sidebar",
         active
           ? "bg-primary text-primary-foreground"
-          : "text-muted-foreground hover:bg-muted hover:text-foreground",
+          : "text-foreground hover:bg-sidebar-accent",
       )}
     >
-      <Icon className="size-4 shrink-0" aria-hidden />
+      <Icon
+        className={cn(
+          "size-4 shrink-0",
+          active ? "text-primary-foreground" : "text-muted-foreground",
+        )}
+        aria-hidden
+      />
       <span className="flex-1 truncate">{link.label}</span>
-      {count > 0 && (
-        <span
-          className={cn(
-            "rounded-full px-1.5 text-xs leading-5 font-semibold tabular-nums",
-            active ? "bg-primary-foreground text-primary" : "bg-amber-500 text-white",
-          )}
-          aria-label={`${count} ${t("nav.pendingSuffix")}`}
-        >
-          {count}
-        </span>
-      )}
+      {count > 0 && <PendingBadge count={count} active={active} label={t("nav.pendingSuffix")} />}
     </Link>
   );
 }
@@ -307,6 +359,18 @@ export function AdminNav({
   const menuOpen = menu.open && menu.at === pathname;
   const closeMenu = () => setMenu({ open: false, at: pathname });
 
+  // Escape closes it. A disclosure that covers the screen and can only be dismissed by finding
+  // its own button again is a trap for anyone on a keyboard, and the handler is only attached
+  // while it is open so there is no listener on any other screen.
+  useEffect(() => {
+    if (!menuOpen) return;
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setMenu({ open: false, at: pathname });
+    };
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [menuOpen, pathname]);
+
   const accountCluster = (onNavigate?: () => void) => (
     <div className="grid gap-1">
       <GroupHeading>{t("nav.group.account")}</GroupHeading>
@@ -319,12 +383,31 @@ export function AdminNav({
           onNavigate={onNavigate}
         />
       ))}
+      {/* Not a `NavItem` only because it carries no capability — every store member may change
+          their own password — but it is a destination like any other and is drawn as one. It
+          used to be the one link in the column with its own colour and hover. */}
       <Link
         href="/admin/change-password"
         onClick={onNavigate}
-        className="flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium text-muted-foreground hover:bg-muted hover:text-foreground"
+        aria-current={isActive(pathname, "/admin/change-password") ? "page" : undefined}
+        className={cn(
+          "flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors",
+          "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1 focus-visible:ring-offset-sidebar",
+          isActive(pathname, "/admin/change-password")
+            ? "bg-primary text-primary-foreground"
+            : "text-foreground hover:bg-sidebar-accent",
+        )}
       >
-        <KeyRound className="size-4 shrink-0" aria-hidden /> {t("nav.changePassword")}
+        <KeyRound
+          className={cn(
+            "size-4 shrink-0",
+            isActive(pathname, "/admin/change-password")
+              ? "text-primary-foreground"
+              : "text-muted-foreground",
+          )}
+          aria-hidden
+        />
+        {t("nav.changePassword")}
       </Link>
     </div>
   );
@@ -339,7 +422,7 @@ export function AdminNav({
         <form action={logoutAction}>
           <button
             type="submit"
-            className="flex items-center gap-2 rounded-lg px-2 py-1.5 text-sm text-muted-foreground hover:bg-muted hover:text-foreground"
+            className="flex items-center gap-2 rounded-lg px-2 py-1.5 text-sm text-muted-foreground transition-colors hover:bg-sidebar-accent hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
           >
             <LogOut className="size-4" aria-hidden /> {t("nav.logOut")}
           </button>
@@ -351,7 +434,12 @@ export function AdminNav({
   return (
     <>
       {/* Desktop sidebar */}
-      <aside className="sticky top-0 hidden h-screen w-64 shrink-0 flex-col overflow-y-auto border-e bg-background md:flex">
+      {/* `bg-sidebar`, not `bg-background`. The nav used to be the same white as a card, so the
+          three regions of the product — chrome, page, raised object — were two colours between
+          them and the sidebar read as a tall panel rather than as the frame around everything.
+          `--sidebar` is a step deeper than the page, so it recedes; the page is paper; a card is
+          white. That is the surface hierarchy of ADMIN_UI.md §10b applied to the shell itself. */}
+      <aside className="sticky top-0 hidden h-screen w-64 shrink-0 flex-col overflow-y-auto border-e bg-sidebar md:flex">
         <div className="flex items-center gap-3 border-b px-5 py-4">
           <span className="grid size-9 shrink-0 place-items-center rounded-lg bg-primary text-sm font-bold text-primary-foreground">
             {initial}
@@ -378,17 +466,21 @@ export function AdminNav({
       </aside>
 
       {/* Phone header */}
-      <header className="sticky top-0 z-20 border-b bg-background md:hidden">
+      <header className="sticky top-0 z-20 border-b bg-sidebar md:hidden">
         <div className="flex items-center gap-3 px-4 py-3">
+          {/* 40px, not 32: these are the only controls on the phone header and the person
+              using them is holding the phone in one hand behind a counter. 32px squares are
+              under every touch-target guideline, and the menu button is the way into the whole
+              product. */}
           <button
             type="button"
             onClick={() => setMenu({ open: !menuOpen, at: pathname })}
             aria-expanded={menuOpen}
             aria-controls="admin-mobile-nav"
             aria-label={menuOpen ? t("nav.closeMenu") : t("nav.menu")}
-            className="grid size-8 shrink-0 place-items-center rounded-lg border text-muted-foreground"
+            className="grid size-10 shrink-0 place-items-center rounded-lg border text-muted-foreground transition-colors hover:bg-sidebar-accent hover:text-foreground"
           >
-            {menuOpen ? <X className="size-4" aria-hidden /> : <Menu className="size-4" aria-hidden />}
+            {menuOpen ? <X className="size-5" aria-hidden /> : <Menu className="size-5" aria-hidden />}
           </button>
           <span className="grid size-8 shrink-0 place-items-center rounded-lg bg-primary text-sm font-bold text-primary-foreground">
             {initial}
@@ -397,12 +489,8 @@ export function AdminNav({
           {/* Pending orders were the one thing the strip said at a glance, so the count stays
               reachable with the menu shut rather than disappearing behind it. */}
           {pendingOrders > 0 && (
-            <Link
-              href="/admin/orders"
-              className="rounded-full bg-amber-500 px-2 text-xs leading-6 font-semibold text-white tabular-nums"
-              aria-label={`${pendingOrders} ${t("nav.pendingSuffix")}`}
-            >
-              {pendingOrders}
+            <Link href="/admin/orders" className="shrink-0">
+              <PendingBadge count={pendingOrders} label={t("nav.pendingSuffix")} />
             </Link>
           )}
           <a
@@ -410,9 +498,9 @@ export function AdminNav({
             target="_blank"
             rel="noopener noreferrer"
             aria-label={t("nav.viewStore")}
-            className="grid size-8 shrink-0 place-items-center rounded-lg border text-muted-foreground"
+            className="grid size-10 shrink-0 place-items-center rounded-lg border text-muted-foreground transition-colors hover:bg-sidebar-accent hover:text-foreground"
           >
-            <ExternalLink className="size-4" aria-hidden />
+            <ExternalLink className="size-5" aria-hidden />
           </a>
         </div>
         {menuOpen && (

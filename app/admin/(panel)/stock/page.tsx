@@ -3,7 +3,7 @@ import { Boxes, ClipboardList, FileSpreadsheet, History, PackagePlus, Search } f
 import { EmptyState } from "@/components/admin/empty-state";
 import { PageHeader } from "@/components/admin/page-header";
 import { SectionCard } from "@/components/admin/section-card";
-import { StatTile } from "@/components/admin/stat-tile";
+import { StatGroup, StatTile } from "@/components/admin/stat-tile";
 import { StockBadge } from "@/components/admin/stock-badge";
 import { buttonVariants } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -99,11 +99,11 @@ export default async function StockPage({ searchParams }: PageProps<"/admin/stoc
         }
       />
 
-      <div className="grid gap-3 sm:grid-cols-3">
+      <StatGroup columns={3}>
         <StatTile label={t("stock.tile.empty")} value={String(counts.empty)} />
         <StatTile label={t("stock.tile.low")} value={String(counts.low)} />
         <StatTile label={t("stock.tile.variants")} value={String(counts.variants)} />
-      </div>
+      </StatGroup>
 
       <form method="get" className="relative max-w-sm" role="search">
         <Search

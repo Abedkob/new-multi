@@ -6,7 +6,7 @@ import { AdminPagination } from "@/components/admin-pagination";
 import { PageHeader } from "@/components/admin/page-header";
 import { EmptyState } from "@/components/admin/empty-state";
 import { SectionCard } from "@/components/admin/section-card";
-import { StatTile } from "@/components/admin/stat-tile";
+import { StatGroup, StatTile } from "@/components/admin/stat-tile";
 import { StatusFilter, type StatusFilterTab } from "@/components/admin/status-filter";
 import { Badge } from "@/components/ui/badge";
 import { buttonVariants } from "@/components/ui/button";
@@ -113,7 +113,7 @@ export default async function CounterSalesPage({
         />
       )}
 
-      <div className="grid gap-3 sm:grid-cols-3 lg:grid-cols-5">
+      <StatGroup columns={4}>
         <StatTile label={t("counter.takings.total")} value={formatPrice(takings.totalCents)} />
         <StatTile label={t("counter.takings.cash")} value={formatPrice(takings.cashCents)} />
         <StatTile label={t("counter.takings.card")} value={formatPrice(takings.cardCents)} />
@@ -122,7 +122,7 @@ export default async function CounterSalesPage({
           label={t("counter.takings.discounts")}
           value={formatPrice(takings.manualDiscountCents)}
         />
-      </div>
+      </StatGroup>
 
       <StatusFilter
         tabs={tabs}

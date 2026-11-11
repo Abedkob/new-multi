@@ -27,7 +27,7 @@ export default async function NotificationsPage() {
   ]);
 
   return (
-    <div className="grid gap-4">
+    <div className="grid max-w-3xl gap-4">
       <PageHeader
         title={t("notifications.page.title")}
         description={t("notifications.page.description")}

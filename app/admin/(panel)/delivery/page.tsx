@@ -14,7 +14,7 @@ export default async function DeliverySettingsPage() {
   const settings = deliverySettingsFromStore(tenant);
 
   return (
-    <div className="grid gap-4">
+    <div className="grid max-w-3xl gap-4">
       <PageHeader
         title={t("nav.delivery")}
         description={t("delivery.page.description")}

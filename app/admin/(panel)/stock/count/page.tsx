@@ -28,7 +28,7 @@ export default async function CountStockPage() {
   if (!canMoveStock({ ...tenant, license })) notFound();
 
   return (
-    <div className="grid gap-4">
+    <div className="grid max-w-3xl gap-4">
       <PageHeader
         title={t("stock.count.title")}
         back={{ href: "/admin/stock", label: t("nav.stock") }}

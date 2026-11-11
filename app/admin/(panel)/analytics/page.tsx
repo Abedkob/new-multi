@@ -2,7 +2,8 @@ import { notFound } from "next/navigation";
 import { PeriodPicker } from "@/components/admin/period-picker";
 import { InsightList } from "@/components/admin/analytics/insight-list";
 import { SeriesTable } from "@/components/admin/analytics/series-table";
-import { StatTile } from "@/components/admin/stat-tile";
+import { SectionHeading } from "@/components/admin/section-card";
+import { StatGroup, StatTile } from "@/components/admin/stat-tile";
 import { lastNLocalDays } from "@/lib/analytics/compare";
 import { buildInsights } from "@/lib/analytics/insights";
 import { rangeFromPeriod } from "@/lib/analytics/range";
@@ -132,8 +133,8 @@ export default async function AnalyticsOverviewPage({
       </div>
 
       <section className="grid gap-3">
-        <h2 className="text-sm font-semibold">{t("overview.heading.traffic")}</h2>
-        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+        <SectionHeading title={t("overview.heading.traffic")} />
+        <StatGroup>
           <StatTile
             label={t("overview.tile.sessions")}
             value={String(totals.sessions)}
@@ -162,12 +163,12 @@ export default async function AnalyticsOverviewPage({
             delta={deltas.searchSessions}
           />
           <LiveVisitors presence={presence} />
-        </div>
+        </StatGroup>
       </section>
 
       <section className="grid gap-3">
-        <h2 className="text-sm font-semibold">{t("overview.heading.orders")}</h2>
-        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+        <SectionHeading title={t("overview.heading.orders")} />
+        <StatGroup>
           <StatTile
             label={t("overview.tile.orders")}
             value={String(totals.orders)}
@@ -193,14 +194,14 @@ export default async function AnalyticsOverviewPage({
             }
             hint={rates.averageOrderValueCents === null ? t("overview.tile.aov.none") : undefined}
           />
-        </div>
+        </StatGroup>
       </section>
 
       {/* Its own section, with the sentence that says what it is not. The WhatsApp figures are
           never placed in the money row above, and never added to anything in it (§3.4). */}
       <section className="grid gap-3">
-        <h2 className="text-sm font-semibold">{t("overview.heading.whatsapp")}</h2>
-        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+        <SectionHeading title={t("overview.heading.whatsapp")} />
+        <StatGroup columns={2}>
           <StatTile
             label={t("overview.tile.whatsappClicks")}
             value={String(totals.whatsappClickSessions)}
@@ -213,17 +214,17 @@ export default async function AnalyticsOverviewPage({
             delta={deltas.whatsappPotentialValueCents}
             hint={t("overview.tile.whatsappValue.hint")}
           />
-        </div>
+        </StatGroup>
         <p className="text-xs text-muted-foreground">{t("overview.whatsapp.note")}</p>
       </section>
 
       <section className="grid gap-3">
-        <h2 className="text-sm font-semibold">{t("overview.heading.insights")}</h2>
+        <SectionHeading title={t("overview.heading.insights")} />
         <InsightList insights={insights} />
       </section>
 
       <section className="grid gap-3">
-        <h2 className="text-sm font-semibold">{t("overview.heading.byDay")}</h2>
+        <SectionHeading title={t("overview.heading.byDay")} />
         <SeriesTable
           label={t("overview.series.label")}
           points={overview.series.map((point) => ({

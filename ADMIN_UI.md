@@ -33,6 +33,20 @@ A page's root element is `<div className="grid gap-4">` — or `gap-6` for a scr
 unrelated to each other. Vertical rhythm is a `gap` on the parent, never a `mb-*`/`mt-*` on a
 child, so moving a block never leaves a hole or a double gap behind.
 
+**A page may declare its measure, which is not its container.** The shell still owns the width,
+the padding and the centring, and no page touches those. But a screen that is a single column of
+form content was being stretched across all 1,152px of it, which is how Delivery ended up as a
+small panel in the top-left of a mostly empty page — a layout that reads as unfinished rather than
+as calm. Such a page adds `max-w-3xl` to its own root grid, and nothing else:
+
+```tsx
+<div className="grid max-w-3xl gap-4">   // a settings or form screen
+<div className="grid gap-4">             // a list, a report, a dashboard
+```
+
+768px is chosen as a *measure*: wide enough for a label-above-control form with a two-up row,
+narrow enough that the eye does not travel the width of the screen between a field and its hint.
+Lists and reports keep the full width, because their tables and figure groups use it.
 ## 2. Headers: a page, and a section
 
 Two altitudes, and the difference is whether the thing has sub-pages.
@@ -232,37 +246,70 @@ only ordering that survives someone adding a fourteenth screen:
   and no amount of reordering fixes a strip whose end you cannot see. The disclosure shows the
   whole structure at once. The pending-order count stays in the header with the menu shut,
   because that is the one thing the strip said at a glance.
+- **A group label is sentence case, and that is an i18n decision rather than a taste one.** The
+  headings were `text-[0.6875rem] font-semibold uppercase tracking-wider`, which is wrong in each
+  language for a different reason. Arabic has no case, so `text-transform: uppercase` does
+  nothing — while `letter-spacing: 0.55px` does plenty: it pushes apart letters that are supposed
+  to join, so `العمل اليومي` was being set with its cursive broken. Measured in the browser, not
+  assumed. In English it is the tracked-out capital eyebrow that sits above every heading in every
+  generated admin, five of them down one column. Now `text-xs font-medium`, no transform, no
+  tracking: it still separates, because the gap between groups and the weight of the destinations
+  do that work.
+- **A destination is `text-foreground`.** All thirteen used to be `text-muted-foreground`, which
+  made the menu read as disabled and left the group headings — themselves muted — competing with
+  the things people aim at. The ICON stays muted; that is what keeps the column calm without
+  greying out the labels.
+- **The sidebar sits on `--sidebar`, not on `--background`.** It used to be the same white as a
+  card, so the product's three regions — chrome, page, raised object — were two colours between
+  them and the nav read as a tall panel rather than as the frame around everything. §10b's
+  surface hierarchy, applied to the shell.
+- **The pending-orders chip is `bg-amber-400 text-amber-950`, and it is a measured figure.** It
+  was `bg-amber-500 text-white` in two hand-copied places: **2.15:1**, less than half the line,
+  on the one element in the product whose whole job is to be read at a glance across a room. The
+  replacement measures 8.97:1 and is *louder*, not quieter. It is one `PendingBadge` component
+  now, so the sidebar and the phone header cannot drift again, and `pnpm verify:contrast` has the
+  pair so it cannot regress quietly.
+- **Escape closes the phone menu**, and its controls are 40px rather than 32px. A disclosure that
+  covers the screen and can only be dismissed by finding its own button again is a trap on a
+  keyboard; 32px squares are under every touch-target guideline, and the person this is for is
+  holding the phone one-handed behind a counter.
 - **"Open" is derived from the path, not closed by an effect.** The menu stores the path it was
   opened at and compares during render, so a navigation closes it with no second render — and
   the back button, which changes the path without going through a link, closes it too.
 
 ## 9. Colour
 
-The palette was `oklch(L 0 0)` on **every** token, chroma exactly zero, `--chart-1` to
-`--chart-5` included. The admin was achromatic by construction, and `--primary` was near-black,
-so the active nav item and a primary button were the same black. The only chroma on a screen was
-the amber pending badge and the destructive tint — which is why six quiet `bg-destructive/10`
-Delete buttons read as the loudest thing on the products list. They were never a solid red; in a
-greyscale UI the only colour wins whatever its strength.
+**Cool ink on warm paper.** The palette used to be indigo on grey, with the neutrals carrying a
+whisper of the accent's own hue — one temperature everywhere, which is a tinted greyscale and is
+also the palette anyone reaches for on any admin. Now the neutrals carry a **warm** cast (hue 75,
+chroma 0.005–0.009) so a page reads as paper, and the accent stays **cool** and deepens
+(`oklch(0.48 0.16 255)`). The tension between the two is the panel's identity, it costs nothing,
+and it is what tells this tool apart from the console at a glance.
 
-- **One accent, hue 265 (indigo).** `--primary`, `--ring` and the two `--sidebar-*` equivalents,
-  in `:root` and `.dark`. It carries the active nav item, primary buttons and focus rings.
-- **White text in both modes**, which is the opposite of what dark mode used to do (a near-white
-  primary with dark text). Light is `oklch(0.52 0.17 265)` and dark `oklch(0.55 0.17 265)` —
-  **measured**, not estimated: white-on-accent is 5.47:1 light and 4.82:1 dark. The dark value
-  started at `0.58` and gave 4.20:1, under the 4.5 line, which arithmetic on paper had said was
-  fine.
-- **The neutrals carry a whisper of the same hue** (chroma 0.003–0.005) so the accent reads as
-  part of the palette rather than bolted onto grey.
-- **`--destructive` is unchanged**, and so is the `destructive` button variant. It was already
-  the quiet treatment: a 10% tint with coloured text. Once an accent exists it stops being the
-  only colour, and the ranking fixes itself.
-- **This cannot reach a storefront.** `ThemeScope` (`components/theme-scope.tsx`) sets
-  `--primary`, `--ring`, `--background`, `--border` and the rest **inline** on a wrapper div, and
-  `app/store/[slug]/layout.tsx` wraps every store route in it — so a store's own colours shadow
-  `:root` inside that subtree, and both previews with it.
-- **It does not reach the platform console either**, which is monochrome on purpose (§10). So
-  `:root` is now the merchant panel's palette and the login page's, and nothing else.
+- **The accent could not have been green, amber or red**, whatever the taste argument: all three
+  already carry meaning on these screens — a rise, a pending order, a destructive action. An
+  accent sharing a hue with a status is an accent the merchant has to learn to ignore.
+- **Dark drops the warmth deliberately.** Warm paper at low lightness is brown. So the surfaces
+  take the accent's own cool hue at very low chroma — slate, not grey — and the accent lifts away
+  from them. The same relationship read the other way round.
+- **`--primary-text` is a separate token, and measuring is the only reason it exists.** One accent
+  cannot do both jobs in dark: white-on-accent needs the accent dark (0.55 measures 4.77:1; 0.58
+  measured 4.20:1 and failed, which §9 has recorded since the indigo pass), while accent-as-text
+  needs it light (0.55 measures **3.49:1** on a card — under the line, and it is the colour every
+  link and active tab label in the panel would have been). 0.66 measures 5.48:1 on a card and
+  6.08:1 on the page. Every text-on-surface pair in both schemes is computed from the oklch values
+  by a script, not estimated.
+- **`--surface-sunken`** is the half-step the palette had no name for: a well *inside* a card — a
+  table head, a footer strip, an inset preview. It used to be spelled as a tint of the
+  accent-hued `--muted` by whoever needed one, and had drifted across `/20`, `/30` and `/40`.
+- **`--chart-1..5` are five steps of the accent's own hue**, light to dark, instead of greyscale.
+  Greyscale was the honest answer when there was no hue to spend; there is one now.
+- **`--radius` is 0.5rem**, down from 0.625. Softer read fine on a page of cards and reads loose
+  on a tool that is mostly rules and rows. Not zero: a square corner is the broadsheet cliché.
+- **This still cannot reach a storefront.** `ThemeScope` sets every one of these inline on a
+  wrapper, so a store's own colours shadow `:root` inside that subtree.
+- **The console still does not get the hue** (§10) — and now needs more overrides to stay out of
+  it, because `:root`'s neutrals are no longer neutral.
 
 ## 10. The platform console: same shapes, no colour
 
@@ -302,6 +349,57 @@ border; five `h1`s where a section layout already owned one; a top bar whose fiv
 the same grey with no current-section state, and a create action sitting among them as a sixth
 link; and four hardcoded palette colours that `.console-neutral` would have sailed straight past.
 
+## 10b. Composition: what the first eleven rules do not say
+
+Every rule above legislates a *primitive* — one panel, four type sizes, one accent. None of them
+says what a screen is **for**, what the eye should land on first, or how a page occupies its
+width. So the panel came out consistent and uncomposed: forty-three screens of identical white
+boxes on grey, where the dashboard's five tiles, the analytics overview's twelve and the delivery
+page's one all had the same treatment at the same weight. That is what "it doesn't feel like a
+system" means, and no amount of primitive-level consistency fixes it.
+
+Three rules, at the altitude the others missed.
+
+1. **Hierarchy by surface, not by box.** Three altitudes that mean different things: content sits
+   on the page separated by rules and space; a row is one real object in a list; a raised card is
+   for a discrete thing you act on. A box is a claim that something is a separate object — so a
+   screen where everything is boxed has made that claim about everything, which is the same as
+   making it about nothing.
+2. **One loud thing per screen.** Each screen nominates its subject and gives it weight; the rest
+   goes quiet. The products list is the catalogue, not the Delete buttons — which is why
+   `DeleteButton` is ghost now and not a red chip repeated down every row (§7 of the destructive
+   argument in reverse: once there is an accent, red stops being the only colour and the ranking
+   has to be chosen rather than inherited).
+3. **A figure is typeset, not boxed.** `StatGroup` is the shape this takes: one bordered object
+   holding N figures divided by hairlines, rather than N bordered objects. The analytics overview
+   went from twelve boxes to three groups with no loss of information.
+
+**`StatGroup`'s rules are drawn by the cells and clipped**, not by a `gap-px` grid over a coloured
+ground. The ground version is the obvious one and it is wrong: a group whose items do not fill its
+last row — the traffic row is four figures plus the live-visitor panel — leaves the empty cells
+showing the ground as grey blocks. Each cell carries `border-t border-s` and the grid is pulled
+back a pixel at the top and the start, so the outermost rules land under the wrapper's own border
+and vanish. Correct at any column count, for any number of items, and correct in RTL with no
+direction class, because `border-s` and `-ms-px` are both logical.
+
+**A varying number of tiles is a flex problem, not a grid one.** The dashboard's tiles depend on
+what a store has — the till only for a store with one, the stockroom only once the module is on —
+and at four columns a store with five stranded the fifth alone beside three empty columns, on the
+first screen anyone sees. `auto-fit` does not fix it: it only chooses how many columns fit, and
+the remainder still sits in a short row against empty tracks (measured — it picked four 260px
+columns and the orphan stayed). Flex items that `grow` from a basis small enough for five to fit,
+with a `max-w-*` so a lone leftover grows to a tile's size instead of across the whole row.
+
+### Colour is a verdict
+
+`StatTile` rendered a green `+2` directly above the words "no earlier figure to compare with".
+Green says the shop is up; the sentence says there is nothing to be up against; the merchant reads
+the colour. It is the same defect as the stock count that said "agrees" and "enter a whole number"
+at once, and it survived because §7's rules were about *numbers* and said nothing about the colour
+behind them. With no base the change is still shown — it is a real number of orders — in muted,
+with no direction claimed, and without the trailing "vs the period before" that named a comparison
+which did not happen.
+
 ## 11. Arabic, RTL, and the phone
 
 - Logical properties only: `ms-*`/`me-*`, `ps-*`/`pe-*`, `start-*`/`end-*`. Never `ml-*`, `pr-*`,
@@ -316,6 +414,23 @@ link; and four hardcoded palette colours that `.console-neutral` would have sail
   reads as a glitch.
 - Every screen is usable at phone width with no horizontal page scroll. A two-column screen is
   one column below `md`, and the column a person acts in comes first.
+- **That rule was false on most of the panel, and no class name was wrong.** Measured at a 375px
+  viewport: `/admin/products` laid out a **984px** document, `/admin/orders` 538px, the dashboard
+  412px. The whole page scrolled sideways, not the table inside it. Three causes, all the same
+  shape — a flex or grid item whose intrinsic minimum nobody had capped:
+  - **A panel is a grid item, and a grid item's `min-width` defaults to `auto`.** So a panel
+    holding a table grew to the table's natural width and `components/ui/table`'s own
+    `overflow-x-auto` never fired, because its `w-full` container was never narrower than its
+    contents. `SectionCard` now carries `min-w-0`, which is why it is there.
+  - **`min-w-0 flex-1` is not enough for an unbreakable string.** A store URL contributed 307px of
+    min-content with `min-w-0`, `flex-1` and `truncate` all applied — `flex-1` zeroes the flex
+    *basis*, which the browser still ignored when sizing the row intrinsically. `w-0 flex-1` is
+    the pair that works: an explicit width leaves nothing to contribute, and `grow` then fills the
+    space. Same fix on the dashboard's order and low-stock rows.
+  - **A page title at 28px does not fit a 375px screen.** `text-2xl sm:text-[1.75rem]`.
+  None of this is reachable by `verify:admin-ui`: it reads class names, and every class involved
+  was a reasonable one. §11 needs a browser at 375px, and until one was pointed at it the rule was
+  being asserted rather than checked.
 
 ## 12. What enforces this
 
@@ -342,6 +457,15 @@ actually happened here rather than a preference:
    under `app/platform/(admin)` fails. Scoped to that group, not the whole of `/platform`, because
    the theme editor sits outside it (§10). `--destructive` is not covered: it is a token, and red
    is the console's one deliberate hue.
+
+**`pnpm verify:admin-layout` is the other half, and it needs a browser.** The six rules above
+read class names, so they can hold down what a panel is made of and nothing about what a screen
+comes out as. §11's "no horizontal page scroll" was the rule that exposed the gap: it was asserted
+for as long as this document existed and was false nearly everywhere, because every class involved
+in breaking it was a perfectly good class. The new suite walks all thirty screens at 375px in a
+real browser and asserts the document is no wider than the viewport. It also reports, without
+failing, any element whose own content overflows its box — a table inside `overflow-x-auto` is
+*supposed* to, so it cannot be an assertion, but it is where to look when a route fails.
 
 **`PENDING` is the honest part.** The not-yet-converted screens are listed by name in the script.
 The check asserts that list does not **grow**, and that every entry still earns its place — an
@@ -377,3 +501,20 @@ other schema returns dictionary keys, so those two field errors do not translate
 `SubmitButton`'s default `pendingText` is the hardcoded English `"Saving…"`.
 
 It cannot check whether a screen is *good*. That is still a person looking at it.
+
+## 13. What this document still does not cover
+
+- **There is no dark mode in the panel.** No toggle, no `prefers-color-scheme` wiring, nothing
+  applies `.dark`. Its tokens are maintained and measured — the contrast figures in §9 are real —
+  but nothing renders them today, so every claim about dark in this file is a claim about the
+  values, not about a screen anyone has seen.
+- **There are no charts**, only figures and tables, which is why `--chart-1..5` existing as a real
+  series is new rather than used.
+- **Composition has reached the screens that needed it; it is not a finished sweep.** The tokens
+  and primitives carry the language to all forty-three. §10b's rules have been applied to the
+  dashboard, the analytics overview, the products list, the till, the stockroom and the console's
+  own home, and ten settings screens now state a measure instead of stretching. What has *not*
+  been revisited is the order detail, the till's sale screen and the content editor's form pane,
+  which are composed around their own content rather than around the baseline.
+- **The till and the counter sale screen keep the full width on purpose** and were left out of the
+  measure list: they are working screens with a search beside a cart, not forms.

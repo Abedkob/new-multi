@@ -31,7 +31,7 @@ export default async function ImportStockCountPage() {
   if (!canMoveStock({ ...tenant, license })) notFound();
 
   return (
-    <div className="grid gap-4">
+    <div className="grid max-w-3xl gap-4">
       <PageHeader
         title={t("import.stock.title")}
         description={t("import.stock.description")}

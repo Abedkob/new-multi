@@ -119,7 +119,20 @@ export default async function AdminHome() {
         </Link>
       )}
 
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+      {/* Flex-wrap with a basis, not a column count, because the number of tiles is not fixed:
+          the till only appears for a store that has one, the stockroom only once the module is
+          on. At four columns a store with five tiles stranded the fifth alone on a second row
+          with three empty columns beside it — the first thing anyone sees on opening the panel,
+          and the clearest sign that the screen was assembled rather than composed.
+          A grid cannot fix this. `auto-fit` only chooses how many columns fit; it still leaves
+          the remainder in a short last row against empty tracks (measured: it picked four 260px
+          columns and the orphan stayed).
+          So: flex, with a basis small enough that five fit on one row at the panel's own width
+          (1,088px of content — 5 x 12rem plus the gaps is 1,024, where 13rem was 1,104 and
+          wrapped), `grow` so a short last row shares the space out rather than leaving a hole,
+          and `max-w-sm` so a single tile left over grows to a tile's size instead of stretching
+          across the whole row, which is what unbounded `grow` did. */}
+      <div className="flex flex-wrap gap-4 [&>*]:max-w-sm [&>*]:grow [&>*]:basis-48">
         <Stat
           icon={BellRing}
           label={t("dashboard.stat.newOrders")}
@@ -250,9 +263,13 @@ export default async function AdminHome() {
                     <span className="grid size-9 shrink-0 place-items-center rounded-full bg-muted text-xs font-semibold">
                       {[...o.customerName.trim()][0]?.toUpperCase() ?? "?"}
                     </span>
-                    <span className="min-w-0 flex-1">
+                    {/* `w-0` as well as `min-w-0`: a flex item with only a zero BASIS still
+                        contributes its content's width when the browser sizes the row
+                        intrinsically, which is what put a horizontal scroll on the whole
+                        document at 375px. See components/copy-text.tsx for the measurement. */}
+                    <span className="w-0 min-w-0 flex-1">
                       <span className="block truncate text-sm font-medium">{o.customerName}</span>
-                      <span className="block text-xs text-muted-foreground">
+                      <span className="block truncate text-xs text-muted-foreground">
                         {orderRef(o.id)} · {timeAgo(o.createdAt, t, new Date(), locale)}
                       </span>
                     </span>
@@ -281,7 +298,7 @@ export default async function AdminHome() {
                       className="flex items-center gap-3 rounded-lg px-2 py-2.5 hover:bg-muted"
                     >
                       <Thumb src={v.product.imageUrl} className="size-9" />
-                      <span className="min-w-0 flex-1">
+                      <span className="w-0 min-w-0 flex-1">
                         <span className="block truncate text-sm font-medium">{v.product.name}</span>
                         {label && <span className="block truncate text-xs text-muted-foreground">{label}</span>}
                       </span>

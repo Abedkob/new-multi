@@ -14,7 +14,7 @@ export default async function SocialLinksPage() {
   const links = socialLinksFromStore(tenant);
 
   return (
-    <div className="grid gap-4">
+    <div className="grid max-w-3xl gap-4">
       <PageHeader
         title={t("nav.socialLinks")}
         description={t("socialLinks.page.description")}

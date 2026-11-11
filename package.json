@@ -70,6 +70,8 @@
     "build:job": "node scripts/build-job.mjs",
     "verify:container-commands": "tsx scripts/verify-container-commands.ts",
     "verify:rollout": "tsx scripts/verify-rollout.ts",
+    "verify:contrast": "node scripts/measure-contrast.mjs",
+    "verify:admin-layout": "tsx scripts/verify-admin-layout.ts",
     "verify:admin-ui": "tsx scripts/verify-admin-ui.ts",
     "verify:counter": "tsx scripts/verify-counter-sales.ts",
     "verify:stock": "tsx scripts/verify-stock.ts",

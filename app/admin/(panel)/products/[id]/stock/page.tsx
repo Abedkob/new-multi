@@ -31,7 +31,7 @@ export default async function ProductStockPage({ params }: PageProps<"/admin/pro
   }));
 
   return (
-    <div className="grid gap-4">
+    <div className="grid max-w-3xl gap-4">
       <PageHeader
         title={t("products.stock.title")}
         back={{ href: "/admin/products", label: t("nav.products") }}

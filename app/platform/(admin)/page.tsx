@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { PageHeader } from "@/components/admin/page-header";
-import { SectionCard } from "@/components/admin/section-card";
+import { StatGroup } from "@/components/admin/stat-tile";
 import { buttonVariants } from "@/components/ui/button";
 import { getPlatformStats } from "@/lib/data/tenants";
 import { cn } from "@/lib/utils";
@@ -12,11 +12,23 @@ import { cn } from "@/lib/utils";
  * the console does not mount. These two are inventory counts with no period, no comparison and
  * no trend, so they are a panel with a number in it.
  */
+/**
+ * The console's own figure, because `StatTile` is a client component that reads the dictionary
+ * and the console has no i18n provider — the same reason the platform analytics screen hand-rolls
+ * its tiles. `StatGroup` IS shared: it is pure presentation and takes children, so both tools get
+ * the same divided-group shape without the console needing a locale.
+ *
+ * `text-2xl`, not `text-3xl`: §7 says a figure must not outrank the page's own title, and this
+ * one did.
+ */
 function Figure({ label, value }: { label: string; value: number }) {
   return (
-    <SectionCard title={label}>
-      <p className="text-3xl font-semibold tabular-nums">{value}</p>
-    </SectionCard>
+    <div className="flex flex-col gap-1 bg-card p-4">
+      <span className="text-xs font-medium text-muted-foreground">{label}</span>
+      <span className="text-2xl font-semibold leading-none tracking-tight tabular-nums">
+        {value}
+      </span>
+    </div>
   );
 }
 
@@ -41,10 +53,10 @@ export default async function PlatformHome() {
           </>
         }
       />
-      <div className="grid gap-4 sm:grid-cols-2">
+      <StatGroup columns={2}>
         <Figure label="Stores" value={stores} />
         <Figure label="Products (all stores)" value={products} />
-      </div>
+      </StatGroup>
     </div>
   );
 }
