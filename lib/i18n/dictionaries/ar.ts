@@ -1224,4 +1224,15 @@ export const ar: Record<DictionaryKey, string> = {
   "counter.error.SUBMISSION_REUSED": "سُجلت هذه البيعة مسبقًا بعناصر مختلفة. ابدأ بيعة جديدة.",
   "counter.error.NOT_FOUND": "هذه البيعة لم تعد موجودة.",
   "counter.error.ALREADY_VOIDED": "هذه البيعة ألغيت مسبقًا.",
+  // ---- الاستيراد الجماعي للكتالوج (ملف الجدول) ----------------------------------------------
+  "import.sheet.noHeader": "لا تحتوي هذه الورقة على عناوين أعمدة نعرفها. نزّل القالب والصق صفوفك فيه.",
+  "import.sheet.missingColumn": "عمود «{0}» غير موجود. أضفه، أو ابدأ من جديد من القالب.",
+  "import.issue.nameTooLong": "اسم المنتج طويل جداً — 120 حرفاً كحد أقصى.",
+  "import.issue.descriptionTooLong": "الوصف طويل جداً — 5000 حرف كحد أقصى.",
+  "import.issue.duplicateProductRow": "هذا المنتج موجود مسبقاً في الصف {0}. اجعل لكل منتج صفاً واحداً، وإلا تعارض الصفان.",
+  "import.issue.categoryInvalid": "لا يمكن قراءة هذه الفئة. استخدم أسماءً مفصولة بشرطة مائلة، حتى {0} مستويات — مثل «ملابس / قمصان».",
+  "import.issue.notYesOrNo": "اكتب نعم أو لا، أو اتركها فارغة لتبقى كما هي.",
+  "import.issue.notAWholeNumber": "اكتب رقماً صحيحاً، 0 أو أكثر.",
+  "import.issue.variantNeedsProduct": "هذا الصف يحتاج اسم المنتج. كرّر الاسم في كل صف من صفوف خيارات ذلك المنتج.",
+  "import.issue.duplicateCountRow": "هذا معدود مسبقاً في الصف {0}. اعدد كل واحد مرة واحدة.",
 };

@@ -1249,6 +1249,19 @@ export const en = {
   "counter.error.SUBMISSION_REUSED": "This sale was already recorded with different items. Start a new one.",
   "counter.error.NOT_FOUND": "That sale no longer exists.",
   "counter.error.ALREADY_VOIDED": "That sale was already voided.",
+  // ---- bulk catalogue import (the spreadsheet) ----------------------------------------------
+  // These reach a merchant who is looking at their own spreadsheet, so each one says what to do
+  // next, and names the row or column it is about. lib/catalogue-sheet/parse.ts produces the keys.
+  "import.sheet.noHeader": "This sheet has no column headings we recognise. Download the template and paste your rows into it.",
+  "import.sheet.missingColumn": "The \"{0}\" column is missing. Add it, or start again from the template.",
+  "import.issue.nameTooLong": "This product name is too long — 120 characters at most.",
+  "import.issue.descriptionTooLong": "This description is too long — 5,000 characters at most.",
+  "import.issue.duplicateProductRow": "This product is already on row {0}. Keep one row per product, or the two rows would contradict each other.",
+  "import.issue.categoryInvalid": "This category cannot be read. Use names separated by a slash, up to {0} levels deep — like \"Clothing / Shirts\".",
+  "import.issue.notYesOrNo": "Type yes or no, or leave it blank to keep what it is.",
+  "import.issue.notAWholeNumber": "Type a whole number, 0 or more.",
+  "import.issue.variantNeedsProduct": "This row needs a product name. Repeat the name on every one of that product's option rows.",
+  "import.issue.duplicateCountRow": "This was already counted on row {0}. Count each one once.",
 } satisfies Record<string, string>;
 
 export type DictionaryKey = keyof typeof en;

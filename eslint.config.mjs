@@ -47,6 +47,12 @@ const eslintConfig = defineConfig([
     // nowhere useful: its warnings are about Prisma's and node-redis's own internals and would
     // teach everyone to scroll past the lint output.
     "**/dist/**",
+    // Tooling state, not this checkout's source. `**/.next/**` above stopped the 61,172 generated
+    // chunks, which left the *source* of every nested git worktree under `.claude/worktrees/`
+    // still being linted — `pnpm lint` here reported eight findings, all of them in another
+    // branch's files, none in this one. A worktree is a separate checkout and lints itself; this
+    // whole directory is git-ignored and never committed.
+    "**/.claude/**",
   ]),
 ]);
 
