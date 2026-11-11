@@ -352,8 +352,33 @@ export async function updateProduct(
   });
 }
 
-export async function deleteProduct(tenantId: string, id: string) {
+/**
+ * Deletes a product, writing off every unit it still held first (D90(iii)).
+ *
+ * This was the gap: `updateProduct` wrote a `VARIANT_REMOVED` before deleting a variant the owner
+ * removed from the form, and deleting the whole PRODUCT — the most direct way there is to destroy
+ * stock — just cascaded its variants away and left nothing behind. The ledger's newest movement
+ * for that variant went on claiming the old figure for ever, so the invariant could never
+ * reconcile it and the history could not answer where the units went. Exactly the defect the
+ * phase exists to prevent, in the one write path that was not wired.
+ *
+ * `actor` is optional only so the fixtures and the isolation suite, which have no person to name,
+ * keep working; every admin caller passes one.
+ */
+export async function deleteProduct(tenantId: string, id: string, actor?: StockActor) {
   return withTenant(tenantId, async (db) => {
+    if (actor && (await stockLedgerEnabled(db, tenantId))) {
+      const doomed = await db.productVariant.findMany({
+        where: { productId: id, product: { tenantId } },
+        select: { id: true },
+      });
+      await recordVariantRemoval(
+        db,
+        tenantId,
+        doomed.map((v) => v.id),
+        { reason: "VARIANT_REMOVED", actor },
+      );
+    }
     const { count } = await db.product.deleteMany({ where: { id, tenantId } });
     return count > 0;
   });

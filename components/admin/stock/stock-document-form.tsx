@@ -9,7 +9,13 @@ import { SectionCard } from "@/components/admin/section-card";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useT } from "@/lib/i18n/context";
-import { MAX_STOCK_LINES, MAX_STOCK_LINE_QUANTITY } from "@/lib/stock";
+import {
+  MAX_STOCK_LINES,
+  countedCeiling,
+  parseStockCostCents,
+  parseStockWhole,
+} from "@/lib/stock";
+import { MAX_STOCK } from "@/lib/variants";
 import { cn } from "@/lib/utils";
 import { VariantPicker } from "./variant-picker";
 import {
@@ -70,23 +76,6 @@ function newSubmissionId() {
   return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 12)}`;
 }
 
-/** A whole number, or null when the text is not one. */
-function parseWhole(text: string): number | null {
-  const trimmed = text.trim();
-  if (!/^\d{1,9}$/.test(trimmed)) return null;
-  const value = Number.parseInt(trimmed, 10);
-  return Number.isSafeInteger(value) ? value : null;
-}
-
-/** Cents from whole currency units, or null for a blank or malformed figure. */
-function parseCents(text: string): number | null {
-  const trimmed = text.trim();
-  if (!trimmed) return null;
-  const value = Number.parseFloat(trimmed.replace(",", "."));
-  if (!Number.isFinite(value) || value < 0) return null;
-  return Math.round(value * 100);
-}
-
 export function StockDocumentForm({ kind, withCost }: { kind: Kind; withCost: boolean }) {
   const t = useT();
   const receiving = kind === "RECEIPT";
@@ -109,17 +98,23 @@ export function StockDocumentForm({ kind, withCost }: { kind: Kind; withCost: bo
 
   /** Each line with its number resolved and judged. The document's one source of truth. */
   const judged = lines.map((line) => {
-    const value = parseWhole(line.numberText);
-    const badNumber =
-      value === null ||
-      value > MAX_STOCK_LINE_QUANTITY ||
-      (receiving && value < 1);
-    const cost = line.costText.trim() ? parseCents(line.costText) : null;
+    const value = parseStockWhole(line.numberText);
+    // Shape and ceiling are separate verdicts, because they need separate sentences. Conflating
+    // them is how a stocktake of a 1,999,998 shelf came to show "agrees" and "Enter a whole
+    // number, 0 or more" at the same time: the form pre-fills the shelf figure, then called its
+    // own pre-fill malformed. A count may always name what is on the shelf (`countedCeiling`); a
+    // receipt is measured against the ceiling the shelf would reach.
+    const badNumber = value === null || (receiving && value < 1);
+    const ceiling = receiving ? MAX_STOCK - line.shelf : countedCeiling(line.shelf);
+    const overCeiling = value !== null && value > ceiling;
+    const cost = parseStockCostCents(line.costText);
     const badCost = line.costText.trim() !== "" && cost === null;
     return {
       line,
       value: value ?? 0,
       badNumber,
+      overCeiling,
+      ceiling,
       cost,
       badCost,
       /** Receiving: where the shelf ends up. Counting: the variance against what we were shown. */
@@ -129,7 +124,9 @@ export function StockDocumentForm({ kind, withCost }: { kind: Kind; withCost: bo
   });
 
   const blocked =
-    lines.length === 0 || judged.some((j) => j.badNumber || j.badCost) || pending;
+    lines.length === 0 ||
+    judged.some((j) => j.badNumber || j.overCeiling || j.badCost) ||
+    pending;
   const full = lines.length >= MAX_STOCK_LINES;
   const variances = judged.filter((j) => j.delta !== 0);
 
@@ -148,7 +145,7 @@ export function StockDocumentForm({ kind, withCost }: { kind: Kind; withCost: bo
         if (!receiving) return current;
         return current.map((l) =>
           l.variantId === item.variantId
-            ? { ...l, numberText: String((parseWhole(l.numberText) ?? 0) + 1) }
+            ? { ...l, numberText: String((parseStockWhole(l.numberText) ?? 0) + 1) }
             : l,
         );
       }
@@ -299,7 +296,7 @@ export function StockDocumentForm({ kind, withCost }: { kind: Kind; withCost: bo
           <p className="text-sm text-muted-foreground">{t("stock.form.noLines")}</p>
         ) : (
           <ul className="grid gap-3">
-            {judged.map(({ line, badNumber, badCost, after, delta }) => (
+            {judged.map(({ line, badNumber, overCeiling, ceiling, badCost, after, delta }) => (
               <li
                 key={line.variantId}
                 data-testid="stock-line"
@@ -338,7 +335,7 @@ export function StockDocumentForm({ kind, withCost }: { kind: Kind; withCost: bo
                       inputMode="numeric"
                       dir="ltr"
                       className="tabular-nums"
-                      aria-invalid={badNumber || undefined}
+                      aria-invalid={badNumber || overCeiling || undefined}
                       aria-label={`${line.productName} ${
                         receiving ? t("stock.form.quantity") : t("stock.form.counted")
                       }`}
@@ -384,6 +381,12 @@ export function StockDocumentForm({ kind, withCost }: { kind: Kind; withCost: bo
                 {badNumber && (
                   <p className="text-xs text-destructive">
                     {receiving ? t("stock.form.badQuantity") : t("stock.form.badCounted")}
+                  </p>
+                )}
+                {!badNumber && overCeiling && (
+                  <p className="text-xs text-destructive">
+                    {receiving ? t("stock.form.receiptCeiling") : t("stock.form.countCeiling")}{" "}
+                    <span className="tabular-nums">{ceiling}</span>
                   </p>
                 )}
                 {badCost && <p className="text-xs text-destructive">{t("stock.form.badCost")}</p>}

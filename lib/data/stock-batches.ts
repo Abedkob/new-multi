@@ -24,8 +24,10 @@ import {
 import {
   MAX_STOCK_LINES,
   MAX_STOCK_LINE_QUANTITY,
+  countedCeiling,
   type StockBatchKindValue,
 } from "@/lib/stock";
+import { MAX_STOCK } from "@/lib/variants";
 
 export type StockBatchErrorCode =
   /** No lines, or every line was zero.*/
@@ -34,8 +36,10 @@ export type StockBatchErrorCode =
   | "INVALID"
   /** The store does not have the module switched on (or is paused, or unlicensed). */
   | "FEATURE_OFF"
-  /** Every line named a variant this store does not have. */
+  /** A line named a variant this store does not have (any more). */
   | "UNAVAILABLE"
+  /** A received line would push a shelf past MAX_STOCK. */
+  | "OVER_CAPACITY"
   /** The same submission id arrived again with different lines. */
   | "SUBMISSION_REUSED";
 
@@ -136,17 +140,46 @@ function normalizeCountLines(lines: readonly CountLineInput[]) {
     if (typeof line.variantId !== "string" || !line.variantId) {
       throw new StockBatchError("INVALID", "A line is missing its product option.");
     }
-    if (
-      !Number.isInteger(line.counted) ||
-      line.counted < 0 ||
-      line.counted > MAX_STOCK_LINE_QUANTITY
-    ) {
+    // Shape only. The ceiling is checked against the live shelf inside the transaction
+    // (`countedCeiling`), because a count of a shelf already above it must still be possible.
+    if (!Number.isInteger(line.counted) || line.counted < 0) {
       throw new StockBatchError("INVALID", "Invalid counted figure.");
     }
     // Zero is a real count — an empty shelf — which is why the floor here is 0 and not 1.
     merged.set(line.variantId, line.counted);
   }
   return merged;
+}
+
+/**
+ * Reads the shelves a document is about to touch, and refuses the WHOLE document if any line
+ * cannot be applied.
+ *
+ * Partial application was the bug: `incrementStock` silently skips a line whose variant has gone,
+ * and the receipt reported its own submitted line count regardless — so staging two lines, having
+ * one product deleted underneath, and submitting said "2 lines received" over a document holding
+ * one movement. Refusing everything is the honest answer: the person picked that option minutes
+ * ago, it is gone, and a summary that quietly counted it is worse than a refusal they can act on.
+ *
+ * Returns the live stock per variant, which the capacity check below needs anyway.
+ */
+async function readShelves(
+  tx: TxClient,
+  tenantId: string,
+  variantIds: readonly string[],
+): Promise<Map<string, number>> {
+  const rows = await tx.productVariant.findMany({
+    where: { id: { in: [...variantIds] }, product: { tenantId } },
+    select: { id: true, stock: true },
+  });
+  const shelves = new Map(rows.map((row) => [row.id, row.stock]));
+  if (shelves.size !== variantIds.length) {
+    throw new StockBatchError(
+      "UNAVAILABLE",
+      "One of those options is no longer in this store. Remove it and submit again.",
+    );
+  }
+  return shelves;
 }
 
 type Header = {
@@ -267,15 +300,32 @@ export async function recordStockReceipt(
       // order, whose id this layer does not control. `incrementStock` reports how many lines it
       // could actually move: a line naming another store's variant moves nothing and is not
       // recorded, which is what makes the "every line was foreign" case detectable below.
-      const moved = await incrementStock(tx, tenantId, items, {
+      // Every line still exists, or nothing is applied.
+      const shelves = await readShelves(
+        tx,
+        tenantId,
+        items.map((item) => item.variantId),
+      );
+      // And no shelf may be pushed past the ceiling. The cap cannot live in `incrementStock`,
+      // which is also how a cancellation and a void give stock BACK: a restore must never be
+      // refused, or a cancelled order could not return what it took. A receipt is somebody's
+      // intent and is refusable; that is the difference.
+      for (const item of items) {
+        const shelf = shelves.get(item.variantId)!;
+        if (shelf + item.quantity > MAX_STOCK) {
+          throw new StockBatchError(
+            "OVER_CAPACITY",
+            `That would put a shelf past ${MAX_STOCK} units, which is the most this system holds.`,
+          );
+        }
+      }
+
+      await incrementStock(tx, tenantId, items, {
         reason: "RECEIPT",
         actor: input.actor,
         batchId: batch.id,
         note,
       });
-      if (moved === 0) {
-        throw new StockBatchError("UNAVAILABLE", "None of those options are in this store.");
-      }
       return {
         id: batch.id,
         idempotent: false,
@@ -331,15 +381,30 @@ export async function recordStocktake(
         select: { id: true },
       });
 
+      // Every line still exists, or nothing is applied — the same rule as a receipt, so a count
+      // can never report more shelves than it touched.
+      const shelves = await readShelves(
+        tx,
+        tenantId,
+        targets.map((target) => target.variantId),
+      );
+      // A count may always name what is actually there, even for a shelf that somehow sits above
+      // the ceiling: refusing it would leave nobody able to bring that figure back into range.
+      for (const target of targets) {
+        if (target.to > countedCeiling(shelves.get(target.variantId)!)) {
+          throw new StockBatchError(
+            "OVER_CAPACITY",
+            `A count cannot be more than ${MAX_STOCK} units.`,
+          );
+        }
+      }
+
       const applied = await setStockToMany(tx, tenantId, targets, {
         reason: "COUNT",
         actor: input.actor,
         batchId: batch.id,
         note,
       });
-      if (applied.length === 0) {
-        throw new StockBatchError("UNAVAILABLE", "None of those options are in this store.");
-      }
       return { id: batch.id, idempotent: false, applied };
     });
   } catch (error) {

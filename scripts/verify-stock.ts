@@ -45,7 +45,15 @@ import {
   recordStockReceipt,
   recordStocktake,
 } from "../lib/data/stock-batches";
-import { MAX_STOCK_LINES, costForRole } from "../lib/stock";
+import {
+  MAX_STOCK_LINES,
+  costForRole,
+  countedCeiling,
+  parseStockCostCents,
+  parseStockWhole,
+} from "../lib/stock";
+import { MAX_STOCK } from "../lib/variants";
+import { deleteProduct } from "../lib/data/products";
 import { describeStockDrift, findStockDrift } from "../lib/stock/invariant";
 import { readFileSync } from "node:fs";
 import { execFileSync, spawnSync } from "node:child_process";
@@ -1007,6 +1015,194 @@ async function main() {
         0,
       );
       await setTenantStock(T, OWNER);
+    });
+
+    // =======================================================================================
+    // The six defects a browser walkthrough found, each with its own leg (C7)
+    // =======================================================================================
+    //
+    // Every one of these was reachable through the real UI and none of the suites caught it. They
+    // are written here so that fixing them is permanent rather than this week's state.
+    console.log("\nThe six defects found by walking the UI:");
+
+    await check("deleting a product writes off the stock it still held", async () => {
+      // THE gap: updateProduct wrote a VARIANT_REMOVED before deleting a variant removed from the
+      // form, and deleting the whole PRODUCT — the most direct way to destroy stock — cascaded its
+      // variants away silently. The ledger's newest movement for that variant went on claiming the
+      // old figure for ever, so the invariant could never reconcile it.
+      const doomed = await product("Doomed Product", 9);
+      const variantId = doomed.variants[0].id;
+      await setVariantStock(T, variantId, 9, actor, 9);
+      const before = await prisma.stockMovement.count({ where: { tenantId: T } });
+
+      assert.equal(await deleteProduct(T, doomed.id, actor), true);
+      assert.equal(
+        await prisma.productVariant.count({ where: { id: variantId } }),
+        0,
+        "the variant really is gone; that is what makes the write-off the only record",
+      );
+      const written = await prisma.stockMovement.findFirstOrThrow({
+        where: { tenantId: T, reason: "VARIANT_REMOVED", productNameSnapshot: "Doomed Product" },
+        orderBy: { createdAt: "desc" },
+      });
+      assert.equal(written.delta, -9, "the whole of what was on the shelf");
+      assert.equal(written.balanceAfter, 0);
+      assert.equal(written.variantId, null, "ON DELETE SET NULL nulled the link");
+      assert.equal(written.actorUserId, OWNER, "and it names who deleted it");
+      assert.ok(
+        (await prisma.stockMovement.count({ where: { tenantId: T } })) > before,
+        "a row was added rather than the stock quietly vanishing",
+      );
+      await assertNoDrift("after deleting a whole product");
+    });
+
+    await check("a receipt that would overfill a shelf is refused, and nothing is saved", async () => {
+      const brim = await product("Nearly Full", MAX_STOCK - 5);
+      const BV = brim.variants[0].id;
+      await assert.rejects(
+        recordStockReceipt(T, {
+          submissionId: sub("cap1"),
+          actor: batchActor,
+          lines: [{ variantId: BV, quantity: 100 }],
+        }),
+        (error: unknown) => error instanceof StockBatchError && error.code === "OVER_CAPACITY",
+        "receiving used to have no ceiling at all, so a shelf could be pushed to twice MAX_STOCK " +
+          "— a figure the stock screen then refused to save, trapping it",
+      );
+      assert.equal(await stockOf(BV), MAX_STOCK - 5, "and the shelf did not move");
+      assert.equal(
+        await prisma.stockBatch.count({ where: { tenantId: T, submissionId: sub("cap1") } }),
+        0,
+        "nor was a document left behind",
+      );
+      // Right up to the ceiling is still allowed: the cap is a limit, not a margin.
+      const ok = await recordStockReceipt(T, {
+        submissionId: sub("cap2"),
+        actor: batchActor,
+        lines: [{ variantId: BV, quantity: 5 }],
+      });
+      assert.ok(ok.id);
+      assert.equal(await stockOf(BV), MAX_STOCK);
+      await assertNoDrift("after filling a shelf exactly");
+    });
+
+    await check("a restore is NEVER refused by the ceiling, however full the shelf", async () => {
+      // The cap deliberately does not live in incrementStock, which is also how a cancellation and
+      // a void give stock back. A restore that could be refused would mean a cancelled order
+      // keeping units it took, which is worse than any ceiling.
+      const full = await product("Brim Full", MAX_STOCK);
+      const FV = full.variants[0].id;
+      const order = await placeOrder(T, customer, [{ variantId: FV, quantity: 3 }]);
+      assert.equal(await stockOf(FV), MAX_STOCK - 3);
+      await updateOrderStatus(T, order.id, "CANCELLED", actor);
+      assert.equal(
+        await stockOf(FV),
+        MAX_STOCK,
+        "the cancellation put all three back, right up to the ceiling",
+      );
+      await assertNoDrift("after restoring onto a full shelf");
+    });
+
+    await check("a document naming a vanished option is refused whole, not partly applied", async () => {
+      const keep = await product("Still Here", 10);
+      const going = await product("About To Go", 10);
+      const KV = keep.variants[0].id;
+      const GV = going.variants[0].id;
+      await prisma.product.deleteMany({ where: { id: going.id } });
+
+      for (const [label, attempt] of [
+        [
+          "a receipt",
+          () =>
+            recordStockReceipt(T, {
+              submissionId: sub("gone1"),
+              actor: batchActor,
+              lines: [
+                { variantId: KV, quantity: 1 },
+                { variantId: GV, quantity: 1 },
+              ],
+            }),
+        ],
+        [
+          "a stocktake",
+          () =>
+            recordStocktake(T, {
+              submissionId: sub("gone2"),
+              actor: batchActor,
+              lines: [
+                { variantId: KV, counted: 1 },
+                { variantId: GV, counted: 1 },
+              ],
+            }),
+        ],
+      ] as const) {
+        await assert.rejects(
+          attempt(),
+          (error: unknown) => error instanceof StockBatchError && error.code === "UNAVAILABLE",
+          `${label} used to apply the surviving lines and report the submitted count, so two ` +
+            `lines read as "2 lines received" over a document holding one`,
+        );
+      }
+      assert.equal(await stockOf(KV), 10, "and the surviving shelf did not move either");
+      await assertNoDrift("after a refused document");
+    });
+
+    await check("a count may always name what is on the shelf, whatever the ceiling", async () => {
+      // The form pre-fills each line with the shelf figure. A ceiling below it made the form
+      // declare its own pre-fill invalid — "agrees" and "enter a whole number" at once, submit
+      // disabled — which left nobody able to count that shelf at all.
+      assert.equal(countedCeiling(10), MAX_STOCK, "a normal shelf is measured against the ceiling");
+      assert.equal(
+        countedCeiling(MAX_STOCK * 2),
+        MAX_STOCK * 2,
+        "and a shelf already above it may still be counted as found",
+      );
+      // The server agrees with that rule, so the form is not alone in it.
+      const legacy = await product("Legacy Overfull", 10);
+      const LV = legacy.variants[0].id;
+      // Straight past both writers, the way pre-fix data got there.
+      await prisma.productVariant.update({ where: { id: LV }, data: { stock: MAX_STOCK + 50 } });
+      const counted = await recordStocktake(T, {
+        submissionId: sub("legacy"),
+        actor: batchActor,
+        lines: [{ variantId: LV, counted: MAX_STOCK + 50 }],
+      });
+      assert.equal(counted.applied[0].delta, 0, "counting it as found is a zero-delta row");
+      // And a count may still not INVENT a figure above the ceiling.
+      await assert.rejects(
+        recordStocktake(T, {
+          submissionId: sub("legacy2"),
+          actor: batchActor,
+          lines: [{ variantId: LV, counted: MAX_STOCK + 51 }],
+        }),
+        (error: unknown) => error instanceof StockBatchError && error.code === "OVER_CAPACITY",
+      );
+    });
+
+    await check("a malformed money figure is refused, not silently truncated", () => {
+      // Number.parseFloat stops at the second decimal point and returns what it has, so "4.5.6"
+      // came back 4.5 and was stored as $4.50 — a money field keeping a different number than the
+      // one typed, with nothing on screen to say so.
+      assert.equal(parseStockCostCents("4.5.6"), null, "the defect, now refused");
+      assert.equal(parseStockCostCents("4,5,6"), null);
+      assert.equal(parseStockCostCents("-5"), null);
+      assert.equal(parseStockCostCents("4.567"), null, "more precision than money has");
+      assert.equal(parseStockCostCents("abc"), null);
+      assert.equal(parseStockCostCents(""), null, "blank is no cost, which is not an error");
+      // And everything a person legitimately types still works.
+      assert.equal(parseStockCostCents("4"), 400);
+      assert.equal(parseStockCostCents("4.5"), 450);
+      assert.equal(parseStockCostCents("4.50"), 450);
+      assert.equal(parseStockCostCents("4,50"), 450, "a comma is a decimal mark in Arabic too");
+      assert.equal(parseStockCostCents(".5"), 50);
+      assert.equal(parseStockCostCents("4."), 400);
+      // The quantity parser shares the discipline.
+      assert.equal(parseStockWhole("12"), 12);
+      assert.equal(parseStockWhole("012"), 12);
+      assert.equal(parseStockWhole("1.5"), null);
+      assert.equal(parseStockWhole("-1"), null);
+      assert.equal(parseStockWhole(""), null);
+      return Promise.resolve();
     });
 
     // =======================================================================================

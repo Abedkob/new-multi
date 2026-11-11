@@ -29,6 +29,7 @@ const ERROR_KEYS: Record<StockBatchErrorCode, DictionaryKey> = {
   INVALID: "stock.error.INVALID",
   FEATURE_OFF: "stock.error.FEATURE_OFF",
   UNAVAILABLE: "stock.error.UNAVAILABLE",
+  OVER_CAPACITY: "stock.error.OVER_CAPACITY",
   SUBMISSION_REUSED: "stock.error.SUBMISSION_REUSED",
 };
 

@@ -83,8 +83,11 @@ export async function updateProductAction(
 }
 
 export async function deleteProductAction(id: string) {
-  const { tenantId } = await requireCapability("products:write");
-  await deleteProduct(tenantId, id);
+  const { tenantId, userId, name } = await requireCapability("products:write");
+  // The actor travels with the delete, so the units it destroys are written off against a person
+  // rather than vanishing (D90(iii)). Deleting a product is the most direct way there is to
+  // destroy stock, and it was the one path with no ledger row.
+  await deleteProduct(tenantId, id, { userId, name });
   redirect("/admin/products");
 }
 

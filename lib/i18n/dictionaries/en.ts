@@ -1066,6 +1066,10 @@ export const en = {
   "stock.history.noun": "movements",
   "stock.history.empty": "No movements recorded yet",
   "stock.history.emptyBody": "A sale, a delivery or a correction will show up here.",
+  // An empty filter is not an empty ledger. Saying "nothing recorded yet" over a store with
+  // movements reads as the feature being broken.
+  "stock.history.noneMatch": "Nothing matches this filter",
+  "stock.history.noneMatchBody": "This store has movements, just none of these. Clear the filter to see them.",
   "stock.history.filterAriaLabel": "Filter movements by what happened",
   "stock.reasonFilter.all": "Everything",
   "stock.reason.OPENING": "Opening balance",
@@ -1117,6 +1121,11 @@ export const en = {
   "stock.form.badQuantity": "Enter a whole number, 1 or more.",
   "stock.form.badCounted": "Enter a whole number, 0 or more.",
   "stock.form.badCost": "Enter an amount, or leave it blank.",
+  // Separate from badQuantity/badCounted on purpose: "enter a whole number" on a figure that IS a
+  // whole number says nothing, and the form used to show exactly that over its own pre-filled
+  // value. These name the limit.
+  "stock.form.receiptCeiling": "That shelf cannot take more than",
+  "stock.form.countCeiling": "A count cannot be more than",
   "stock.form.aboutTitle": "About this document",
   "stock.form.aboutHint": "Both are for your own records. Neither is shown to anyone shopping.",
   "stock.form.reference": "Reference",
@@ -1145,7 +1154,8 @@ export const en = {
   "stock.error.EMPTY": "Add at least one line first.",
   "stock.error.INVALID": "Something in that document was not valid. Check the numbers and try again.",
   "stock.error.FEATURE_OFF": "This store cannot record stock movements right now.",
-  "stock.error.UNAVAILABLE": "None of those options are in this store any more.",
+  "stock.error.UNAVAILABLE": "One of those options is no longer in this store. Remove that line and submit again.",
+  "stock.error.OVER_CAPACITY": "That would put a shelf over the one-million limit this system holds. Nothing was saved.",
   "stock.error.SUBMISSION_REUSED": "That was already saved with different lines. Start a new one.",
   "stock.error.generic": "Something went wrong. Try again.",
 

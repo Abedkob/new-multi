@@ -7,6 +7,7 @@ import { PageHeader } from "@/components/admin/page-header";
 import { SectionCard } from "@/components/admin/section-card";
 import { StatusFilter, type StatusFilterTab } from "@/components/admin/status-filter";
 import { Badge } from "@/components/ui/badge";
+import { buttonVariants } from "@/components/ui/button";
 import {
   Table,
   TableBody,
@@ -82,7 +83,10 @@ export default async function StockHistoryPage({
   const all = STOCK_MOVEMENT_REASONS.reduce((n, r) => n + countOf(r), 0);
   // Only the reasons this store has actually recorded. A shop with no till should not be offered a
   // "Sold at the counter" tab reading (0) — nine empty pills would bury the two that matter.
-  const present = STOCK_MOVEMENT_REASONS.filter((r) => countOf(r) > 0);
+  //
+  // Plus whichever reason is actually selected, even at zero: without it a URL naming a reason the
+  // store has none of drew no active pill at all, so nothing on screen said a filter was applied.
+  const present = STOCK_MOVEMENT_REASONS.filter((r) => countOf(r) > 0 || r === reason);
   const tabs: StatusFilterTab[] = [
     { key: "ALL", label: t("stock.reasonFilter.all"), count: all, href: query({}) },
     ...present.map((r) => ({
@@ -135,9 +139,29 @@ export default async function StockHistoryPage({
 
       {items.length === 0 ? (
         <SectionCard bodyClassName="p-0">
-          <EmptyState icon={History} title={t("stock.history.empty")}>
-            {t("stock.history.emptyBody")}
-          </EmptyState>
+          {/* An empty FILTER is not an empty ledger, and saying "no movements recorded yet" over a
+              store with seven of them reads as the feature being broken. `all` is the count across
+              every reason within the current scope, so it answers which of the two this is. */}
+          {all === 0 && !variantId && !batchId ? (
+            <EmptyState icon={History} title={t("stock.history.empty")}>
+              {t("stock.history.emptyBody")}
+            </EmptyState>
+          ) : (
+            <EmptyState
+              icon={History}
+              title={t("stock.history.noneMatch")}
+              action={
+                <Link
+                  href="/admin/stock/history"
+                  className={buttonVariants({ variant: "outline" })}
+                >
+                  {t("stock.scope.clear")}
+                </Link>
+              }
+            >
+              {t("stock.history.noneMatchBody")}
+            </EmptyState>
+          )}
         </SectionCard>
       ) : (
         <>

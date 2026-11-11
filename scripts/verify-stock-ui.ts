@@ -282,6 +282,34 @@ async function main() {
       ok("a single variant's history shows only its own movements, and keeps its scope");
     }
 
+    // ------------------------------------------------------------------- an empty FILTER
+    {
+      // Filtering by a reason this store has none of used to show "No movements recorded yet",
+      // directly under a tab reading "Everything (7)" — the empty-ledger message over a store
+      // with a ledger, which reads as the feature being broken. And no pill was active, so
+      // nothing on screen said a filter was even applied.
+      const filtered = await owner.get("/admin/stock/history?reason=COUNTER_VOID");
+      assert.equal(filtered.status, 200);
+      assert.ok(
+        filtered.body.includes(en["stock.history.noneMatch"]),
+        "an empty filter must say the filter is empty",
+      );
+      assert.ok(
+        !filtered.body.includes(en["stock.history.empty"]),
+        "and must NOT claim the store has no movements when it has some",
+      );
+      assert.ok(
+        filtered.body.includes(en["stock.scope.clear"]),
+        "with a way back, or the filter is a dead end",
+      );
+      assert.ok(
+        /aria-current="page"[^>]*>[\s\S]{0,200}?Counter sale voided/.test(filtered.body) ||
+          filtered.body.includes("reason=COUNTER_VOID"),
+        "and the selected reason is drawn as a pill even at zero, so the filter is visible",
+      );
+      ok("an empty filter says so, instead of claiming the ledger is empty");
+    }
+
     // ------------------------------------------------------------------- a removed option
     {
       // Two options, then one of them removed through the form — the write that destroys stock

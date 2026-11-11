@@ -428,6 +428,38 @@ no statement is added.
   `/admin/products/[id]/stock`, which every store has. A store with no module gets a **404**, not
   `/admin/no-access`: the refusal page means "your role may not", and this is not about the role.
 
+### What walking the UI found
+
+Six defects, none of which any suite caught, because the suites tested the paths that were
+remembered. Each now has its own leg in `verify:stock` or `verify:stock-ui`.
+
+- **Deleting a product destroyed its stock with no ledger row.** `updateProduct` was wired for a
+  variant removed from the form; `deleteProduct` — the most direct way there is to destroy stock —
+  cascaded its variants away silently, leaving the newest movement claiming the old figure for
+  ever. It now writes the write-off first, naming whoever deleted it.
+- **Receiving had no ceiling.** 999,999 onto a shelf of 999,999 was accepted, producing a figure
+  the stock screen then refused to save ("Some fields need attention", with no mention of a cap).
+  A receipt is now refused if it would push a shelf past `MAX_STOCK`, on screen with the remaining
+  headroom and again in the writer. **The cap deliberately does not live in `incrementStock`**,
+  which is also how a cancellation and a void give stock back: a restore must never be refused, or
+  a cancelled order could keep what it took. There is a leg for that too.
+- **A count could not name its own pre-filled figure.** For a shelf above the ceiling the form
+  showed "agrees" and "Enter a whole number, 0 or more" together, with submit disabled. Shape and
+  ceiling are now separate verdicts with separate sentences, and `countedCeiling` guarantees a
+  count may always state what is on the shelf.
+- **A receipt reported lines that never moved.** `applied` was built from the submitted items, so
+  staging two lines and having one product deleted underneath said "2 lines received" over a
+  document holding one movement. A document naming a vanished option is now refused **whole** —
+  partial application with an honest summary was the alternative, and refusing is the answer a
+  person can act on.
+- **The history showed the empty-ledger message for an empty filter**, under a tab reading
+  "Everything (7)", with no active pill to say a filter was applied. The two states are now
+  distinct, and the selected reason draws its pill even at zero.
+- **A malformed unit cost was silently truncated.** `Number.parseFloat` stops at the second decimal
+  point, so "4.5.6" was stored as $4.50. Money is now shape-checked before parsing
+  (`parseStockCostCents`), and `MAX_STOCK_LINE_QUANTITY` is `MAX_STOCK` rather than a second
+  constant of the same value — which is how the two ceilings D89 merged got there originally.
+
 ### What it costs
 
 `pnpm measure:stock`, 2,000 products x 3 variants and 100,000 movements, dev laptop, after

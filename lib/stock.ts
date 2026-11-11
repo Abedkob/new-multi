@@ -8,6 +8,7 @@
 
 import { canServeTenant, type LicenseAccessSnapshot } from "@/lib/license/status";
 import type { AdminRole } from "@/lib/roles";
+import { MAX_STOCK } from "@/lib/variants";
 
 export const STOCK_MOVEMENT_REASONS = [
   "OPENING",
@@ -34,8 +35,58 @@ export type StockBatchKindValue = (typeof STOCK_BATCH_KINDS)[number];
  */
 export const MAX_STOCK_LINES = 50;
 
-/** The largest quantity one received line may carry, matching the one stock ceiling (D89). */
-export const MAX_STOCK_LINE_QUANTITY = 1_000_000;
+/**
+ * The ceiling a stocktake line may name.
+ *
+ * `MAX_STOCK` itself, re-exported rather than restated. It was briefly a second constant of the
+ * same value, which is how the two stock ceilings that D89 merged got there in the first place:
+ * the product form admitted nine digits while the stock screen refused anything over a million.
+ * One number, one definition.
+ *
+ * A count is allowed to name whatever is already on the shelf, even if that is somehow above the
+ * ceiling — see `countedCeiling`. A shelf cannot get there any more (a receipt is refused for
+ * exceeding it), but refusing somebody's count of data that already exists would leave them no way
+ * to bring it back into range.
+ */
+export const MAX_STOCK_LINE_QUANTITY = MAX_STOCK;
+
+/**
+ * The largest figure a count of this shelf may name.
+ *
+ * Normally the ceiling; never less than what is actually there. A stocktake form pre-fills each
+ * line with the shelf figure, so a ceiling below it would make the form declare its own pre-filled
+ * value invalid — which it did: a shelf of 1,999,998 showed "agrees" and "Enter a whole number, 0
+ * or more" at the same time, with the submit disabled. A count must always be able to say what is
+ * on the shelf.
+ */
+export function countedCeiling(shelf: number): number {
+  return Math.max(MAX_STOCK, shelf);
+}
+
+/**
+ * Cents from a typed money figure, or null when the text is not one.
+ *
+ * Shape-checked BEFORE parsing, which is the whole point. `Number.parseFloat` stops at the second
+ * decimal point and returns what it has, so "4.5.6" came back as 4.5 and was stored as $4.50 — a
+ * money field silently keeping a different number than the one typed. Accepts a comma as the
+ * decimal mark, up to two decimal places, and a leading or trailing one ("4.", ".5").
+ */
+export function parseStockCostCents(text: string): number | null {
+  const trimmed = text.trim();
+  if (!trimmed) return null;
+  if (!/^(\d{1,9}([.,]\d{0,2})?|[.,]\d{1,2})$/.test(trimmed)) return null;
+  const value = Number.parseFloat(trimmed.replace(",", "."));
+  if (!Number.isFinite(value) || value < 0) return null;
+  return Math.round(value * 100);
+}
+
+/** A whole number as typed, or null. Shared by both documents' numeric column. */
+export function parseStockWhole(text: string): number | null {
+  const trimmed = text.trim();
+  if (!/^\d{1,9}$/.test(trimmed)) return null;
+  const value = Number.parseInt(trimmed, 10);
+  return Number.isSafeInteger(value) ? value : null;
+}
 
 /** The fields a stock decision needs. Structural, so a `select`ed row fits. */
 export type StockTenant = {
