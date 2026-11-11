@@ -17,6 +17,8 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 
+import ExcelJS from "exceljs";
+
 import {
   BLANK_RULE,
   MAX_OPTION_PAIRS,
@@ -31,6 +33,14 @@ import {
 } from "../lib/catalogue-sheet/columns";
 import { parseCsv, sniffDelimiter, writeCsv } from "../lib/catalogue-sheet/csv";
 import {
+  MAX_SHEET_ROWS,
+  buildWorkbook,
+  readWorkbook,
+  type ExportProduct,
+  type ExportStockLine,
+  type ExportVariant,
+} from "../lib/catalogue-sheet/workbook";
+import {
   matchKeyOf,
   parseCatalogueSheets,
   parseProductSheet,
@@ -43,6 +53,11 @@ import { MAX_STOCK } from "../lib/variants";
 let checks = 0;
 function check(name: string, fn: () => void) {
   fn();
+  checks++;
+  console.log(`  ok  ${name}`);
+}
+async function acheck(name: string, fn: () => Promise<void>) {
+  await fn();
   checks++;
   console.log(`  ok  ${name}`);
 }
@@ -61,7 +76,7 @@ function stockGrid(rows: string[][]): string[][] {
 /** `name, description, price, category, best seller, warn at` */
 const product = (name: string, price = "10", rest: string[] = []) => [name, "", price, ...rest];
 
-function main() {
+async function main() {
   console.log("The column definition:");
 
   check("every column has a key, both languages, and help in both", () => {
@@ -687,13 +702,286 @@ function main() {
         assert.ok(!source.includes(forbidden), `${file} must not reach for ${forbidden}`);
       }
     }
+    // And the quarantine holds from the other side: exactly one file may import the library.
+    const importers = ["parse.ts", "csv.ts", "columns.ts", "workbook.ts"].filter((f) =>
+      readFileSync(`lib/catalogue-sheet/${f}`, "utf8").includes('from "exceljs"'),
+    );
+    assert.deepEqual(importers, ["workbook.ts"], "the spreadsheet library has escaped its one file");
+  });
+
+  console.log("\nThe workbook, written and read back:");
+
+  const CATEGORIES = ["Clothing", "Clothing / Shirts", "Kitchen"];
+  const EXPORTED: {
+    products: ExportProduct[];
+    variants: ExportVariant[];
+    stock: ExportStockLine[];
+  } = {
+    products: [
+      {
+        name: "Linen Shirt",
+        description: "Light, with a comma, and\na second line",
+        priceCents: 12_999,
+        categoryPath: ["Clothing", "Shirts"],
+        bestSeller: true,
+        warnAt: 3,
+      },
+      { name: "قميص كتان", description: "", priceCents: 950, categoryPath: null, bestSeller: false, warnAt: null },
+      { name: 'Mug "large"', description: "", priceCents: 0, categoryPath: ["Kitchen"], bestSeller: false, warnAt: 0 },
+    ],
+    variants: [
+      { productName: "Linen Shirt", attributes: { Size: "M", Colour: "Blue" }, stock: 4, priceOverrideCents: 13_500 },
+      { productName: "Linen Shirt", attributes: { Size: "L", Colour: "Blue" }, stock: 2, priceOverrideCents: null },
+      { productName: "قميص كتان", attributes: {}, stock: 7, priceOverrideCents: null },
+    ],
+    stock: [
+      { productName: "Linen Shirt", attributes: { Size: "M", Colour: "Blue" }, onHand: 4 },
+      { productName: "قميص كتان", attributes: {}, onHand: 7 },
+    ],
+  };
+
+  await acheck("a blank template is a real xlsx whose every sheet the reader recognises", async () => {
+    const buffer = await buildWorkbook({
+      locale: "en",
+      storeName: "Demo Boutique",
+      categoryPaths: CATEGORIES,
+      productNames: ["Linen Shirt"],
+    });
+    assert.equal(buffer.subarray(0, 2).toString(), "PK", "an xlsx is a zip; this is not one");
+    const { sheets, truncated, sheetNames } = await readWorkbook(buffer);
+    assert.equal(truncated, false);
+    assert.deepEqual(Object.keys(sheets).sort(), ["products", "stock", "variants"]);
+    // The Instructions sheet must be FIRST, because it is the thing a merchant opening the file
+    // has not read yet, and the hidden Lists sheet must not be offered as a sheet to fill in.
+    assert.equal(sheetNames[0], SHEET_NAMES.instructions.en);
+    assert.ok(sheetNames.includes(SHEET_NAMES.lists.en));
+    // Headers recognised, no rows, no complaints: a blank template is not an error.
+    const parsed = parseCatalogueSheets({ products: sheets.products, variants: sheets.variants });
+    assert.deepEqual(parsed.issues, [], JSON.stringify(parsed.issues));
+    assert.equal(parsed.products.length, 0);
+    assert.deepEqual(parseStockSheet(sheets.stock!).issues, []);
+  });
+
+  await acheck("an export, read back and parsed, is exactly what went in", async () => {
+    const buffer = await buildWorkbook({
+      locale: "en",
+      storeName: "Demo Boutique",
+      categoryPaths: CATEGORIES,
+      productNames: EXPORTED.products.map((p) => p.name),
+      ...EXPORTED,
+    });
+    const { sheets } = await readWorkbook(buffer);
+    const parsed = parseCatalogueSheets({ products: sheets.products, variants: sheets.variants });
+    assert.deepEqual(parsed.issues, [], JSON.stringify(parsed.issues));
+
+    // One assertion covering the writer, the reader, the column definition and the parser at once
+    // — and the reason all four read `columns.ts`. A column added to one and not another dies here.
+    assert.deepEqual(
+      parsed.products.map((p) => ({
+        name: p.name,
+        description: p.description ?? "",
+        priceCents: p.priceCents,
+        categoryPath: p.categoryPath,
+        bestSeller: p.bestSeller,
+        warnAt: p.warnAt,
+      })),
+      EXPORTED.products,
+    );
+    assert.deepEqual(
+      parsed.variants.map((v) => ({
+        productName: v.productName,
+        attributes: v.attributes,
+        priceOverrideCents: v.priceOverrideCents,
+      })),
+      EXPORTED.variants.map(({ productName, attributes, priceOverrideCents }) => ({
+        productName,
+        attributes,
+        priceOverrideCents,
+      })),
+    );
+    // Stock is deliberately NOT round-tripped on the Options sheet: it applies only to options
+    // being created, so an export leaves it blank rather than writing a figure that a re-import
+    // would ignore and report — which looks exactly like a bug to the person reading the preview.
+    assert.deepEqual(parsed.variants.map((v) => v.stock), [null, null, null]);
+  });
+
+  await acheck("the stock sheet exports what is on the shelf and leaves the counting to the shop", async () => {
+    const buffer = await buildWorkbook({
+      locale: "en",
+      storeName: "Demo Boutique",
+      categoryPaths: CATEGORIES,
+      productNames: EXPORTED.products.map((p) => p.name),
+      ...EXPORTED,
+    });
+    const { sheets } = await readWorkbook(buffer);
+    const { rows, issues } = parseStockSheet(sheets.stock!);
+    assert.deepEqual(issues, []);
+    // Every `Counted` cell is blank, so nothing parses — a count sheet that arrived pre-filled
+    // with the system's own figures would be a stocktake that agrees with itself by construction.
+    assert.equal(rows.length, 0, "an exported count sheet must not pre-fill the count");
+    // And `On the shelf now` is there to be read: the figures are in the grid even though the
+    // parser drops them.
+    const flat = sheets.stock!.flat().join("|");
+    assert.ok(flat.includes("4") && flat.includes("7"), "the live figures must be visible");
+  });
+
+  await acheck("an Arabic workbook is Arabic throughout, and right-to-left", async () => {
+    const buffer = await buildWorkbook({
+      locale: "ar",
+      storeName: "متجر تجريبي",
+      categoryPaths: ["ملابس / قمصان"],
+      productNames: ["قميص كتان"],
+      products: [{ name: "قميص كتان", description: "", priceCents: 950, categoryPath: ["ملابس", "قمصان"], bestSeller: true, warnAt: null }],
+    });
+    const workbook = new ExcelJS.Workbook();
+    await workbook.xlsx.load(buffer as unknown as ArrayBuffer);
+    const sheet = workbook.getWorksheet(SHEET_NAMES.products.ar);
+    assert.ok(sheet, `the sheet must be named in Arabic; got ${workbook.worksheets.map((w) => w.name).join(", ")}`);
+    // Without this the headers are Arabic and the columns run the wrong way, which is the same
+    // half-translated feeling as an Arabic page with a left-aligned table.
+    assert.equal(sheet.views[0]?.rightToLeft, true);
+    assert.equal(workbook.getWorksheet(SHEET_NAMES.lists.ar)?.state, "hidden");
+
+    // And the Arabic headers parse: the whole point of bilingual headers is that a merchant can
+    // download in their own language, type into it, and upload it back.
+    const { sheets } = await readWorkbook(buffer);
+    const parsed = parseProductSheet(sheets.products!);
+    assert.deepEqual(parsed.issues, [], JSON.stringify(parsed.issues));
+    assert.equal(parsed.rows[0].bestSeller, true, "and 'نعم' reads as yes");
+    assert.deepEqual(parsed.rows[0].categoryPath, ["ملابس", "قمصان"]);
+  });
+
+  await acheck("the category dropdown exists, and suggests rather than refuses", async () => {
+    const buffer = await buildWorkbook({
+      locale: "en",
+      storeName: "Demo Boutique",
+      categoryPaths: CATEGORIES,
+      productNames: ["Linen Shirt"],
+    });
+    const workbook = new ExcelJS.Workbook();
+    await workbook.xlsx.load(buffer as unknown as ArrayBuffer);
+    const sheet = workbook.getWorksheet(SHEET_NAMES.products.en)!;
+    const categoryColumn = productSheetColumns().findIndex((c) => c.key === "category") + 1;
+    const validation = sheet.getCell(2, categoryColumn).dataValidation;
+    assert.ok(validation, "the dropdown is the only thing .xlsx buys over a CSV here");
+    assert.equal(validation.type, "list");
+    assert.ok(validation.formulae?.[0]?.includes(SHEET_NAMES.lists.en), "it must point at the hidden sheet");
+    // A merchant typing a brand-new category must not be blocked by a dialog we did not write:
+    // this importer CREATES missing categories, so refusing the cell would refuse the feature.
+    //
+    // Asserted as falsy rather than `=== false` because the attribute comes back *absent* from a
+    // written-then-read workbook: `showErrorMessage` defaults to false in the file format, so
+    // exceljs omits it. Absent and false are the same instruction to Excel — do not block — and
+    // pinning the assertion to the literal `false` would fail on a correct file.
+    assert.ok(!validation.showErrorMessage, "the dropdown must suggest, not refuse");
+    const bestSellerColumn = productSheetColumns().findIndex((c) => c.key === "bestSeller") + 1;
+    assert.equal(sheet.getCell(2, bestSellerColumn).dataValidation?.type, "list");
+  });
+
+  await acheck("every cell shape a merchant's workbook can produce is read safely", async () => {
+    // `CellValue` is nine shapes wide and `String(value)` on the object ones yields
+    // "[object Object]" — which would be imported as a product name.
+    const workbook = new ExcelJS.Workbook();
+    const sheet = workbook.addWorksheet(SHEET_NAMES.products.en);
+    sheet.addRow(["Product", "Description", "Price"]);
+    const row = sheet.addRow([]);
+    row.getCell(1).value = { richText: [{ text: "Linen " }, { text: "Shirt" }] };
+    row.getCell(2).value = { text: "see this", hyperlink: "https://example.com" };
+    row.getCell(3).value = { formula: "1*2", result: 12.5 };
+    const dates = sheet.addRow([]);
+    dates.getCell(1).value = "Dated";
+    dates.getCell(3).value = new Date("2026-03-09T00:00:00Z");
+    const broken = sheet.addRow([]);
+    broken.getCell(1).value = "Broken";
+    broken.getCell(3).value = { formula: "1/0", result: undefined };
+    const buffer = Buffer.from(await workbook.xlsx.writeBuffer());
+
+    const { sheets } = await readWorkbook(buffer);
+    const grid = sheets.products!;
+    assert.equal(grid[1][0], "Linen Shirt", "rich text must be joined, not stringified");
+    assert.equal(grid[1][1], "see this", "a hyperlink's text, not its object");
+    assert.equal(grid[1][2], "12.5", "a formula's cached result, never evaluated by us");
+    const parsed = parseProductSheet(grid);
+    assert.equal(parsed.rows[0].priceCents, 1250);
+    // A date in a price column and a formula with no result are both mistakes, and both become a
+    // complaint with a row number rather than a value.
+    assert.deepEqual(
+      parsed.issues.map((i) => [i.row, i.message]),
+      [[3, "validation.price.invalidOrEmpty"], [4, "validation.price.invalidOrEmpty"]],
+    );
+  });
+
+  await acheck("an export refuses to write a figure that is not one", async () => {
+    // Found by running this against the real demo store: the caller read `priceCents` where the
+    // column is `basePriceCents`, every price cell came out as the string "NaN", and the workbook
+    // was produced and then parsed back as six numbered complaints about a file our own code had
+    // written. A missing figure on the export side is our bug, and it has to stop here.
+    await assert.rejects(
+      () =>
+        buildWorkbook({
+          locale: "en",
+          storeName: "Demo Boutique",
+          categoryPaths: [],
+          productNames: [],
+          products: [
+            {
+              name: "Mug",
+              description: "",
+              priceCents: undefined as unknown as number,
+              categoryPath: null,
+              bestSeller: false,
+              warnAt: null,
+            },
+          ],
+        }),
+      /non-numeric amount/,
+    );
+  });
+
+  await acheck("a sheet called Sheet1 is identified by its headers", async () => {
+    // What a merchant exporting from another system, or pasting into a fresh workbook, hands over.
+    const workbook = new ExcelJS.Workbook();
+    const sheet = workbook.addWorksheet("Sheet1");
+    sheet.addRow(["Product", "Price"]);
+    sheet.addRow(["Mug", 9.99]);
+    const buffer = Buffer.from(await workbook.xlsx.writeBuffer());
+    const { sheets } = await readWorkbook(buffer);
+    assert.ok(sheets.products, "a file whose sheet is unnamed must still work");
+    assert.equal(parseProductSheet(sheets.products).rows[0].priceCents, 999);
+  });
+
+  await acheck("a sheet longer than the cap is read to the cap and says so", async () => {
+    const workbook = new ExcelJS.Workbook();
+    const sheet = workbook.addWorksheet(SHEET_NAMES.products.en);
+    sheet.addRow(["Product", "Price"]);
+    for (let i = 0; i < MAX_SHEET_ROWS + 20; i++) sheet.addRow([`Item ${i}`, 1]);
+    const buffer = Buffer.from(await workbook.xlsx.writeBuffer());
+    const { sheets, truncated } = await readWorkbook(buffer);
+    assert.equal(truncated, true, "silently dropping rows is the worst possible outcome here");
+    assert.equal(sheets.products!.length, MAX_SHEET_ROWS);
+  });
+
+  await acheck("trailing formatting is not mistaken for truncated data", async () => {
+    // A merchant who styled their sheet to row 5,000 has a huge `rowCount` and nothing past row
+    // 400. Warning about that would cry wolf on every file anyone has ever formatted.
+    const workbook = new ExcelJS.Workbook();
+    const sheet = workbook.addWorksheet(SHEET_NAMES.products.en);
+    sheet.addRow(["Product", "Price"]);
+    sheet.addRow(["Mug", 9.99]);
+    sheet.getCell(`A${MAX_SHEET_ROWS + 500}`).fill = {
+      type: "pattern", pattern: "solid", fgColor: { argb: "FFFF0000" },
+    };
+    const buffer = Buffer.from(await workbook.xlsx.writeBuffer());
+    const { truncated, sheets } = await readWorkbook(buffer);
+    assert.equal(truncated, false);
+    assert.equal(parseProductSheet(sheets.products!).rows.length, 1);
   });
 }
 
-try {
-  main();
-  console.log(`\n${checks} checks passed.`);
-} catch (error) {
-  console.error("\nFAILED:", error instanceof Error ? error.stack : error);
-  process.exitCode = 1;
-}
+main().then(
+  () => console.log(`\n${checks} checks passed.`),
+  (error: unknown) => {
+    console.error("\nFAILED:", error instanceof Error ? error.stack : error);
+    process.exitCode = 1;
+  },
+);

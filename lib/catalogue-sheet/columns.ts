@@ -253,16 +253,23 @@ export const SHEET_NAMES = {
  * own — Excel will happily hand back `Price ` with a trailing space, and a merchant will type
  * `price` in lower case. Arabic diacritics and the tatweel are removed for the same reason: a
  * header typed by hand will not match one written by a generator byte for byte.
+ *
+ * `*` is in the strip list so the template can write `Product *` to mark a required column and
+ * still match it on read — the marking is for the person, and must not become a parsing rule.
  */
 export function normalizeHeader(value: string): string {
   return value
     .normalize("NFKD")
     .replace(/[̀-ًͯ-ْـ]/g, "")
     .toLowerCase()
-    .replace(/[()'".،,:;]/g, " ")
+    .replace(/[()'".،,:;*]/g, " ")
     .replace(/\s+/g, " ")
     .trim();
 }
+
+/** How a required column is marked for the reader's eye, on both the template and the export. */
+export const headerLabel = (column: SheetColumn, locale: Locale): string =>
+  column.required ? `${column.header[locale]} *` : column.header[locale];
 
 /** Every spelling of a column's header that the reader will accept. */
 export function headerAliases(column: SheetColumn): string[] {

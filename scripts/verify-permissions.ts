@@ -138,11 +138,29 @@ function adminCapabilityGuard() {
       ["app", "admin", "(panel)", "analytics", "links", "page.tsx"],
     ].map((parts) => join(...parts)),
   );
+  /**
+   * Route handlers under /admin that are deliberately public, listed by name.
+   *
+   * Only the installable app's manifest, and only because a browser fetches a manifest with
+   * `credentials: "omit"` — the /admin role gate saw an anonymous request and redirected it to
+   * /login, which meant neither app could be installed by anyone. A manifest is a name, a colour
+   * and a list of icons, identical for every store. `PUBLIC_CONSOLE_PATHS` in proxy.ts is the
+   * other half of that decision.
+   */
+  const PUBLIC_ROUTES = new Set([join("app", "admin", "manifest.webmanifest", "route.ts")]);
 
   const named = new Map<Capability, string[]>();
   let guarded = 0;
+  // `route.ts` is in this list as of the bulk-import work, and was not before.
+  //
+  // The only route handlers under /admin were the two deliberately-public manifests, so nothing
+  // had ever needed the check — which meant the download routes for the catalogue template and
+  // the export, the first *guarded* route handlers in this repository, could have shipped with no
+  // guard at all and this suite would have reported green. A route handler is its own HTTP
+  // endpoint in exactly the way a server action is, and the rule that caught a missing guard on
+  // one has to cover the other.
   const files = walk(join("app", "admin")).filter((f) =>
-    ["page.tsx", "layout.tsx", "actions.ts"].some((name) => basename(f) === name),
+    ["page.tsx", "layout.tsx", "actions.ts", "route.ts"].some((name) => basename(f) === name),
   );
   assert.ok(files.length > 40, `expected the whole admin surface, found ${files.length} files`);
 
@@ -160,6 +178,15 @@ function adminCapabilityGuard() {
           file.endsWith(join("app", "admin", "layout.tsx")),
         `${file} has no guard and is not a redirect: it must name a capability`,
       );
+      continue;
+    }
+
+    if (PUBLIC_ROUTES.has(file)) {
+      assert.ok(
+        basename(file) === "route.ts",
+        `${file} is listed as a public route but is not a route handler`,
+      );
+      assert.equal(caps.length, 0, `${file} is listed as public yet names a capability`);
       continue;
     }
 
@@ -188,7 +215,7 @@ function adminCapabilityGuard() {
     }
     // Every exported server action in the file has to carry the guard itself, not inherit it
     // from the page that imports it: an action is its own HTTP endpoint.
-    if (file.endsWith("actions.ts")) {
+    if (file.endsWith("actions.ts") || basename(file) === "route.ts") {
       for (const part of src.split(/^export async function /m).slice(1)) {
         const name = part.slice(0, part.indexOf("("));
         assert.ok(
