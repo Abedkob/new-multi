@@ -177,12 +177,36 @@ Newest sections at the bottom; delete an item when it's fixed.
   ledger is. There is no "undo this receipt" button, so a receipt entered twice is fixed by a
   stocktake rather than by deleting anything. The submission id prevents the common case (a double
   tap, a retry) from needing that at all.
-- **No CSV import or export, no barcodes, no SKUs.** The picker searches `Product.name`, which has
-  no text index in this schema — see `pnpm measure:stock` for the measured figure (8ms p95 at
-  2,000 products) and the written trigger for adding `pg_trgm` (150ms).
+- **Spreadsheet import and export now exist; barcodes and SKUs still do not.** A merchant can
+  download an `.xlsx`, edit it, and upload it back, and can upload a counted stock sheet
+  (`/admin/products/import`, `/admin/stock/import`). What that deliberately does **not** do:
+  - **Nothing is ever deleted.** A product in the store and absent from the sheet is left alone, an
+    option the sheet omits is kept and reported as kept, and no row shape removes anything. An
+    import is an upsert, never a sync.
+  - **No SKU column, so rows are matched by product name.** The user chose that over adding
+    `Product.sku`, and it cannot be made safe — only safer. Renaming a product in the sheet creates
+    a second product; matching is normalised (case-folded, whitespace-collapsed) so `Linen shirt`
+    finds `Linen Shirt`; and a name that matches two products is refused rather than guessed, since
+    `Product.name` has no unique constraint. The mitigation is that the preview is mandatory and
+    lists the names it would create. Adding a SKU column would make all of this strictly safer and
+    stays available as a separate decision.
+  - **No images.** An image column would mean fetching arbitrary URLs per row, and
+    `importImageFromUrl` is SSRF-guarded and rate-limited at 40 per 10 minutes, which is not a bulk
+    primitive. Photos are added on the product screen; the Instructions sheet says so.
+  - **A sheet cannot give a one-version product its first option**, because the only way through
+    would be to delete the version it has now and write off its stock. Do it on the product screen
+    once; the sheet works thereafter.
+  - **No scheduled or API import.** A person uploads a file and reads the preview.
+  - The picker still searches `Product.name`, which has no text index in this schema — see
+    `pnpm measure:stock` for the measured figure (8ms p95 at 2,000 products) and the written
+    trigger for adding `pg_trgm` (150ms).
 - **A stocktake is capped at 50 lines**, like a cart and a till sale, and for the same reason: past
   that nobody is reading what they are submitting. A shop counting four hundred lines does it as
-  several stocktakes, which is also how it would walk the shelves.
+  several stocktakes, which is also how it would walk the shelves. **An uploaded count sheet does
+  not raise that cap** — it is chunked into documents of 50, each carrying `(n/total)` in its
+  reference, because `setStockToMany` holds a `FOR UPDATE` lock per line for its whole transaction
+  on the same rows checkout and the till wait on. Measured at `~99ms per document, 2.0ms per line`
+  (`pnpm measure:import`).
 - **Counter and online stock are one shelf, and that is the point** — but counter units still never
   reach `AnalyticsProductDaily` (see the till's section above). The stockroom does not change that:
   a movement explains where stock went, while product performance still means online performance.

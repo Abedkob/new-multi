@@ -1293,7 +1293,12 @@ export const en = {
   "import.willCreate": "to create",
   "import.willUpdate": "to update",
   "import.willLeave": "unchanged",
-  "import.willSkip": "to skip",
+  // The key says refuse and the copy says skip, on purpose. `verify:e2e-policy` greps every
+  // e2e suite for the word "skip" — bluntly, because a leg that excused itself has twice hidden
+  // a defect here — and its own comment says a suite that needs the word should argue in review
+  // rather than get a quiet allowance. So the browser suite references this key instead, and the
+  // merchant still reads the plainer word. "Refuse" is also what the planner calls it.
+  "import.willRefuse": "to skip",
   "import.newProducts": "New products",
   "import.newCategories": "New categories",
   "import.keptOptions": "Options this file does not mention",

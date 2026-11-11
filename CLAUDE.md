@@ -47,6 +47,10 @@ pnpm dev                              # http://localhost:3000
 | `pnpm verify:templates` | Test all templates × all sections (needs server running) |
 | `pnpm verify:permissions` | Test role-based access + the static rule that every admin route names a capability (needs server + login session) |
 | `pnpm verify:staff` | Test staff accounts through a real staff session: every row of the D73 table, the refusal page, revocation, the audit row (needs server) |
+| `pnpm verify:sheet` | Test the catalogue sheet's pure core: every column's good and bad values, the CSV quirks (BOM, CRLF, `;` delimiter, formula injection), the normalised-name matcher, and a write→read→parse round trip through a real workbook. No server, no database, no `.env` |
+| `pnpm verify:import` | Test the writer through the real data layer on throwaway stores: that an update keeps the photos and options the sheet does not mention, slug allocation for two same-slugging rows, categories created parent-first, an ambiguous name refused, new-variant stock as an `OPENING` and existing-variant stock ignored *and reported*, the count sheet as chunked stocktakes, and the ledger invariant after each |
+| `pnpm verify:import-ui` | Test the import screens through real owner **and staff** sessions: the capability split, both downloads as downloads (type, filename, openable bytes), and the custom-domain leg (needs server) |
+| `pnpm measure:import` | Time 500 creates, an unchanged re-import, and a 1,000-line count sheet against the 5s transaction timeout. Reports; asserts nothing |
 | `pnpm verify:social-links` | Test tenant social-link fields (validation, storefront rendering) |
 | `pnpm verify:campaigns` | Test saved marketing campaigns (D39: names saved by the owner, numbers only ever from the data) |
 | `pnpm verify:report-ui` | Test the report screens through a real owner session (exact small numbers, the two money figures never summed, empty funnel steps, deleted products, redacted searches) |
@@ -75,7 +79,7 @@ pnpm dev                              # http://localhost:3000
 | `pnpm verify:insights` | Test §6's insight rules at, just below and just above every threshold (pure; no server or database) |
 | `pnpm verify:integrations` | Test the owner's Google/Meta connections: snippet extraction, consent gating, verification tags on a custom domain, audit rows (needs server) |
 | `pnpm uploads:migrate --rewrite-from=<old URL>` | Rewrite stored R2 URLs after moving buckets/domains |
-| `pnpm e2e:categories` / `e2e:variants` / `e2e:discounts` / `e2e:social-links` / `e2e:pages` / `e2e:checkout` / `e2e:counter` / `e2e:stock` / `e2e:kinetic` / `e2e:mirage` / `e2e:prism` | Chrome automation tests, one per feature area (needs server + Chrome installed; each creates/removes throwaway stores) |
+| `pnpm e2e:categories` / `e2e:variants` / `e2e:discounts` / `e2e:social-links` / `e2e:pages` / `e2e:checkout` / `e2e:counter` / `e2e:stock` / `e2e:import` / `e2e:kinetic` / `e2e:mirage` / `e2e:prism` | Chrome automation tests, one per feature area (needs server + Chrome installed; each creates/removes throwaway stores) |
 
 **After pulling changes:**
 ```bash
@@ -489,6 +493,79 @@ build — `next dev` numbers measure the compiler — and this machine cannot pr
 `lib/env.ts` refuses to boot without five production secrets this `.env` lacks. The database half
 of both pages is in the table above, which is where their cost is; the page figures belong in the
 VPS run before the pilot, beside the load test.
+
+## Bulk Import and Export (the spreadsheet)
+
+The platform is handed to merchants for daily use, and the catalogue was entered one product at a
+time. A 200-line supplier price list was 200 form submissions. Two screens now take a file.
+
+- **Three sheets a merchant edits, one they read, one hidden.** `lib/catalogue-sheet/columns.ts`
+  defines the columns **once**, and the template writer, the exporter and the importer all build
+  from it, so a column cannot exist in one and not another — `verify:sheet` asserts the round trip
+  precisely so the three can never disagree. Headers are **bilingual and matched either way**: a
+  merchant whose dashboard is Arabic downloads an Arabic workbook, types into it, and uploads it.
+- **One rule governs every optional cell: blank means leave it alone.** Never "set this to empty",
+  never "set this to zero". The safe direction — a cell nobody filled in can then never destroy
+  something that was already there — and the cost is written down rather than hidden: a value
+  cannot be *cleared* through the sheet. The one exception is `Counted` on the stock sheet, where a
+  blank line is skipped and `0` is a real count of an empty shelf.
+- **Every update payload is `existing ∪ sheet`, never `sheet` alone.** `updateProduct` is a
+  *replace*, not a merge: `productImage.deleteMany({ id: { notIn: keepImages } })`. The sheet has no
+  image column by design, so the straightforward `images: []` would have destroyed every product's
+  whole gallery on the first re-import, and an omitted variant row would have deleted that variant
+  *and written off its stock* — while the outcome still said "1 updated". So images are carried
+  through verbatim with their ids, existing variants are carried forward by id, an omitted option
+  is **reported as kept**, and an existing variant's stock is carried rather than reset (with the
+  ledger off, `updateProduct` writes the figure it is given, so a 0 would empty the shelf).
+  `verify:import`'s first leg is this case, because it is the one failure here that destroys data a
+  merchant cannot get back.
+- **Two screens, because a page names one capability.** `/admin/products/import` is
+  `products:write` (owner); `/admin/stock/import` is `stock:move`, which staff hold — a stockroom
+  assistant can upload what they counted and still cannot reprice anything. One page would have
+  meant either putting the stock sheet out of staff reach or hiding half of it, which is the "a
+  link that offers what the page refuses" failure the capability table exists to prevent. The count
+  sheet has its own download route (`/admin/stock/import/sheet`) for the same reason.
+- **Matching is by name**, which the user chose over adding a SKU. Irreducibly unsafe for a rename,
+  so: normalised matching, an ambiguous name refused rather than guessed, and a **mandatory
+  preview** that lists the names it would create. The export round trip is the answer in practice —
+  a sheet produced by Export carries the exact current names.
+- **Creates bypass `createProduct`; updates go through `updateProduct`.** `createProduct` reads its
+  taken-slug set from *committed* rows only, so two rows in one file whose names slugify
+  identically collide; it is also ~2,500 statements across 500 transactions where allocating in
+  memory and writing in batches of 25 is ~580 across 20. Updates keep going through
+  `updateProduct` because it owns the variant diff and the three ledger writes that hang off it
+  (D90). **`product.create` may appear only in `products.ts`, `tenants.ts` and the importer.**
+- **The count sheet chunks at 50 rather than raising `MAX_STOCK_LINES`.** `setStockToMany` holds a
+  `FOR UPDATE` lock per line for its whole transaction on the rows checkout and the till wait on; a
+  500-line document would block sales on 500 variants at once. Chunk ids `` `${importId}#${i}` ``
+  meet the existing `(tenantId, submissionId)` unique index, so a re-run after a failure at chunk 8
+  answers 1–7 as `idempotent: true` with no writes.
+- **An `unchanged` verdict**, which is what makes the normal workflow nearly free: measured at 500
+  unchanged rows costing one 53ms read instead of 500 transactions (`pnpm measure:import`). Creates
+  run at ~99ms per batch of 25 against Prisma's 5s default transaction timeout — 50× headroom, so
+  `CREATE_BATCH = 25` is measured rather than guessed.
+- **`exceljs` is quarantined to `lib/catalogue-sheet/workbook.ts`**, asserted from both sides by
+  `verify:sheet`. The package is 21.8 MB and pulls 75 packages, but 21 MB of it is the *browser*
+  bundle the Node entry never loads (the code that runs is 997 KB) and no advisory in this tree
+  reaches through it. It was kept over the 1.8 MB `write-excel-file` because that package has no
+  data-validation API, and the dropdown on the category column is the main defence against a typo
+  silently creating a junk category now that missing categories are created.
+- **A merchant's workbook is untrusted input**: `file.size` is checked **before** `arrayBuffer()`
+  (reading first and measuring after is the whole vulnerability), rows and columns are capped per
+  sheet, nine `CellValue` shapes are unwrapped explicitly (`String(value)` on the object ones
+  yields `"[object Object]"`, which would be imported as a product name), and a formula's *cached*
+  result is read rather than evaluated. The posted Apply payload is zod-validated and **the match
+  key is recomputed from the name**, never trusted — a payload pairing one name with another
+  product's key would be a forged cross-product write past every capability check.
+- **`verify:permissions` now walks `route.ts`.** These downloads were the repository's first
+  *guarded* route handlers; the rule had only ever covered `page.tsx`, `layout.tsx` and
+  `actions.ts`, so one could have shipped with no guard at all and the suite would have reported
+  green. A layout does not run in front of a route handler.
+- **Formula injection is neutralised on CSV write** (`=`, `+`, `-`, `@` prefixed with a tab), and a
+  BOM is written, because a shop's catalogue gets exported, mailed to an accountant and opened —
+  and without the BOM Excel reads UTF-8 in the system codepage and mangles every Arabic name. The
+  CSV **delimiter is sniffed**, because Excel writes the system list separator, which is `;` across
+  most of Europe and the Middle East.
 
 ## Staff Accounts & Capabilities
 

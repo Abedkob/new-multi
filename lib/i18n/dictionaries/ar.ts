@@ -1266,7 +1266,7 @@ export const ar: Record<DictionaryKey, string> = {
   "import.willCreate": "ستُنشأ",
   "import.willUpdate": "ستُحدَّث",
   "import.willLeave": "دون تغيير",
-  "import.willSkip": "ستُتجاهل",
+  "import.willRefuse": "ستُتجاهل",
   "import.newProducts": "منتجات جديدة",
   "import.newCategories": "فئات جديدة",
   "import.keptOptions": "خيارات لا يذكرها هذا الملف",

@@ -22,6 +22,7 @@ const nextConfig: NextConfig = {
     "prism-e2e.test",
     "counter-e2e.test",
     "stock-e2e.test",
+    "import-e2e.test",
   ],
   experimental: {
     serverActions: {

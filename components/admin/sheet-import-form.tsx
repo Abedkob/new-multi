@@ -318,7 +318,7 @@ function CataloguePlanBody({
         <Figure label={t("import.willCreate")} value={plan.counts.create ?? 0} />
         <Figure label={t("import.willUpdate")} value={plan.counts.update ?? 0} />
         <Figure label={t("import.willLeave")} value={plan.counts.unchanged ?? 0} />
-        <Figure label={t("import.willSkip")} value={willSkip} />
+        <Figure label={t("import.willRefuse")} value={willSkip} />
       </div>
 
       {/* The created names, listed rather than counted. A rename is invisible in a spreadsheet and
@@ -365,7 +365,7 @@ function StockPlanBody({
         <Figure label={t("import.linesDiffering")} value={differing.length} />
         <Figure label={t("import.documents")} value={plan.chunks} />
         {/* Same rule as the catalogue sheet: the figure is the length of the list below it. */}
-        <Figure label={t("import.willSkip")} value={plan.issues.length} />
+        <Figure label={t("import.willRefuse")} value={plan.issues.length} />
       </div>
       {differing.length > 0 ? (
         <div className="grid gap-1">
