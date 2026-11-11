@@ -108,6 +108,15 @@ No headless check can prove any of these.
       the operator's.
 - [ ] **Every admin and report screen in Arabic, RTL, on your phone** (P7-35): the report
       screens, the marketing tabs, the notification settings.
+- [ ] **The import template, in the spreadsheet program the merchant really has.** Download it,
+      open it, type three products, save, upload. `scripts/fixtures/sheets/excel-authored.xlsx`
+      holds one file Excel 16 wrote and `verify:sheet` parses it on every run, which is what keeps
+      the known defect fixed — a merchant's `=10+9.99` is stored as `19.990000000000002` and was
+      refused as an invalid price. A fixture cannot speak for a version it was not written by, so
+      confirm on: **Excel on Windows**, **Excel on a Mac or the web**, **Google Sheets**
+      (download as .xlsx) and **LibreOffice**. What to look for: the dropdown on Category offers
+      the store's categories and still accepts a new one, the header note explains the column, the
+      Arabic template opens right-to-left with no mojibake, and nothing reports a repaired file.
 
 ## Before launch
 

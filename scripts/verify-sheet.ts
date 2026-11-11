@@ -1006,6 +1006,79 @@ async function main() {
     assert.equal(truncated, false);
     assert.equal(parseProductSheet(sheets.products!).rows.length, 1);
   });
+
+  console.log("\nA workbook Excel itself wrote, which is the only file a merchant ever uploads:");
+
+  // `scripts/fixtures/sheets/excel-authored.xlsx` is this template opened in Excel 16, typed into,
+  // and saved by Excel — so the package is Excel's own: its sharedStrings, its number formats, a
+  // style index on every cell, and numeric cells where we wrote text.
+  //
+  // It is committed rather than generated because every other workbook in this suite was written
+  // by exceljs, which stores exactly what it was given. That made the suite agree with itself and
+  // miss a real defect: a merchant's `=10+9.99` is stored by Excel as 19.990000000000002 and shown
+  // as 19.99, and `String(…)` of that was refused by the price parser as "not a valid amount" — so
+  // any computed or marked-up price lost its row. Regenerate the fixture only by repeating those
+  // steps in Excel; writing it with exceljs would quietly turn this section back into a tautology.
+  const authored = readFileSync("scripts/fixtures/sheets/excel-authored.xlsx");
+
+  await acheck("Excel's own package is read, and its sheets identified by their headers", async () => {
+    const { sheets, truncated } = await readWorkbook(authored);
+    assert.equal(truncated, false);
+    assert.deepEqual(Object.keys(sheets).sort(), ["products", "stock", "variants"]);
+    // The header row survives Excel's rewrite, including the star on a required column.
+    assert.equal(sheets.products![0]?.[0], "Product *");
+  });
+
+  await acheck("a price Excel computed is read as the figure Excel displays", async () => {
+    const { sheets } = await readWorkbook(authored);
+    const parsed = parseProductSheet(sheets.products!);
+    const tee = parsed.rows.find((row) => row.name === "Formula Priced Tee");
+    assert.ok(tee, `the formula row was dropped: ${JSON.stringify(parsed.issues)}`);
+    // =10+9.99. The cached double is 19.990000000000002; the merchant sees 19.99 and means 1999.
+    assert.equal(tee.priceCents, 1999);
+    assert.equal(parsed.issues.length, 0, JSON.stringify(parsed.issues));
+  });
+
+  await acheck("and a third decimal is still refused, so the trim removed dust and not a figure", () => {
+    // The other half of the same rule: `toPrecision(15)` must not round a figure anybody typed
+    // into an acceptable one. 12.567 is a mistake worth naming, dust is not.
+    const parsed = parseProductSheet(productGrid([["Overprecise", "", "12.567"]]));
+    assert.equal(parsed.rows.length, 0);
+    assert.equal(parsed.issues.length, 1);
+    return Promise.resolve();
+  });
+
+  await acheck("every row of Excel's file lands, spaces and currency symbols included", async () => {
+    const { sheets } = await readWorkbook(authored);
+    const parsed = parseCatalogueSheets({ products: sheets.products, variants: sheets.variants });
+    assert.deepEqual(
+      parsed.products.map((p) => [p.name, p.priceCents]),
+      [["Excel Authored Shirt", 1250], ["Padded Jacket", 129950], ["Formula Priced Tee", 1999]],
+    );
+    // Typed with leading and trailing spaces in Excel, which keeps them verbatim.
+    assert.equal(parsed.products[1]!.matchKey, "padded jacket");
+    assert.deepEqual(parsed.products[0]!.categoryPath, ["Shirts", "Linen"]);
+    assert.equal(parsed.products[0]!.bestSeller, true);
+    assert.equal(parsed.products[0]!.warnAt, 2);
+    // Excel wrote these as numbers; the stock column is whole-number only and must still read.
+    assert.deepEqual(parsed.variants.map((v) => [v.attributes.Size, v.stock]), [["M", 7], ["L", 3]]);
+    assert.equal(parsed.issues.length, 0, JSON.stringify(parsed.issues));
+  });
+
+  await acheck("a formula with no usable result is a missing figure, never the text 'NaN'", async () => {
+    // #DIV/0! and an Infinity both reach `cellText` as a cached result. "NaN" would parse like a
+    // merchant's typo and read like one in the complaint; blank is reported as a missing figure.
+    const workbook = new ExcelJS.Workbook();
+    const sheet = workbook.addWorksheet(SHEET_NAMES.products.en);
+    sheet.addRow(productSheetColumns().map((c) => c.header.en));
+    const row = sheet.addRow(["Broken", "", ""]);
+    row.getCell(3).value = { formula: "1/0", result: Number.NaN } as never;
+    const { sheets } = await readWorkbook(Buffer.from(await workbook.xlsx.writeBuffer()));
+    assert.equal(sheets.products![1]?.[2], "");
+    const parsed = parseProductSheet(sheets.products!);
+    assert.equal(parsed.rows.length, 0);
+    assert.equal(parsed.issues.length, 1);
+  });
 }
 
 main().then(

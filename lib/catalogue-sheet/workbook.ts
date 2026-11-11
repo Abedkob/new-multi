@@ -53,6 +53,26 @@ export type SheetId = "products" | "variants" | "stock";
 export type SheetGrids = Partial<Record<SheetId, string[][]>>;
 
 /**
+ * A number out of a spreadsheet cell, as text the parsers in `parse.ts` can read.
+ *
+ * `String(19.990000000000002)` is what a merchant's `=10+9.99` really becomes. Excel stores the
+ * full IEEE double and displays `19.99`, so the row was refused as "not a valid amount" over a
+ * figure the merchant could see was fine — and a markup formula (`=B2*1.2`) or a pasted computed
+ * column does the same thing. Found only by having **Excel** write the file: every workbook in the
+ * suites was written by exceljs, which stores exactly what it was given.
+ *
+ * Fifteen significant digits is what a double carries reliably, so trimming to it removes the dust
+ * and nothing anybody typed: `12.567` survives as `12.567` and is still refused for its third
+ * decimal, which is the price parser's job and not this function's.
+ */
+function numberText(value: number): string {
+  // NaN and Infinity reach here from a cached formula result. Blank, so the row is reported as
+  // missing a figure, rather than the string "NaN" — which reads as a typo and parses as one.
+  if (!Number.isFinite(value)) return "";
+  return String(Number.parseFloat(value.toPrecision(15)));
+}
+
+/**
  * One cell, as a string, whatever exceljs decided it was.
  *
  * The `CellValue` union is nine shapes wide and a merchant's workbook produces most of them: a
@@ -65,7 +85,7 @@ export type SheetGrids = Partial<Record<SheetId, string[][]>>;
 function cellText(value: ExcelJS.CellValue): string {
   if (value === null || value === undefined) return "";
   if (typeof value === "string") return value.trim();
-  if (typeof value === "number") return String(value);
+  if (typeof value === "number") return numberText(value);
   if (typeof value === "boolean") return value ? "true" : "false";
   if (value instanceof Date) {
     // A price or count cell that Excel decided was a date is a mistake, not a value. The ISO form
@@ -83,6 +103,9 @@ function cellText(value: ExcelJS.CellValue): string {
       const result = (value as { result?: unknown }).result;
       if (result === null || result === undefined) return "";
       if (typeof result === "object") return "";
+      // Through the same trimming as a plain numeric cell: a formula is where the IEEE dust
+      // actually comes from, so this branch is the one that most needed it.
+      if (typeof result === "number") return numberText(result);
       return String(result).trim();
     }
     if ("error" in value) return ""; // #REF!, #DIV/0! — blank, then reported as missing

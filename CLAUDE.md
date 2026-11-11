@@ -561,6 +561,19 @@ time. A 200-line supplier price list was 200 form submissions. Two screens now t
   *guarded* route handlers; the rule had only ever covered `page.tsx`, `layout.tsx` and
   `actions.ts`, so one could have shipped with no guard at all and the suite would have reported
   green. A layout does not run in front of a route handler.
+- **One committed workbook was written by Excel, not by us**
+  (`scripts/fixtures/sheets/excel-authored.xlsx`), because a suite whose files are all written by
+  `exceljs` only ever proves that `exceljs` agrees with itself. Excel rewrites the whole package on
+  save — its own sharedStrings, its own number formats, numeric cells where we wrote text — and the
+  first file it wrote exposed a defect every other check had called healthy: a merchant's
+  `=10+9.99` is stored as `19.990000000000002` and displayed as `19.99`, and `String(…)` of that
+  was refused by the price parser as "not a valid amount", so **any computed or marked-up price
+  lost its row**. `cellText` now trims a numeric cell to 15 significant digits — the most a double
+  carries reliably — which removes the dust and nothing anybody typed: `12.567` is still refused
+  for its third decimal, and `verify:sheet` asserts both halves. Regenerate that fixture only by
+  repeating the steps in Excel; writing it with `exceljs` turns the section back into a tautology.
+  Other spreadsheet programs are a row in HUMAN_CHECKLIST.md, since a fixture cannot speak for a
+  version it was not written by.
 - **Formula injection is neutralised on CSV write** (`=`, `+`, `-`, `@` prefixed with a tab), and a
   BOM is written, because a shop's catalogue gets exported, mailed to an accountant and opened —
   and without the BOM Excel reads UTF-8 in the system codepage and mangles every Arabic name. The
