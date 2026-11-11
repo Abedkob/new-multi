@@ -28,6 +28,7 @@
 import ExcelJS from "exceljs";
 
 import type { Locale } from "@/lib/i18n/types";
+import { guessSheetFromHeaders } from "@/lib/catalogue-sheet/parse";
 import type { Attributes } from "@/lib/variants";
 
 import {
@@ -95,30 +96,6 @@ function identifySheet(name: string): SheetId | null {
   for (const id of ["products", "variants", "stock"] as const) {
     const names = SHEET_NAMES[id];
     if (key === normalizeHeader(names.en) || key === normalizeHeader(names.ar)) return id;
-  }
-  return null;
-}
-
-/**
- * Which columns a sheet appears to hold, used to identify an unnamed sheet.
- *
- * A merchant exporting from another system, or pasting into a fresh workbook, gets a sheet called
- * `Sheet1`. Guessing from the headers is what makes that file work instead of being told no sheet
- * was recognised — and the guess is cheap to make safe, because `counted` only exists on the stock
- * sheet and `price` only on the products sheet.
- */
-function guessSheetFromHeaders(grid: string[][]): SheetId | null {
-  const limit = Math.min(grid.length, 10);
-  for (let i = 0; i < limit; i++) {
-    const normalized = new Set((grid[i] ?? []).map(normalizeHeader));
-    const has = (column: SheetColumn) =>
-      normalized.has(normalizeHeader(column.header.en)) || normalized.has(normalizeHeader(column.header.ar));
-    const stockTail = stockSheetColumns(1).find((c) => c.key === "counted")!;
-    const price = productSheetColumns().find((c) => c.key === "price")!;
-    const variantStock = variantSheetColumns(1).find((c) => c.key === "stock")!;
-    if (has(stockTail)) return "stock";
-    if (has(price)) return "products";
-    if (has(variantStock)) return "variants";
   }
   return null;
 }

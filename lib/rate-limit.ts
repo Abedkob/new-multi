@@ -130,6 +130,12 @@ export const RATE_LIMITS = {
   // Importing an image from a pasted link makes the server fetch an outside URL: keyed per
   // tenant, so an owner account can't be used as a download proxy.
   imageImport: { limit: 40, windowMs: 10 * 60_000 },
+  // Parsing a spreadsheet is the most expensive thing a signed-in owner can ask this server to do
+  // - a zip to inflate, XML to walk, and a read of the whole catalogue to resolve against - and
+  // the preview is the half they can repeat freely without writing anything. Keyed per tenant
+  // like imageImport, because the actor is an authenticated member of one store rather than an
+  // address. Twenty in ten minutes is far beyond any real editing session.
+  catalogueImport: { limit: 20, windowMs: 10 * 60_000 },
 } as const;
 
 /**

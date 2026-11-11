@@ -21,6 +21,7 @@
     "verify:commerce": "tsx scripts/verify-commerce.ts",
     "verify:coupons": "tsx scripts/verify-coupons.ts",
     "verify:import": "tsx scripts/verify-import.ts",
+    "verify:import-ui": "tsx scripts/verify-import-ui.ts",
     "verify:sheet": "tsx scripts/verify-sheet.ts",
     "verify:social-links": "tsx scripts/verify-social-links.ts",
     "verify:consent": "tsx scripts/verify-consent.ts",

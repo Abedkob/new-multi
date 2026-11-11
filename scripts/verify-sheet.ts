@@ -41,6 +41,7 @@ import {
   type ExportVariant,
 } from "../lib/catalogue-sheet/workbook";
 import {
+  guessSheetFromHeaders,
   matchKeyOf,
   parseCatalogueSheets,
   parseProductSheet,
@@ -936,6 +937,35 @@ async function main() {
         }),
       /non-numeric amount/,
     );
+  });
+
+  await acheck("the template's own Instructions sheet is not mistaken for a data sheet", async () => {
+    // Exactly the bug a looser guess had: the Instructions sheet documents every column, and one
+    // of its rows is labelled "Stock". A single-column match read that as the Options sheet, so
+    // the REAL Options sheet was skipped and reported as having no header — a blank template that
+    // complained about itself.
+    const buffer = await buildWorkbook({
+      locale: "en",
+      storeName: "Demo Boutique",
+      categoryPaths: CATEGORIES,
+      productNames: ["Linen Shirt"],
+    });
+    const { sheets } = await readWorkbook(buffer);
+    for (const id of ["products", "variants", "stock"] as const) {
+      assert.ok(sheets[id], `${id} was claimed by another sheet`);
+      // Each grid must really be that sheet: its header row maps the column only it has.
+      const flat = sheets[id]!.slice(0, 2).flat().map((c) => c.toLowerCase()).join("|");
+      assert.ok(flat.includes("product"), `${id}'s grid does not look like a sheet header`);
+    }
+    assert.deepEqual(parseProductSheet(sheets.products!).issues, []);
+    assert.deepEqual(parseVariantSheet(sheets.variants!).issues, []);
+    assert.deepEqual(parseStockSheet(sheets.stock!).issues, []);
+    // And the guess on its own: prose containing a column's name is not a header row.
+    assert.equal(guessSheetFromHeaders([["Stock", "The Stock column only applies to new options."]]), null);
+    assert.equal(guessSheetFromHeaders([["Price", "Required."]]), null);
+    assert.equal(guessSheetFromHeaders([["Product", "Price"]]), "products");
+    assert.equal(guessSheetFromHeaders([["Product", "Counted"]]), "stock");
+    assert.equal(guessSheetFromHeaders([["Product", "Option 1 name", "Option 1 value", "Stock"]]), "variants");
   });
 
   await acheck("a sheet called Sheet1 is identified by its headers", async () => {

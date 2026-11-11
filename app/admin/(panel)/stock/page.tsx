@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { Boxes, ClipboardList, History, PackagePlus, Search } from "lucide-react";
+import { Boxes, ClipboardList, FileSpreadsheet, History, PackagePlus, Search } from "lucide-react";
 import { EmptyState } from "@/components/admin/empty-state";
 import { PageHeader } from "@/components/admin/page-header";
 import { SectionCard } from "@/components/admin/section-card";
@@ -77,6 +77,15 @@ export default async function StockPage({ searchParams }: PageProps<"/admin/stoc
                   className={buttonVariants({ variant: "outline" })}
                 >
                   <ClipboardList className="size-4" aria-hidden /> {t("stock.page.count")}
+                </Link>
+                {/* `stock:move`, the same as Count — a stockroom assistant can walk the shelves
+                    with a printed sheet and upload what they found, and still cannot reprice
+                    anything. */}
+                <Link
+                  href="/admin/stock/import"
+                  className={buttonVariants({ variant: "outline" })}
+                >
+                  <FileSpreadsheet className="size-4" aria-hidden /> {t("stock.importCount")}
                 </Link>
               </>
             )}

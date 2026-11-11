@@ -236,6 +236,38 @@ function readAttributes(
   return { attributes };
 }
 
+/**
+ * Which of the three sheets a grid appears to be, from its headers alone.
+ *
+ * Pure, and here rather than in `workbook.ts`, because a **CSV** has exactly one unnamed sheet and
+ * the importer has to decide what it is without touching the spreadsheet library. It is also what
+ * makes an `.xlsx` whose sheet is called `Sheet1` work — what a merchant exporting from another
+ * system, or pasting into a fresh workbook, hands over.
+ *
+ * **Two columns matched, one of them the distinguishing one.** A looser version of this claimed
+ * the template's own Instructions sheet: that sheet documents every column, and one of its rows is
+ * labelled `Stock`, which a single-column match read as the Options sheet — so the real Options
+ * sheet was then skipped and reported as having no header. The three sheets each have a column the
+ * others lack (`Counted` only on the stock sheet, `Price` only on the products sheet), and
+ * requiring a second match alongside it is what separates a header row from prose that happens to
+ * contain a column's name.
+ */
+export function guessSheetFromHeaders(grid: readonly (readonly string[])[]): SheetId | null {
+  const candidates: [SheetId, readonly SheetColumn[], string][] = [
+    ["stock", stockSheetColumns(MAX_OPTION_PAIRS), "counted"],
+    ["products", productSheetColumns(), "price"],
+    ["variants", variantSheetColumns(MAX_OPTION_PAIRS), "stock"],
+  ];
+  const limit = Math.min(grid.length, 10);
+  for (let i = 0; i < limit; i++) {
+    for (const [id, columns, distinguishing] of candidates) {
+      const map = mapHeaderRow(grid[i] ?? [], columns);
+      if (map.size >= 2 && map.has(distinguishing)) return id;
+    }
+  }
+  return null;
+}
+
 export function parseProductSheet(grid: readonly (readonly string[])[]): {
   rows: ProductRow[];
   issues: SheetIssue[];

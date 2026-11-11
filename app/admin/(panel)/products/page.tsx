@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { Package, Plus, Search } from "lucide-react";
+import { FileSpreadsheet, Package, Plus, Search } from "lucide-react";
 import { AdminPageSizeControl } from "@/components/admin-page-size-control";
 import { AdminPagination } from "@/components/admin-pagination";
 import { EmptyState } from "@/components/admin/empty-state";
@@ -49,9 +49,20 @@ export default async function ProductsPage({ searchParams }: PageProps<"/admin/p
   const pricedAt = new Date();
 
   const addButton = mayWrite ? (
-    <Link href="/admin/products/new" className={buttonVariants()}>
-      <Plus className="size-4" aria-hidden /> {t("products.page.newProduct")}
-    </Link>
+    <>
+      <Link href="/admin/products/new" className={buttonVariants()}>
+        <Plus className="size-4" aria-hidden /> {t("products.page.newProduct")}
+      </Link>
+      {/* Behind the same capability as the screen it opens (`products:write`), which is the rule:
+          the nav is filtered from the same table the pages enforce, so a link can never offer
+          something the page behind it would refuse. */}
+      <Link
+        href="/admin/products/import"
+        className={buttonVariants({ variant: "outline" })}
+      >
+        <FileSpreadsheet className="size-4" aria-hidden /> {t("products.importFromFile")}
+      </Link>
+    </>
   ) : undefined;
 
   return (
