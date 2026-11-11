@@ -17,10 +17,12 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { getStockBatch, listStockMovementsPage } from "@/lib/data/stock-ledger";
+import { getTenantById } from "@/lib/data/tenants";
 import { formatPrice } from "@/lib/format";
-import { getT } from "@/lib/i18n/locale";
+import { getLocale, getT } from "@/lib/i18n/locale";
 import { requireCapability } from "@/lib/permissions";
 import { STOCK_MOVEMENT_REASONS, maySeeStockCost, stockActorKey } from "@/lib/stock";
+import { formatDateTime } from "@/lib/time-ago";
 import { parseAttributes, variantLabel } from "@/lib/variants";
 import { cn } from "@/lib/utils";
 
@@ -45,7 +47,12 @@ export default async function StockHistoryPage({
 }: PageProps<"/admin/stock/history">) {
   const { tenantId, role } = await requireCapability("stock:read");
   const t = await getT();
+  const locale = await getLocale();
   const withCost = maySeeStockCost(role);
+  // One extra indexed lookup, so a ledger row reads in the store's own day. A Beirut shop on a
+  // UTC server would otherwise see a movement made at 01:00 dated to the previous evening — and
+  // the whole point of this screen is matching rows against what happened in the shop.
+  const tenant = await getTenantById(tenantId);
 
   const sp = await searchParams;
   const requested = Number.parseInt(first(sp.page) ?? "1", 10) || 1;
@@ -189,7 +196,7 @@ export default async function StockHistoryPage({
                   return (
                     <TableRow key={row.id}>
                       <TableCell className="ps-4 whitespace-nowrap text-muted-foreground">
-                        {row.createdAt.toLocaleString()}
+                        {formatDateTime(row.createdAt, locale, tenant?.analyticsTimezone)}
                       </TableCell>
                       <TableCell>
                         {productId ? (

@@ -19,7 +19,9 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { formatPrice } from "@/lib/format";
-import { getT } from "@/lib/i18n/locale";
+import { getLocale, getT } from "@/lib/i18n/locale";
+import { encodeMessage } from "@/lib/i18n/types";
+import { resolveMessage } from "@/lib/i18n/types";
 import { requireCapability } from "@/lib/permissions";
 import {
   canSellAtCounter,
@@ -33,6 +35,7 @@ import { getCounterTakings, listCounterSalesPage } from "@/lib/data/counter-sale
 import { getLicenseAccessSnapshot } from "@/lib/data/licenses";
 import { getTenantById } from "@/lib/data/tenants";
 import { localDayOf, localDayRange } from "@/lib/analytics/local-day";
+import { formatDateTime } from "@/lib/time-ago";
 
 const first = (value: string | string[] | undefined) =>
   Array.isArray(value) ? value[0] : value;
@@ -49,6 +52,7 @@ export default async function CounterSalesPage({
 }: PageProps<"/admin/counter">) {
   const { tenantId } = await requireCapability("counter:read");
   const t = await getT();
+  const locale = await getLocale();
   const tenant = await getTenantById(tenantId);
   if (!tenant || !hasCounterSaleHistory(tenant)) notFound();
 
@@ -130,7 +134,20 @@ export default async function CounterSalesPage({
         <SectionCard bodyClassName="p-0">
           <EmptyState
             icon={Receipt}
-            title={t("counter.page.empty")}
+            // Per status, like the orders screen. One message for every filter meant that
+            // selecting a status the store has none of claimed no sales had EVER been recorded —
+            // under tabs reading "All (2)" and a tile reading "$60.00 taken today".
+            title={
+              status
+                ? resolveMessage(
+                    t,
+                    encodeMessage(
+                      "counter.page.emptyStatus",
+                      tabs.find((tab) => tab.key === status)!.label.toLowerCase(),
+                    ),
+                  )
+                : t("counter.page.empty")
+            }
             action={
               canSell ? (
                 <Link href="/admin/counter/new" className={buttonVariants()}>
@@ -162,7 +179,7 @@ export default async function CounterSalesPage({
                     <TableRow key={sale.id}>
                       <TableCell className="font-medium">{counterSaleRef(sale.id)}</TableCell>
                       <TableCell className="text-muted-foreground">
-                        {sale.createdAt.toLocaleString()}
+                        {formatDateTime(sale.createdAt, locale, tenant.analyticsTimezone)}
                       </TableCell>
                       <TableCell>{sale.soldByNameSnapshot}</TableCell>
                       <TableCell>{t(`counter.payment.${sale.payment}` as const)}</TableCell>

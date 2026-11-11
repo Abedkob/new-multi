@@ -23,7 +23,7 @@ import { SectionCard } from "@/components/admin/section-card";
 import { getDashboard } from "@/lib/data/dashboard";
 import { getTenantById } from "@/lib/data/tenants";
 import { formatPrice } from "@/lib/format";
-import { getT } from "@/lib/i18n/locale";
+import { getLocale, getT } from "@/lib/i18n/locale";
 import { encodeMessage, resolveMessage } from "@/lib/i18n/types";
 import { orderRef, orderTotal } from "@/lib/orders";
 import { requireCapability } from "@/lib/permissions";
@@ -36,6 +36,7 @@ import { StatusBadge } from "./orders/status-badge";
 export default async function AdminHome() {
   const { tenantId, name } = await requireCapability("analytics:read");
   const t = await getT();
+  const locale = await getLocale();
   const [tenant, d] = await Promise.all([getTenantById(tenantId), getDashboard(tenantId)]);
   if (!tenant) notFound();
 
@@ -252,7 +253,7 @@ export default async function AdminHome() {
                     <span className="min-w-0 flex-1">
                       <span className="block truncate text-sm font-medium">{o.customerName}</span>
                       <span className="block text-xs text-muted-foreground">
-                        {orderRef(o.id)} · {timeAgo(o.createdAt, t)}
+                        {orderRef(o.id)} · {timeAgo(o.createdAt, t, new Date(), locale)}
                       </span>
                     </span>
                     <span className="text-sm font-medium tabular-nums">{formatPrice(orderTotal(o.items, o.deliveryFeeCentsSnapshot, o.couponDiscountCentsSnapshot))}</span>

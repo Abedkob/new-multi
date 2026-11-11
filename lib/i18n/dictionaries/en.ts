@@ -1164,6 +1164,7 @@ export const en = {
   "counter.page.description": "Sales you made in person, paid at the counter.",
   "counter.page.newSale": "New sale",
   "counter.page.empty": "No counter sales yet.",
+  "counter.page.emptyStatus": "No {0} counter sales.",
   "counter.page.filterAriaLabel": "Filter sales by status",
   "counter.status.all": "All",
   "counter.status.RECORDED": "Recorded",

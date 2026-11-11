@@ -17,7 +17,7 @@ import {
 } from "@/components/ui/table";
 import { expireStalePendingOrders, listOrdersPage } from "@/lib/data/orders";
 import { formatPrice } from "@/lib/format";
-import { getT } from "@/lib/i18n/locale";
+import { getLocale, getT } from "@/lib/i18n/locale";
 import type { DictionaryKey } from "@/lib/i18n/dictionaries/en";
 import { encodeMessage, resolveMessage } from "@/lib/i18n/types";
 import { ORDER_STATUSES, orderRef, orderTotal, type OrderStatusValue } from "@/lib/orders";
@@ -47,6 +47,9 @@ const EMPTY_TEXT_KEYS: Record<OrderStatusValue | "ALL", DictionaryKey> = {
 export default async function OrdersPage({ searchParams }: PageProps<"/admin/orders">) {
   const { tenantId } = await requireCapability("orders:read");
   const t = await getT();
+  // timeAgo's tail falls back to a formatted date past seven days, and that used to be hardcoded
+  // en-US — so even this screen, which uses the helper correctly, leaked English after a week.
+  const locale = await getLocale();
   const sp = await searchParams;
   const requested = Number.parseInt(first(sp.page) ?? "1", 10) || 1;
   const requestedPageSize = Number.parseInt(first(sp.perPage) ?? "25", 10) || 25;
@@ -144,7 +147,7 @@ export default async function OrdersPage({ searchParams }: PageProps<"/admin/ord
                       className="block text-xs text-muted-foreground"
                       title={o.createdAt.toLocaleString("en-US", { dateStyle: "medium", timeStyle: "short" })}
                     >
-                      {timeAgo(o.createdAt, t)}
+                      {timeAgo(o.createdAt, t, new Date(), locale)}
                     </span>
                   </TableCell>
                   <TableCell>

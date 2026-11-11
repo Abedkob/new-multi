@@ -53,6 +53,8 @@ import {
   parseStockWhole,
 } from "../lib/stock";
 import { MAX_STOCK } from "../lib/variants";
+import { formatDateTime, timeAgo } from "../lib/time-ago";
+import { deliverySettingsSchema } from "../lib/delivery";
 import { deleteProduct } from "../lib/data/products";
 import { describeStockDrift, findStockDrift } from "../lib/stock/invariant";
 import { readFileSync } from "node:fs";
@@ -1287,6 +1289,63 @@ async function main() {
         await prisma.tenant.deleteMany({ where: { id: other.tenant.id } });
         await prisma.user.deleteMany({ where: { id: other.user.id } });
       }
+    });
+
+    console.log("\nDates and verdicts the UI walk turned up:");
+    await check("a date is formatted in the reader's language, not the server's", () => {
+      // `Date.toLocaleString()` with no arguments uses the SERVER process's locale, so an Arabic
+      // dashboard rendered "11/11/2026, 5:27:44 AM" — a US date with a latin AM — inside a
+      // right-to-left table, while the orders screen showed "1 دقيقة مضت". Four till screens and
+      // this module's history did it; `timeAgo` itself leaked en-US past seven days, so even its
+      // correct callers were only right for a week.
+      const when = new Date("2026-03-09T13:45:00Z");
+      const en = formatDateTime(when, "en", "UTC");
+      const ar = formatDateTime(when, "ar", "UTC");
+      assert.notEqual(ar, en, "the two languages must not render identically");
+      assert.match(en, /Mar 9, 2026/, `English reads as English: ${en}`);
+      // Arabic script, NOT Arabic-Indic digits. This codebase runs two number conventions on
+      // purpose: notifications use \u0660\u0661\u0662\u0663 because "\u0644\u062f\u064a\u0643 3 \u0637\u0644\u0628\u0627\u062a" reads as half-translated on a lock
+      // screen, while every figure on every SCREEN is latin \u2014 formatPrice is hardcoded en-US, and
+      // the Arabic dashboard shows $45.00 and (2) beside this date. A date in Arabic-Indic digits
+      // would be the one odd figure on the page, so `ar` \u2014 Arabic ordering, RTL marks and \u0645 for
+      // PM, with latin digits \u2014 is the consistent answer here.
+      assert.ok(/\u0645|\u0635/.test(ar), `Arabic marks the half of the day in Arabic: ${ar}`);
+      assert.ok(!/AM|PM/.test(ar), `and not in English: ${ar}`);
+      // The store's own day, not the server's: a Beirut shop on a UTC server would otherwise read
+      // a movement made at 01:00 as the previous evening.
+      const beirut = formatDateTime(new Date("2026-03-08T23:30:00Z"), "en", "Asia/Beirut");
+      assert.match(beirut, /Mar 9/, `the store's zone decides the date, got ${beirut}`);
+      // And the relative helper's tail follows the reader too.
+      const old = new Date(Date.now() - 40 * 86_400_000);
+      const t = (key: string) => key;
+      assert.notEqual(
+        timeAgo(old, t as never, new Date(), "ar"),
+        timeAgo(old, t as never, new Date(), "en"),
+        "timeAgo's date fallback was hardcoded en-US",
+      );
+      return Promise.resolve();
+    });
+
+    await check("one malformed figure produces one verdict, not two contradictory ones", () => {
+      // `.regex(...).refine(...)` both ran, and Number("9.9.9") is NaN — NaN <= 9999.99 is false —
+      // so a malformed delivery fee ALSO failed the range check, and the field showed "up to 2
+      // decimal places" and "must be $9,999.99 or less" together. One of those was a lie.
+      const messages = (fee: string) => {
+        const parsed = deliverySettingsSchema.safeParse({ deliveryFee: fee, deliveryNote: "" });
+        return parsed.success ? [] : parsed.error.issues.map((issue) => issue.message);
+      };
+      assert.deepEqual(messages("9.9.9"), ["validation.delivery.feeInvalid"], "shape only");
+      assert.deepEqual(messages("20000"), ["validation.delivery.feeTooLarge"], "range only");
+      assert.deepEqual(messages(""), ["validation.delivery.feeRequired"], "required only");
+      assert.deepEqual(messages("12.34"), [], "and a real figure passes");
+      for (const fee of ["9.9.9", "20000", "", "abc", "-1", "1.234"]) {
+        assert.equal(
+          messages(fee).length,
+          1,
+          `"${fee}" produced ${messages(fee).length} messages: a field may give one verdict`,
+        );
+      }
+      return Promise.resolve();
     });
 
     console.log("\nThe seam the ledger depends on:");

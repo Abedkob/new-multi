@@ -146,6 +146,24 @@ async function main() {
     assert.equal(sale.items[0].priceCentsSnapshot, 1250, "$15.00 less the $2.50 reduction");
     ok("completing the sale deducts the stock and records the reduced price");
 
+    // ---- an empty FILTER is not an empty till ----------------------------------------------
+    // One sale is recorded and none is voided, which is the state that showed "No counter sales
+    // yet." under tabs reading "All (1)" and a tile reading today's takings. Orders already
+    // solved this with a message per status; the till said the same thing whatever was selected.
+    await page.goto(`${BASE}/admin/counter?status=VOIDED`, { waitUntil: "load" });
+    const filtered = await page.locator("main").innerText();
+    assert.ok(
+      /no voided counter sales/i.test(filtered),
+      `an empty filter must name the filter, got: ${filtered.slice(0, 200)}`,
+    );
+    assert.ok(
+      !/no counter sales yet/i.test(filtered),
+      "and must not claim the till has never recorded a sale when it has",
+    );
+    // The figures above it prove the till is not empty, which is what made the old message wrong.
+    assert.ok(/All\s*\(1\)/.test(filtered), `the tabs still count the real sales: ${filtered.slice(0, 200)}`);
+    ok("filtering the till by an empty status says so, instead of claiming no sales exist");
+
     // ---- the receipt, and the void ---------------------------------------------------------
     await page.goto(`${BASE}/admin/counter/${sale.id}`, { waitUntil: "load" });
     assert.equal(await page.locator('[data-testid="receipt-total"]').innerText(), "$25.00");

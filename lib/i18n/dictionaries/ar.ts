@@ -1141,6 +1141,7 @@ export const ar: Record<DictionaryKey, string> = {
   "counter.page.description": "المبيعات التي أتممتها شخصيًا ودُفعت عند الصندوق.",
   "counter.page.newSale": "بيعة جديدة",
   "counter.page.empty": "لا توجد مبيعات مباشرة بعد.",
+  "counter.page.emptyStatus": "لا توجد مبيعات مباشرة {0}.",
   "counter.page.filterAriaLabel": "تصفية المبيعات حسب الحالة",
   "counter.status.all": "الكل",
   "counter.status.RECORDED": "مسجلة",

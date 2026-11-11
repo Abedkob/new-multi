@@ -4,11 +4,12 @@ import { Badge } from "@/components/ui/badge";
 import { Detail, DetailList } from "@/components/admin/detail-list";
 import { SectionCard } from "@/components/admin/section-card";
 import { formatPrice } from "@/lib/format";
-import { getT } from "@/lib/i18n/locale";
+import { getLocale, getT } from "@/lib/i18n/locale";
 import { can, requireCapability } from "@/lib/permissions";
 import { counterSaleRef, counterSaleTotal, hasCounterSaleHistory } from "@/lib/counter-sales";
 import { getCounterSale } from "@/lib/data/counter-sales";
 import { getTenantById } from "@/lib/data/tenants";
+import { formatDateTime } from "@/lib/time-ago";
 import { parseAttributes, variantLabel } from "@/lib/variants";
 import { PrintButton } from "./print-button";
 import { VoidControl } from "./void-control";
@@ -25,6 +26,7 @@ export default async function CounterSalePage({ params }: PageProps<"/admin/coun
   const { id } = await params;
   const { tenantId, role } = await requireCapability("counter:read");
   const t = await getT();
+  const locale = await getLocale();
   const tenant = await getTenantById(tenantId);
   if (!tenant || !hasCounterSaleHistory(tenant)) notFound();
 
@@ -61,7 +63,7 @@ export default async function CounterSalePage({ params }: PageProps<"/admin/coun
           <p className="text-xs">
             {t("counter.sale.title")} {counterSaleRef(sale.id)}
           </p>
-          <p className="text-xs">{sale.createdAt.toLocaleString()}</p>
+          <p className="text-xs">{formatDateTime(sale.createdAt, locale, tenant.analyticsTimezone)}</p>
           {sale.status === "VOIDED" && (
             <p className="text-xs font-semibold">{t("counter.status.VOIDED")}</p>
           )}
@@ -69,7 +71,10 @@ export default async function CounterSalePage({ params }: PageProps<"/admin/coun
 
         <SectionCard className="print:hidden">
           <DetailList>
-            <Detail label={t("counter.sale.when")} value={sale.createdAt.toLocaleString()} />
+            <Detail
+              label={t("counter.sale.when")}
+              value={formatDateTime(sale.createdAt, locale, tenant.analyticsTimezone)}
+            />
             <Detail label={t("counter.sale.soldBy")} value={sale.soldByNameSnapshot} />
             <Detail
               label={t("counter.sale.paidBy")}
@@ -138,7 +143,8 @@ export default async function CounterSalePage({ params }: PageProps<"/admin/coun
       {sale.status === "VOIDED" ? (
         <div data-print-hide className="grid gap-1 rounded-lg border border-dashed bg-card p-4 text-sm">
           <p className="font-medium">
-            {t("counter.sale.voidedOn")} {sale.voidedAt?.toLocaleString()}
+            {t("counter.sale.voidedOn")}{" "}
+            {sale.voidedAt ? formatDateTime(sale.voidedAt, locale, tenant.analyticsTimezone) : ""}
           </p>
           {sale.voidReason && <p className="text-muted-foreground">{sale.voidReason}</p>}
           {/*
