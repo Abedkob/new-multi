@@ -1262,6 +1262,14 @@ export const en = {
   "import.issue.notAWholeNumber": "Type a whole number, 0 or more.",
   "import.issue.variantNeedsProduct": "This row needs a product name. Repeat the name on every one of that product's option rows.",
   "import.issue.duplicateCountRow": "This was already counted on row {0}. Count each one once.",
+  "import.cap.rows": "This file has more rows than one import can take ({0}). Split it and import the parts one after another.",
+  "import.cap.products": "This file has more products than one import can take ({0}). Split it and import the parts one after another.",
+  "import.cap.stockLines": "This count has more lines than one import can take ({0}). Split it and upload the parts one after another.",
+  "import.issue.ambiguousName": "Your store has more than one product called \"{0}\", so this row could mean either. Rename one of them, then import again.",
+  "import.issue.unknownProduct": "There is no product called \"{0}\" in your store, and this file does not create one. Add it on the Products sheet, or check the spelling.",
+  "import.issue.unknownOption": "\"{0}\" has no option {1}. Check the spelling, or add the option on the product screen first.",
+  "import.issue.firstOptionOnProductScreen": "This product is sold in one version with no options. Add its first option on the product screen — doing it from a file would mean deleting the version it has now, along with its stock.",
+  "import.error.stopped": "The import stopped here. Everything before this row was saved. Re-uploading the same file is safe: rows already imported are updated, not duplicated.",
 } satisfies Record<string, string>;
 
 export type DictionaryKey = keyof typeof en;
