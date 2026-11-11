@@ -42,6 +42,11 @@ export function OwnerNotificationSections({
     { key: "funnelAlerts", label: t("notifications.type.funnelAlerts"), hint: t("notifications.type.funnelAlerts.hint") },
     { key: "searchAlerts", label: t("notifications.type.searchAlerts"), hint: t("notifications.type.searchAlerts.hint") },
     { key: "trafficAlerts", label: t("notifications.type.trafficAlerts"), hint: t("notifications.type.trafficAlerts.hint") },
+    {
+      key: "lowStockAlerts",
+      label: t("notifications.type.lowStockAlerts"),
+      hint: t("notifications.type.lowStockAlerts.hint"),
+    },
   ];
 
   return (

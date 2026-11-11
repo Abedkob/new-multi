@@ -221,13 +221,18 @@ function adminCapabilityGuard() {
       "orders:read",
       "products:read",
       "products:stock",
+      "stock:move",
+      "stock:read",
     ],
-    "D73, plus the till: exactly these eight capabilities belong to staff. Changing this list is " +
-      "a product decision, so it is written here as well as in the table. The two counter rows " +
-      "are the job at a counter; counter:void is deliberately NOT among them, for the same " +
-      "reason orders:cancel is not.",
+    "D73, plus the till and the stockroom: exactly these ten capabilities belong to staff. " +
+      "Changing this list is a product decision, so it is written here as well as in the table. " +
+      "The two counter rows are the job at a counter; counter:void is deliberately NOT among " +
+      "them, for the same reason orders:cancel is not. The two stock rows are the job in a " +
+      "stockroom — receiving deliveries and counting shelves is what somebody there does all " +
+      "day. What staff do not get with stock:move is the unit cost, which is a rule about the " +
+      "person (maySeeStockCost, D92) rather than a capability.",
   );
-  ok(`staff hold exactly 8 of ${CAPABILITIES.length} capabilities, and the owner holds all of them`);
+  ok(`staff hold exactly 10 of ${CAPABILITIES.length} capabilities, and the owner holds all of them`);
 }
 
 function staticActionGuard() {
@@ -263,7 +268,12 @@ function staticActionGuard() {
       .map((m) => m[1])
       .filter((helper) => {
         const body = src.slice(src.indexOf(`function ${helper}(`));
-        return body.slice(0, body.indexOf("\n}\n") + 1).includes(wants);
+        // The helper ends at its closing brace in column 0. Found with a regex rather than
+        // indexOf("\n}\n"), which never matched in a Windows working tree — every line there ends
+        // \r\n, so the slice came back empty, every helper looked unguarded, and the suite failed
+        // on `summarizePrivacyRequestAction` while its guard sat one call away in `resolve()`.
+        const end = /\r?\n\}\r?\n/.exec(body);
+        return body.slice(0, end ? end.index + end[0].length : body.length).includes(wants);
       });
 
     for (const part of parts) {
@@ -506,6 +516,22 @@ async function main() {
     ok("/platform/stores/[slug]/theme works: template picker and color inputs present");
     assert.equal((await admin.get("/platform/stores/does-not-exist-xyz/theme")).status, 404);
     ok("unknown store slug is a 404");
+    // The two module switches. Only the platform may see them, and each must actually render its
+    // control rather than an empty card — a switch page that 200s with no form is the failure that
+    // looks healthy, because the owner's panel simply never gains the feature and nobody is told.
+    for (const [path, label] of [
+      [`/platform/stores/${DEMO_SLUG}/counter`, "counter sales"],
+      [`/platform/stores/${DEMO_SLUG}/stock`, "stock management"],
+    ] as const) {
+      const page = await admin.get(path);
+      assert.equal(page.status, 200, `${path} should open for the platform admin`);
+      assert.ok(
+        /Turn on (counter sales|stock management)|Turn off (counter sales|stock management)/.test(page.body),
+        `${path} rendered no switch for ${label}`,
+      );
+      assert.ok(isLoginRedirect(await owner.get(path)), `the owner reached ${path}`);
+    }
+    ok("both module switches render for the platform admin and are unreachable by the owner");
     const preview = await admin.get(previewPath);
     assert.equal(preview.status, 200);
     assert.ok(preview.body.includes('data-section="hero"'), "preview did not render the storefront");

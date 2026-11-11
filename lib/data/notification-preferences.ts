@@ -29,6 +29,7 @@ export type OwnerPreferences = {
   funnelAlerts: boolean;
   searchAlerts: boolean;
   trafficAlerts: boolean;
+  lowStockAlerts: boolean;
   showOrderAmount: boolean;
 };
 
@@ -49,6 +50,7 @@ const OWNER_SELECT = {
   funnelAlerts: true,
   searchAlerts: true,
   trafficAlerts: true,
+  lowStockAlerts: true,
   showOrderAmount: true,
 } as const;
 

@@ -33,12 +33,14 @@ export async function updateOrderStatusAction(id: string, status: string): Promi
     // names no capability, so there is nothing to check it against.
     return { error: "orders.error.unknownStatus" };
   }
-  const { tenantId } = await requireCapability(
+  const { tenantId, userId, name } = await requireCapability(
     parsed.data === "CANCELLED" ? "orders:cancel" : "orders:advance",
   );
 
   try {
-    await updateOrderStatus(tenantId, id, parsed.data);
+    // The actor, so a cancellation's restore names the person who ordered it rather than the
+    // automatic sweep's label (lib/data/orders.ts).
+    await updateOrderStatus(tenantId, id, parsed.data, { userId, name });
   } catch (e) {
     if (e instanceof OrderError) {
       return { error: ORDER_ERROR_KEYS[e.code as keyof typeof ORDER_ERROR_KEYS] ?? "orders.error.badTransition" };

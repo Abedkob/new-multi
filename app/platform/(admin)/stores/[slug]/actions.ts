@@ -14,6 +14,7 @@ import {
   resetOwnerPassword,
   setTenantAnalyticsPaused,
   setTenantCounterSales,
+  setTenantStock,
   setTenantPaused,
   updateTenantPrivacy,
   updateTenantDomain,
@@ -201,6 +202,43 @@ export async function disableCounterSalesAction(
   if (!tenant.counterSalesEnabled) return { error: "This store does not have counter sales." };
   // Stops new sales and leaves the history readable: counterSalesFirstEnabledAt is not cleared.
   await setTenantCounterSales(tenant.id, null);
+  revalidateStore(slug);
+  return { ok: true };
+}
+
+/**
+ * The stock module, switched on and off by the platform.
+ *
+ * Two actions and no reason field, for the same reasons the till's pair has: each can refuse its
+ * own no-op and say so, and the audit trail is the operator id and the timestamp
+ * `setTenantStock` records. Only the admin surfaces are revalidated — nothing a shopper sees
+ * changes.
+ */
+export async function enableStockAction(
+  slug: string,
+  _prev: FormState,
+  _formData: FormData,
+): Promise<FormState> {
+  const admin = await requirePlatformAdmin();
+  const tenant = await getTenantBySlug(slug);
+  if (!tenant) return { error: "Store not found." };
+  if (tenant.stockEnabled) return { error: "This store already has stock management." };
+  await setTenantStock(tenant.id, admin.userId);
+  revalidateStore(slug);
+  return { ok: true };
+}
+
+export async function disableStockAction(
+  slug: string,
+  _prev: FormState,
+  _formData: FormData,
+): Promise<FormState> {
+  await requirePlatformAdmin();
+  const tenant = await getTenantBySlug(slug);
+  if (!tenant) return { error: "Store not found." };
+  if (!tenant.stockEnabled) return { error: "This store does not have stock management." };
+  // Stops new movements and leaves the history readable: stockFirstEnabledAt is not cleared.
+  await setTenantStock(tenant.id, null);
   revalidateStore(slug);
   return { ok: true };
 }

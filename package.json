@@ -67,8 +67,12 @@
     "verify:rollout": "tsx scripts/verify-rollout.ts",
     "verify:admin-ui": "tsx scripts/verify-admin-ui.ts",
     "verify:counter": "tsx scripts/verify-counter-sales.ts",
+    "verify:stock": "tsx scripts/verify-stock.ts",
+    "verify:stock-ui": "tsx scripts/verify-stock-ui.ts",
+    "measure:stock": "tsx scripts/measure-stock.ts",
     "measure:counter": "tsx scripts/measure-counter.ts",
-    "e2e:counter": "tsx scripts/e2e/counter.ts"
+    "e2e:counter": "tsx scripts/e2e/counter.ts",
+    "e2e:stock": "tsx scripts/e2e/stock.ts"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1138.0",

@@ -82,6 +82,41 @@ export function weeklySummaryText(
  * now on a lock screen, where there is no room to qualify a claim and no chance to read the
  * evidence first.
  */
+/**
+ * "Running low" (D96).
+ *
+ * Its own function rather than another `kind` in `ownerAlertText`, because that one builds the
+ * ANALYTICS alerts: its kinds mirror the insight kinds in `ALERTABLE`, and its `facts.reference`
+ * means "the same figure in the period before". A low-stock alert has no period and infers
+ * nothing — it is a count on a shelf against a number the owner typed in.
+ *
+ * `others` is how many MORE products are also low, so one sweep is one notification however many
+ * crossed at once. Like every template here it says what was counted and stops: no "because", and
+ * nothing telling the merchant what to order.
+ */
+export function lowStockText(
+  locale: NotificationLocale,
+  facts: { product: string; left: number; threshold: number; others: number },
+): PushText {
+  const n = (value: number) => number(value, locale);
+  if (locale === "ar") {
+    return {
+      title: "المخزون يقترب من النفاد",
+      body:
+        facts.others === 0
+          ? `${facts.product}: بقي ${n(facts.left)} والحدّ الذي حددته ${n(facts.threshold)}.`
+          : `${facts.product} و${n(facts.others)} منتجاً آخر يقترب مخزونها من النفاد.`,
+    };
+  }
+  return {
+    title: "Running low",
+    body:
+      facts.others === 0
+        ? `${facts.product}: ${facts.left} left, your limit is ${facts.threshold}.`
+        : `${facts.product} and ${facts.others} more products are running low.`,
+  };
+}
+
 export function ownerAlertText(
   locale: NotificationLocale,
   kind: "product" | "funnel" | "search" | "traffic",

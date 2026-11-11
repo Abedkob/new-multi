@@ -73,6 +73,8 @@ export default async function ManageStoreLayout({
               // No `todo` dot: setupStatus means "what is incomplete", and a store without a
               // till is not incomplete. It is a commercial arrangement, not a missing step.
               { href: `${base}/counter`, label: "Counter sales" },
+              // Same reasoning: a store without a stockroom is not incomplete.
+              { href: `${base}/stock`, label: "Stock management" },
               { href: `${base}/theme`, label: "Theme", external: true },
               { href: `${base}/danger`, label: "Danger zone" },
             ]}

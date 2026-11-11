@@ -4,7 +4,7 @@ import { useState, useTransition } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { useT } from "@/lib/i18n/context";
+import { resolveMessage, useT } from "@/lib/i18n/context";
 import { setVariantStockAction } from "../../actions";
 
 export type StockRow = { id: string; label: string; stock: number };
@@ -29,7 +29,12 @@ export function StockForm({ rows }: { rows: StockRow[] }) {
 }
 
 function StockField({ row, saveLabel }: { row: StockRow; saveLabel: string }) {
+  const t = useT();
   const [value, setValue] = useState(String(row.stock));
+  // The figure this screen is showing, which the server compares against before it writes. It
+  // starts as what was rendered and moves only on a successful save, so a second Save after a
+  // refusal is still measured against something the person actually saw.
+  const [shown, setShown] = useState(row.stock);
   const [saved, setSaved] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
@@ -37,10 +42,14 @@ function StockField({ row, saveLabel }: { row: StockRow; saveLabel: string }) {
   function save() {
     setSaved(false);
     setError(null);
+    const next = Number.parseInt(value, 10);
     startTransition(async () => {
-      const result = await setVariantStockAction(row.id, Number.parseInt(value, 10));
+      const result = await setVariantStockAction(row.id, next, shown);
       if (result.error) setError(result.error);
-      else setSaved(true);
+      else {
+        setShown(next);
+        setSaved(true);
+      }
     });
   }
 
@@ -68,7 +77,13 @@ function StockField({ row, saveLabel }: { row: StockRow; saveLabel: string }) {
         {saveLabel}
       </Button>
       {saved && <span className="text-xs text-muted-foreground">✓</span>}
-      {error && <span className="text-xs text-destructive">{error}</span>}
+      {/* Translated, not printed raw. The refusal that matters here carries the live figure as a
+          parameter ("someone changed this to 4 while you were counting"), so a raw key would
+          throw away the one number the person needs — and the pre-existing validation key was
+          being shown to owners as a dotted identifier. */}
+      {error && (
+        <span className="text-xs text-destructive">{resolveMessage(t, error)}</span>
+      )}
     </div>
   );
 }

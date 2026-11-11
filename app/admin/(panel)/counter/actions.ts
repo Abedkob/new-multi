@@ -109,6 +109,7 @@ export async function voidCounterSaleAction(
   const member = await requireCapability("counter:void");
   try {
     const result = await voidCounterSale(member.tenantId, saleId, {
+      voidedByName: member.name,
       reason,
       voidedByUserId: member.userId,
     });

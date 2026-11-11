@@ -5,6 +5,14 @@ import { withTenant, type TxClient } from "@/lib/prisma";
 import { slugCandidate, slugify } from "@/lib/slug";
 import { isUniqueViolation } from "@/lib/data/tenants";
 import { variantSetIssues } from "@/lib/variants";
+import {
+  recordVariantOpening,
+  recordVariantRemoval,
+  setStockTo,
+  stockLedgerEnabled,
+  type SetStockOutcome,
+  type StockActor,
+} from "@/lib/data/stock";
 
 /**
  * Every function takes a tenantId and runs inside withTenant(), which scopes the queries and
@@ -47,6 +55,13 @@ export type ProductInput = {
   images: { id?: string; url: string; altText?: string }[];
   isBestSeller: boolean;
   categoryId: string | null;
+  /**
+   * null = no threshold of its own, so the platform default applies (lib/variants.ts).
+   *
+   * Optional because the fixtures and the demo seed have no opinion about it; the product form,
+   * the only caller that can clear one, always sends the field.
+   */
+  lowStockThreshold?: number | null;
   variants: VariantInput[];
 };
 
@@ -133,7 +148,7 @@ export function countProducts(tenantId: string) {
   return withTenant(tenantId, (db) => db.product.count({ where: { tenantId } }));
 }
 
-export async function createProduct(tenantId: string, input: ProductInput) {
+export async function createProduct(tenantId: string, input: ProductInput, actor?: StockActor) {
   assertVariants(input.variants);
 
   const base = slugify(input.name);
@@ -156,7 +171,7 @@ export async function createProduct(tenantId: string, input: ProductInput) {
         let n = 1;
         while (taken.has(slugCandidate(base, n))) n++;
         // One statement: the product and its variants are created together or not at all.
-        return db.product.create({
+        const created = await db.product.create({
           data: {
             tenantId,
             slug: slugCandidate(base, n),
@@ -165,6 +180,7 @@ export async function createProduct(tenantId: string, input: ProductInput) {
             basePriceCents: input.basePriceCents,
             imageUrl: input.imageUrl,
             isBestSeller: input.isBestSeller,
+            lowStockThreshold: input.lowStockThreshold ?? null,
             categoryId: input.categoryId,
             variants: {
               create: input.variants.map((v, i) => ({
@@ -185,6 +201,22 @@ export async function createProduct(tenantId: string, input: ProductInput) {
           },
           include: withVariants,
         });
+
+        // A product created with twenty on the shelf is twenty units the ledger has to account
+        // for. Without this, every product added after the module was switched on would hold
+        // stock with no history at all, and the beginning of the story would be missing from
+        // every single line. An opening balance, not a movement: nothing moved, the units came
+        // into existence along with the row that holds them.
+        //
+        // Variants created empty are skipped — an OPENING of zero states nothing, and the first
+        // real movement on such a variant writes its own.
+        if (actor) {
+          const opening = created.variants.filter((v) => v.stock > 0).map((v) => v.id);
+          if (opening.length > 0 && (await stockLedgerEnabled(db, tenantId))) {
+            await recordVariantOpening(db, tenantId, opening, { reason: "OPENING", actor });
+          }
+        }
+        return created;
       });
     } catch (e) {
       if (!isUniqueViolation(e)) throw e;
@@ -201,11 +233,20 @@ export async function createProduct(tenantId: string, input: ProductInput) {
  * this product are updated in place (so orders and carts keep pointing at them), new ones are
  * added, and any the owner removed are deleted. Returns false if the product isn't in this store.
  */
-export async function updateProduct(tenantId: string, id: string, input: ProductInput) {
+export async function updateProduct(
+  tenantId: string,
+  id: string,
+  input: ProductInput,
+  actor?: StockActor,
+) {
   assertVariants(input.variants);
 
   return withTenant(tenantId, async (tx) => {
     await assertCategory(tx, tenantId, input.categoryId);
+    // One read, once, for the three things D90 changes about this function. Without an actor there
+    // is nobody to attribute a movement to, so the old behaviour stands — which is what keeps the
+    // fixtures and the demo seed working unchanged.
+    const ledgerOn = !!actor && (await stockLedgerEnabled(tx, tenantId));
 
     const product = await tx.product.findFirst({
       where: { id, tenantId },
@@ -221,6 +262,7 @@ export async function updateProduct(tenantId: string, id: string, input: Product
         basePriceCents: input.basePriceCents,
         imageUrl: input.imageUrl,
         isBestSeller: input.isBestSeller,
+        lowStockThreshold: input.lowStockThreshold ?? null,
         categoryId: input.categoryId,
       },
     });
@@ -230,10 +272,22 @@ export async function updateProduct(tenantId: string, id: string, input: Product
     const keepVariants = new Set(
       input.variants.map((v) => v.id).filter((vid): vid is string => !!vid && existingVariants.has(vid)),
     );
+    // D90(iii): the stock of a removed variant is written off BEFORE the row goes, because the
+    // delete destroys it with no record otherwise — an owner who removes the wrong line today has
+    // no way to find out what was on it. The movement outlives the variant through
+    // `variantId ON DELETE SET NULL` plus the name and attribute snapshots.
+    if (ledgerOn) {
+      const removed = [...existingVariants].filter((vid) => !keepVariants.has(vid));
+      await recordVariantRemoval(tx, tenantId, removed, {
+        reason: "VARIANT_REMOVED",
+        actor: actor!,
+      });
+    }
     await tx.productVariant.deleteMany({
       where: { productId: product.id, id: { notIn: [...keepVariants] } },
     });
 
+    const addedVariants: string[] = [];
     for (const [i, v] of input.variants.entries()) {
       const data = {
         attributes: v.attributes,
@@ -243,10 +297,34 @@ export async function updateProduct(tenantId: string, id: string, input: Product
         sortOrder: i,
       };
       if (v.id && keepVariants.has(v.id)) {
-        await tx.productVariant.update({ where: { id: v.id }, data });
+        // D90(i): while the module is on, this form does not write stock. The field is IGNORED
+        // server-side rather than merely hidden on screen, because the form posts it under
+        // `products:write` alone and has never named `products:stock` — so a stale tab, a browser
+        // that restored an old value, or a direct post would still replace a shelf somebody
+        // counted an hour ago with whatever number was last rendered, and leave no trace of the
+        // old one. `stock: undefined` is Prisma's "do not touch this column".
+        //
+        // With the module off the behaviour is exactly what it has always been.
+        await tx.productVariant.update({
+          where: { id: v.id },
+          data: ledgerOn ? { ...data, stock: undefined } : data,
+        });
       } else {
-        await tx.productVariant.create({ data: { ...data, productId: product.id } });
+        // D90(ii): a brand-new variant keeps its submitted stock. Adding a line with twenty
+        // already on hand is legitimate, and it is the one case where this form is the only place
+        // the figure could come from.
+        const fresh = await tx.productVariant.create({
+          data: { ...data, productId: product.id },
+          select: { id: true, stock: true },
+        });
+        if (fresh.stock > 0) addedVariants.push(fresh.id);
       }
+    }
+    if (ledgerOn) {
+      await recordVariantOpening(tx, tenantId, addedVariants, {
+        reason: "OPENING",
+        actor: actor!,
+      });
     }
 
     const existingImages = new Set(product.images.map((img) => img.id));
@@ -290,16 +368,34 @@ export async function deleteProduct(tenantId: string, id: string) {
  * product and change its price".
  *
  * Scoped through the product, because ProductVariant has no tenantId of its own — so another
- * store's variant id updates zero rows and comes back false, the same way every other function
- * here behaves for a foreign id.
+ * store's variant id updates zero rows and comes back NOT_FOUND, the same way every other
+ * function here behaves for a foreign id.
+ *
+ * It used to set the number absolutely, last write wins, which meant two staff counting the same
+ * shelf clobbered each other with no error and neither was told. It is now a compare-and-swap
+ * (D89, `setStockTo`): the loser gets the live figure back and decides what to do with it, because
+ * the server cannot know which of two counts is right.
+ *
+ * `actor` is required rather than optional. A movement with no actor is not an audit record, and
+ * making it optional would mean a caller could silently opt out of the history by forgetting it.
+ *
+ * `expect` is the figure the person was looking at when they typed the new one. Without it this
+ * degrades to a plain set — see `setStockTo` for why that is no protection — so the stock screen
+ * always sends it, and only a caller with no earlier figure to compare against may leave it out.
  */
-export async function setVariantStock(tenantId: string, variantId: string, stock: number) {
-  return withTenant(tenantId, async (db) => {
-    const { count } = await db.productVariant.updateMany({
-      where: { id: variantId, product: { tenantId } },
-      data: { stock },
+export async function setVariantStock(
+  tenantId: string,
+  variantId: string,
+  stock: number,
+  actor: StockActor,
+  expect?: number,
+): Promise<SetStockOutcome> {
+  return withTenant(tenantId, async (tx) => {
+    const ledgerOn = await stockLedgerEnabled(tx, tenantId);
+    return setStockTo(tx, tenantId, variantId, stock, {
+      expect,
+      ledger: ledgerOn ? { reason: "ADJUST", actor } : null,
     });
-    return count > 0;
   });
 }
 

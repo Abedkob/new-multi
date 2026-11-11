@@ -49,6 +49,8 @@ export type ProductFormDefaults = {
   imageUrl: string;
   images: Omit<ImageRow, "key">[];
   isBestSeller: boolean;
+  /** "" = no threshold of its own; the platform default applies. */
+  lowStockThreshold: string;
   categoryId: string;
   variants: Omit<VariantRow, "key">[];
 };
@@ -63,6 +65,7 @@ const EMPTY: ProductFormDefaults = {
   imageUrl: "",
   images: [],
   isBestSeller: false,
+  lowStockThreshold: "",
   categoryId: "",
   // Every product has at least one variant. A product with no real variation keeps this
   // single default variant (no attributes) and only uses its stock.
@@ -87,11 +90,25 @@ export function ProductForm({
   categories,
   defaults = EMPTY,
   submitLabel,
+  stockHref,
 }: {
   action: (input: ProductFormInput) => Promise<ProductActionState>;
   categories: CategoryOption[];
   defaults?: ProductFormDefaults;
   submitLabel: string;
+  /**
+   * Where a saved variant's stock is changed, when the stock module is on (D90).
+   *
+   * Passing it turns the stock input of every ALREADY-SAVED variant into a figure and a link. A
+   * new row keeps its input, because adding a line with twenty on hand is legitimate and this
+   * form is the only place that number could come from.
+   *
+   * Undefined when the module is off, or on the create screen, where nothing is saved yet.
+   *
+   * The server ignores a saved variant's posted stock under exactly the same condition, so this
+   * is a courtesy to the person using the form and not the enforcement — `updateProduct` is.
+   */
+  stockHref?: string;
 }) {
   const t = useT();
   const [name, setName] = useState(defaults.name);
@@ -99,6 +116,7 @@ export function ProductForm({
   const [price, setPrice] = useState(defaults.price);
   const [imageUrl, setImageUrl] = useState(defaults.imageUrl);
   const [isBestSeller, setIsBestSeller] = useState(defaults.isBestSeller);
+  const [lowStockThreshold, setLowStockThreshold] = useState(defaults.lowStockThreshold);
   const [categoryId, setCategoryId] = useState(defaults.categoryId);
   const [variants, setVariants] = useState<VariantRow[]>(() =>
     defaults.variants.map((v) => ({ ...v, key: rowKey() })),
@@ -157,6 +175,7 @@ export function ProductForm({
           .filter((img) => img.url.trim() !== "")
           .map((img) => ({ id: img.id, url: img.url, altText: img.altText })),
         isBestSeller,
+        lowStockThreshold,
         categoryId,
         variants: variants.map((v) => ({
           id: v.id,
@@ -365,6 +384,20 @@ export function ProductForm({
           description={t("products.form.variantsText")}
           bodyClassName="grid gap-5"
         >
+          <Field
+            label={t("products.form.lowStockThreshold")}
+            name="lowStockThreshold"
+            optional
+            hint={t("products.form.lowStockThresholdHint")}
+            value={lowStockThreshold}
+            onChange={(e) => setLowStockThreshold(e.target.value)}
+            inputMode="numeric"
+            dir="ltr"
+            className="tabular-nums"
+            fieldClassName="max-w-xs"
+            errors={errs("lowStockThreshold")}
+          />
+
           {listError("variants")}
 
           {variants.map((v, i) => (
@@ -463,16 +496,31 @@ export function ProductForm({
               <div className="grid gap-3 sm:grid-cols-3">
                 <div className="grid gap-1">
                   <Label className="text-xs">{t("products.form.stockLabel")}</Label>
-                  <Input
-                    aria-label={resolveMessage(
-                      t,
-                      encodeMessage("products.form.stockAria", i + 1),
-                    )}
-                    inputMode="numeric"
-                    className="tabular-nums"
-                    value={v.stock}
-                    onChange={(e) => patchVariant(v.key, { stock: e.target.value })}
-                  />
+                  {stockHref && v.id ? (
+                    // Saved, and the module is on: the figure, and where to change it. Not a
+                    // disabled input — a greyed-out box reads as broken, and the owner still needs
+                    // to see the number while they are editing the price beside it.
+                    <div className="flex h-9 items-center gap-2 text-sm">
+                      <span className="tabular-nums font-medium">{v.stock}</span>
+                      <Link
+                        href={stockHref}
+                        className="text-xs text-muted-foreground underline underline-offset-2 hover:text-foreground"
+                      >
+                        {t("products.form.stockManaged")}
+                      </Link>
+                    </div>
+                  ) : (
+                    <Input
+                      aria-label={resolveMessage(
+                        t,
+                        encodeMessage("products.form.stockAria", i + 1),
+                      )}
+                      inputMode="numeric"
+                      className="tabular-nums"
+                      value={v.stock}
+                      onChange={(e) => patchVariant(v.key, { stock: e.target.value })}
+                    />
+                  )}
                   {listError(`variants.${i}.stock`)}
                 </div>
                 <div className="grid gap-1">

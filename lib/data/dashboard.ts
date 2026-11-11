@@ -3,6 +3,17 @@ import { ORDER_STATUSES, type OrderStatusValue } from "@/lib/orders";
 import { withTenant } from "@/lib/prisma";
 import { LOW_STOCK } from "@/lib/variants";
 
+/** One row of the running-low read, flat as the SQL returns it. */
+type LowStockRow = {
+  id: string;
+  stock: number;
+  attributes: unknown;
+  lowAt: number;
+  productId: string;
+  productName: string;
+  productImageUrl: string;
+};
+
 /**
  * Everything the owner's home page shows, in one transaction (one pooled connection, see
  * lib/prisma.ts). Sales count confirmed + delivered orders only: pending ones may never happen
@@ -35,17 +46,21 @@ export function getDashboard(tenantId: string) {
           take: 5,
           include: { items: { select: { priceCentsSnapshot: true, quantity: true } } },
         }),
-        db.productVariant.findMany({
-          where: { product: { tenantId }, stock: { lte: LOW_STOCK } },
-          orderBy: [{ stock: "asc" }, { createdAt: "desc" }],
-          take: 6,
-          select: {
-            id: true,
-            stock: true,
-            attributes: true,
-            product: { select: { id: true, name: true, imageUrl: true } },
-          },
-        }),
+        // Raw, because the threshold is per product now (D95) and
+        // `stock <= COALESCE(p."lowStockThreshold", 3)` compares two columns, which Prisma's query
+        // builder cannot express. With no product carrying a threshold — every store until an owner
+        // sets one — COALESCE returns the same LOW_STOCK this read has always used, so the card
+        // does not move. Same ordering, same take, same shape, one statement either way.
+        db.$queryRaw<LowStockRow[]>`
+          SELECT v."id", v."stock", v."attributes",
+                 COALESCE(p."lowStockThreshold", ${LOW_STOCK}) AS "lowAt",
+                 p."id" AS "productId", p."name" AS "productName", p."imageUrl" AS "productImageUrl"
+          FROM "ProductVariant" v
+          JOIN "Product" p ON p."id" = v."productId"
+          WHERE p."tenantId" = ${tenantId}
+            AND v."stock" <= COALESCE(p."lowStockThreshold", ${LOW_STOCK})
+          ORDER BY v."stock" ASC, v."createdAt" DESC
+          LIMIT 6`,
         db.product.count({ where: { tenantId } }),
         db.category.count({ where: { tenantId } }),
         db.tenantContent.findMany({
@@ -98,7 +113,13 @@ export function getDashboard(tenantId: string) {
         : null,
       ordersThisWeek,
       recentOrders,
-      lowStock,
+      lowStock: lowStock.map((v) => ({
+        id: v.id,
+        stock: v.stock,
+        attributes: v.attributes,
+        lowAt: v.lowAt,
+        product: { id: v.productId, name: v.productName, imageUrl: v.productImageUrl },
+      })),
       productCount,
       categoryCount,
       hasLogo: !!value("navbar.logo"),

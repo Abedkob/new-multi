@@ -148,6 +148,20 @@ model Tenant {
   // The last platform operator to flip the switch (a User id). Deliberately not a foreign key,
   // like jointControllerRecordedBy: an audit reference must outlive that operator's account.
   counterSalesEnabledBy      String?
+  // --- Stock management: the ledger, receiving and stocktake (D85) ---------------------------
+  // Platform-admin switch, the till's exact shape. Off until an operator enables it: a store
+  // cannot grant itself a stockroom, and with this false every stock path behaves exactly as it
+  // did before this phase — no movement row is written and no statement is added.
+  stockEnabled               Boolean        @default(false)
+  // When the module was FIRST enabled, never cleared. Separates "may record a movement now"
+  // from "has ledger history its owner is entitled to read", like counterSalesFirstEnabledAt.
+  // It is deliberately NOT the ledger's epoch: stock can still move while the module is off
+  // (the product form, an order, a counter sale), so the writer reconciles against the live
+  // figure instead of trusting a window — see lib/stock/invariant.ts.
+  stockFirstEnabledAt        DateTime?
+  // The last platform operator to flip the switch (a User id). Not a foreign key, for the
+  // reason counterSalesEnabledBy gives: an audit reference must outlive that account.
+  stockEnabledBy             String?
   license                    TenantLicense?
   createdAt                  DateTime       @default(now())
 
@@ -172,6 +186,8 @@ model Tenant {
   notificationAlertStates   NotificationAlertState[]     @relation("TenantAlertStates")
   staff                     User[]                       @relation("TenantStaff")
   counterSales              CounterSale[]
+  stockBatches              StockBatch[]
+  stockMovements            StockMovement[]
 }
 
 // A campaign the owner saved while building a tracked link (D39).
@@ -322,30 +338,37 @@ model ProductVariant {
   createdAt          DateTime          @default(now())
   orderItems         OrderItem[]
   counterSaleItems   CounterSaleItem[]
+  stockMovements     StockMovement[]
 
   @@index([productId])
 }
 
 model Product {
-  id             String            @id @default(cuid())
-  tenantId       String
-  tenant         Tenant            @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  name           String
-  description    String            @default("")
+  id                String            @id @default(cuid())
+  tenantId          String
+  tenant            Tenant            @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  name              String
+  description       String            @default("")
   // Used when a variant has no price override of its own.
-  basePriceCents Int
-  imageUrl       String            @default("")
-  slug           String
-  categoryId     String?
-  category       Category?         @relation(fields: [categoryId], references: [id], onDelete: NoAction)
+  basePriceCents    Int
+  imageUrl          String            @default("")
+  slug              String
+  categoryId        String?
+  category          Category?         @relation(fields: [categoryId], references: [id], onDelete: NoAction)
   // Manually flagged for the "Best sellers" section (no sales data yet).
-  isBestSeller   Boolean           @default(false)
-  variants       ProductVariant[]
-  images         ProductImage[]
-  discounts      DiscountProduct[]
-  coupons        CouponProduct[]
-  createdAt      DateTime          @default(now())
-  updatedAt      DateTime          @updatedAt
+  isBestSeller      Boolean           @default(false)
+  // At or below this many of a variant left, this product counts as "running low" (D95). NULL
+  // means the platform default, LOW_STOCK in lib/variants.ts — which is what every product used
+  // before this column existed, so COALESCE(NULL, 3) is the behaviour that already shipped.
+  // Per product rather than per variant: a threshold is a purchasing decision about a product,
+  // and a second place to set one number is a second place for it to be wrong.
+  lowStockThreshold Int?
+  variants          ProductVariant[]
+  images            ProductImage[]
+  discounts         DiscountProduct[]
+  coupons           CouponProduct[]
+  createdAt         DateTime          @default(now())
+  updatedAt         DateTime          @updatedAt
 
   // Product slugs only need to be unique within a store.
   @@unique([tenantId, slug])
@@ -675,6 +698,168 @@ model CounterSaleItem {
 
   @@index([tenantId, counterSaleId])
   @@index([variantId])
+}
+
+// --- Stock management: the ledger, receiving and stocktake -------------------------------------
+//
+// ProductVariant.stock is one mutable Int. Before these tables it had no updatedAt, no history
+// and no audit trail of any kind, and two writers changed it silently: setVariantStock set it
+// absolutely with no record of the old figure, and updateProduct did the same for every variant
+// on every product save while hard-deleting the ones the owner removed from the form. A merchant
+// who sells both online and over a counter could not answer "why is this number what it is?".
+//
+// So every change to a variant's stock, while the module is on, writes a movement. A movement IS
+// the audit record - it carries its own actor and its own timestamp - which is why this phase
+// adds no AuditAction, and why the switch itself needs no audit row either.
+//
+// Both tables are tenant-scoped and under forced RLS, like every other tenant table.
+
+/// Why a variant's stock changed. One value per writer, so a history row can never be ambiguous
+/// about which surface moved the number.
+enum StockMovementReason {
+  /// The balance this ledger found on the shelf and cannot explain: delta 0, written ahead of a
+  /// variant's first movement, and again after any period the module was switched off (during
+  /// which the product form, an order or a till sale could still move stock). A CHECK pins its
+  /// delta to 0, so an OPENING can never quietly invent or destroy units.
+  OPENING
+  /// Goods received into the stockroom.
+  RECEIPT
+  /// A stocktake line. Written even when the counted figure agrees, because a zero-delta row is
+  /// the only evidence the count happened.
+  COUNT
+  /// A direct correction through /admin/products/[id]/stock. Breakage, a return, a fix.
+  ADJUST
+  /// The storefront took it off the shelf, and a cancellation putting it back.
+  SALE
+  ORDER_CANCELLED
+  /// The till took it off the shelf, and a void putting it back.
+  COUNTER_SALE
+  COUNTER_VOID
+  /// The owner removed this variant from the product form. The variant row is hard-deleted, so
+  /// this movement is the only surviving record that its stock existed - which is why it is
+  /// written BEFORE the delete, and why the ledger keeps name and attribute snapshots.
+  VARIANT_REMOVED
+}
+
+enum StockBatchKind {
+  RECEIPT
+  COUNT
+}
+
+/// The header of one document a person submitted: a delivery received, or a shelf counted.
+///
+/// One table for both kinds, the argument Order/OrderItem and CounterSale/CounterSaleItem already
+/// make: same lifecycle (created once, never edited, listed newest-first, opened to read its
+/// lines), same query shape, and a forty-line count needs one place for its reference, note and
+/// actor rather than forty copies of them.
+model StockBatch {
+  id                String         @id @default(cuid())
+  tenantId          String
+  tenant            Tenant         @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  kind              StockBatchKind
+
+  /// Idempotency, the till's mechanism verbatim: an id minted once per form and unique per store,
+  /// so a double-tapped Save or a retry after an ambiguous network failure commits exactly one
+  /// batch. The unique index IS the mechanism; there is no lock.
+  submissionId      String
+  /// A hash of the lines. The same id with the SAME lines returns the existing batch; the same id
+  /// with different lines is refused rather than silently answered with the first write.
+  linesFingerprint  String
+
+  /// The merchant's own reference - a supplier's delivery note number, a date, anything. Free
+  /// text, never parsed: this phase has no suppliers and no purchase orders.
+  reference         String         @default("")
+  note              String         @default("")
+
+  /// Who submitted it. Nullable because a staff account can be removed from the store and the
+  /// document must outlive it, so the name is snapshotted beside it.
+  actorUserId       String?
+  actorNameSnapshot String
+  createdAt         DateTime       @default(now())
+
+  movements         StockMovement[]
+
+  /// One batch per submission, per store. The idempotency guarantee.
+  @@unique([tenantId, submissionId])
+  /// The history screen filters by kind and sorts newest-first; there is one access pattern.
+  @@index([tenantId, kind, createdAt])
+}
+
+/// One change to one variant's stock, with the balance it left behind.
+///
+/// balanceAfter is STORED rather than derived by summing deltas, for three reasons: there is
+/// history from before this module existed and gaps from it being switched off, both deliberate,
+/// so a sum would be wrong; the variant may since have been deleted; and "left: 14" is what makes
+/// a row readable to a shopkeeper, which is a requirement before it is a test.
+model StockMovement {
+  id                        String              @id @default(cuid())
+  tenantId                  String
+  tenant                    Tenant              @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  /// Nulled when the variant is deleted, exactly as OrderItem and CounterSaleItem are. The
+  /// snapshots below are what keep the row readable afterwards.
+  variantId                 String?
+  variant                   ProductVariant?     @relation(fields: [variantId], references: [id], onDelete: SetNull)
+  /// This variant's own movement counter, 1, 2, 3 ..., and the ONLY total order over one
+  /// variant's history (D86). Computed as MAX + 1 while the writer holds that variant's row
+  /// lock - which it always does, because the UPDATE that changed the stock took it - so two
+  /// concurrent writers to one variant are serialised, and the unique index below turns any
+  /// mistake into an error instead of a silently corrupt ledger.
+  ///
+  /// Deliberately not a global autoincrement: nothing else in this schema uses a sequence, no
+  /// migration contains a GRANT, and scripts/sql/rls-role.sql grants on TABLES only - so app_user
+  /// would have had no USAGE on it and every insert would have failed in production alone, while
+  /// passing every suite, because the suites connect as the owner.
+  variantSeq                Int
+
+  productNameSnapshot       String
+  variantAttributesSnapshot Json                @default("{}")
+
+  /// Signed: negative took units off the shelf, positive put them back, zero recorded that
+  /// somebody looked. balanceAfter is the variant's stock immediately after this movement.
+  delta                     Int
+  balanceAfter              Int
+  reason                    StockMovementReason
+
+  /// The document this line belongs to, when a person submitted one. A plain foreign key rather
+  /// than the composite (id, tenantId) shape used elsewhere: ON DELETE SET NULL cannot null a
+  /// composite whose tenantId is NOT NULL, and the alternative - CASCADE - would mean a ledger
+  /// row could be deleted by the thing it points at, which is exactly what a ledger must not be.
+  ///
+  /// So this one column is not covered by the tenant policy: a store can file its own movement
+  /// against another store's document id, because Postgres checks a foreign key without applying
+  /// RLS to the referenced table. It leaks nothing and corrupts nothing - see the migration and
+  /// KNOWN_GAPS.md - and scripts/fixtures/stock-cross-tenant.ts reports it on every run.
+  batchId                   String?
+  batch                     StockBatch?         @relation(fields: [batchId], references: [id], onDelete: SetNull)
+  /// What caused it, when the cause was an order or a till sale. References, deliberately NOT
+  /// foreign keys, for the reason Order.analyticsSessionId gives: a ledger that can be cascaded
+  /// away by whatever it points at is not a ledger. verify:stock checks each still resolves.
+  orderId                   String?
+  counterSaleId             String?
+
+  /// What one unit cost, captured at receipt because that is the only moment anyone knows it.
+  /// Owner-only on every screen (maySeeStockCost in lib/stock.ts) and dropped in the action for
+  /// a non-owner whatever was posted. Nothing in this phase computes with it: no valuation, no
+  /// COGS, no margin.
+  unitCostCents             Int?
+  note                      String              @default("")
+
+  /// Who moved it. Null for a movement the system made with no person behind it (a storefront
+  /// sale, an automatic expiry), in which case the snapshot names the channel instead - the
+  /// labels are listed once in lib/stock.ts so they cannot drift.
+  actorUserId               String?
+  actorNameSnapshot         String
+  createdAt                 DateTime            @default(now())
+
+  /// A race on the per-variant counter becomes an error rather than a corrupt ledger. NULL
+  /// variantIds are distinct to Postgres, so deleted variants' rows do not collide.
+  @@unique([variantId, variantSeq])
+  /// The history screen's only sort, and its reason tabs.
+  @@index([tenantId, createdAt])
+  @@index([tenantId, reason, createdAt])
+  /// One document's lines.
+  @@index([batchId])
 }
 
 // --- Storefront analytics: collection ---------------------------------------------------------
@@ -1148,6 +1333,11 @@ enum NotificationType {
   FUNNEL_ALERT
   SEARCH_ALERT
   TRAFFIC_ALERT
+  /// A variant reached the product's own low-stock threshold (D96). Not an analytics alert: this
+  /// is a counted fact about a shelf, measured against a number the owner chose, so it carries no
+  /// inference and needs no evidence sentence. It reaches every store, not only those inside the
+  /// analytics rollout.
+  LOW_STOCK
   // Platform (§11.10, §11.11)
   INACTIVE_STORE
   STORE_DECLINE
@@ -1221,6 +1411,7 @@ model OwnerNotificationPreference {
   funnelAlerts  Boolean @default(true)
   searchAlerts  Boolean @default(true)
   trafficAlerts Boolean @default(true)
+  lowStockAlerts Boolean @default(true)
 
   /// The only preference that starts OFF (D50). A lock screen reading "new order — $340" tells
   /// whoever is holding the phone what the shop takes in, so the amount is opt-in. Customer

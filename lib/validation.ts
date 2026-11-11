@@ -15,7 +15,7 @@ import { encodeMessage } from "@/lib/i18n/types";
 import { isIanaTimeZone } from "@/lib/time-zones";
 // Pure, and shared with the link builder on purpose — see lib/utm.ts.
 import { slugifyUtm } from "@/lib/utm";
-import { variantSetIssues } from "@/lib/variants";
+import { MAX_STOCK, variantSetIssues } from "@/lib/variants";
 
 /**
  * A staff account the owner is creating (Phase 7, D71).
@@ -259,11 +259,26 @@ const priceString = z.string().transform((v, ctx) => {
   return cents;
 });
 
-const stockString = z
-  .string()
-  .trim()
-  .regex(/^\d{1,9}$/, "validation.stock.invalid")
-  .transform(Number);
+// One ceiling for stock, shared with the narrow stock screen's action. There used to be two:
+// this regex admitted nine digits while setVariantStockAction refused anything over a million, so
+// the same figure was accepted on the product form and rejected on the stock screen.
+const stockString = z.string().trim().transform((v, ctx) => {
+  if (!/^\d{1,9}$/.test(v) || Number(v) > MAX_STOCK) {
+    ctx.addIssue({ code: "custom", message: "validation.stock.invalid" });
+    return z.NEVER;
+  }
+  return Number(v);
+});
+
+/** "" means the product has no threshold of its own, so the platform default applies (D95). */
+const lowStockThresholdString = z.string().trim().default("").transform((v, ctx) => {
+  if (v === "") return null;
+  if (!/^\d{1,9}$/.test(v) || Number(v) > MAX_STOCK) {
+    ctx.addIssue({ code: "custom", message: "validation.lowStockThreshold.invalid" });
+    return z.NEVER;
+  }
+  return Number(v);
+});
 
 const optionalImage = z
   .string()
@@ -338,6 +353,7 @@ export const productFormSchema = z
       altText: z.string().trim().max(100).optional(),
     })).max(10, "validation.images.tooMany").default([]),
     isBestSeller: z.boolean().default(false),
+    lowStockThreshold: lowStockThresholdString,
     /** "" = no category. */
     categoryId: z
       .string()
@@ -366,6 +382,8 @@ export type ProductFormInput = {
   imageUrl: string;
   images: { id?: string; url: string; altText: string }[];
   isBestSeller: boolean;
+  /** "" = no threshold of its own. */
+  lowStockThreshold: string;
   categoryId: string;
   variants: {
     id?: string;

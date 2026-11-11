@@ -21,6 +21,7 @@ const nextConfig: NextConfig = {
     "mirage-e2e.test",
     "prism-e2e.test",
     "counter-e2e.test",
+    "stock-e2e.test",
   ],
   experimental: {
     serverActions: {

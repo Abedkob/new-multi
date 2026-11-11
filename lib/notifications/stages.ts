@@ -23,6 +23,7 @@ import { participationWhere } from "@/lib/analytics/rollout";
 import { CATCH_UP_WINDOW_MS, announceNewOrder } from "@/lib/notifications/new-order";
 import { claimDelivery, recordDeliveryOutcome } from "@/lib/data/notifications";
 import { decryptPushSecret } from "@/lib/push/crypto";
+import { evaluateLowStock } from "@/lib/notifications/low-stock";
 import { pushConfigured } from "@/lib/push/keys";
 import { sendPush } from "@/lib/push/send";
 import { markDeviceExpired, recordDeviceFailure, recordDeviceSuccess } from "@/lib/data/push-subscriptions";
@@ -284,6 +285,31 @@ export const ownerAlerts: Stage = {
 };
 
 /**
+ * "Running low" (D96).
+ *
+ * Walks the stock rather than the analytics rollout, so it reaches every store — see
+ * lib/notifications/low-stock.ts for why that is not the same shape as `ownerAlerts`. It fires on
+ * the transition into "low" and re-arms only when the stock goes back above the threshold, so a
+ * product that is simply discontinued goes quiet instead of buzzing every five minutes.
+ */
+export const lowStockSweep: Stage = {
+  name: "low-stock-sweep",
+  async run(ctx: StageContext) {
+    if (!pushConfigured()) return { items: 0, detail: "push is not configured" };
+    const result = await evaluateLowStock(ctx.now, { dryRun: ctx.dryRun });
+    if (ctx.dryRun) {
+      return { items: result.stores, detail: `would check ${result.stores} store(s) with low stock` };
+    }
+    return {
+      items: result.sent,
+      detail:
+        `${result.sent} store(s) told about ${result.crossings} newly low variant(s); ` +
+        `${result.cleared} re-armed after restocking`,
+    };
+  },
+};
+
+/**
  * The Monday summary (§11.7).
  *
  * Due at 09:00 in each store's OWN zone, which is why this is a stage rather than a cron
@@ -389,6 +415,7 @@ export const platformWeeklySummary: Stage = {
 
 export const NOTIFICATION_STAGES: Stage[] = [
   newOrderCatchUp,
+  lowStockSweep,
   ownerAlerts,
   ownerWeeklySummary,
   platformAlerts,

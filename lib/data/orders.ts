@@ -7,7 +7,16 @@ import { calculateCouponDiscount, couponStatus } from "@/lib/pricing";
 import { findCouponForPricing, normalizeCouponCode } from "@/lib/data/coupons";
 import { parseAttributes, variantLabel } from "@/lib/variants";
 import { isLicenseActive } from "@/lib/license/status";
-import { decrementStockOrThrow, incrementStock, StockShortError } from "@/lib/data/stock";
+import {
+  decrementStockOrThrow,
+  incrementStock,
+  recordStockMovements,
+  soldLines,
+  stockLedgerEnabled,
+  StockShortError,
+  type StockActor,
+} from "@/lib/data/stock";
+import { STOCK_SYSTEM_ACTORS } from "@/lib/stock";
 
 /**
  * Orders. Every function takes a tenantId (from the storefront's slug lookup when a customer
@@ -182,8 +191,9 @@ export async function placeOrder(
       isPaused: boolean;
       deliveryFeeCents: number;
       deliveryNote: string;
+      stockEnabled: boolean;
     }[]>`
-      SELECT "isPaused", "deliveryFeeCents", "deliveryNote"
+      SELECT "isPaused", "deliveryFeeCents", "deliveryNote", "stockEnabled"
       FROM "Tenant" WHERE id = ${tenantId} FOR SHARE`;
     const licenseRows = await tx.$queryRaw<{
       status: string;
@@ -300,7 +310,7 @@ export async function placeOrder(
       throw error;
     }
 
-    return tx.order.create({
+    const order = await tx.order.create({
       data: {
         tenantId,
         customerName: customer.customerName,
@@ -351,6 +361,29 @@ export async function placeOrder(
       },
       include: { items: true },
     });
+
+    // The ledger, written after the order exists because the movement names it (see
+    // recordStockMovements for why that split costs nothing). `stockEnabled` rode along on the
+    // tenant read this transaction already does, so a store with the module off pays one column in
+    // one existing SELECT and not a single extra statement.
+    //
+    // A shopper is not somebody an admin can hold responsible for a stock change, so the actor is
+    // the channel rather than a person: STOCK_SYSTEM_ACTORS.storefront, listed once so the label
+    // cannot drift into three spellings across three writers.
+    if (tenantRows[0].stockEnabled) {
+      await recordStockMovements(
+        tx,
+        tenantId,
+        {
+          reason: "SALE",
+          actor: { userId: null, name: STOCK_SYSTEM_ACTORS.storefront },
+          orderId: order.id,
+          at: pricedAt,
+        },
+        soldLines(wanted),
+      );
+    }
+    return order;
   });
 }
 
@@ -438,7 +471,12 @@ export function countOrdersByStatus(tenantId: string, status: OrderStatusValue) 
  * the stock back to the variants, exactly once: the status write is guarded on the status we
  * read, so a double click (or two admin tabs) can't restore the same stock twice.
  */
-export async function updateOrderStatus(tenantId: string, id: string, next: OrderStatusValue) {
+export async function updateOrderStatus(
+  tenantId: string,
+  id: string,
+  next: OrderStatusValue,
+  actor: StockActor = { userId: null, name: STOCK_SYSTEM_ACTORS.automatic },
+) {
   return withTenant(tenantId, async (tx) => {
     const order = await tx.order.findFirst({
       where: { id, tenantId },
@@ -464,7 +502,21 @@ export async function updateOrderStatus(tenantId: string, id: string, next: Orde
       // Shared with a counter-sale void (lib/data/stock.ts). A line whose variant was deleted
       // after the order has variantId null and cannot be restored; the helper skips it and
       // reports the count, which this path does not need but the till's receipt does.
-      await incrementStock(tx, tenantId, order.items);
+      //
+      // One extra read, and only on a cancellation: the other three transitions move no stock, so
+      // they ask the question not at all. The order id is known here, so the ledger travels with
+      // the restore rather than following it.
+      //
+      // `actor` defaults to the automatic label because expireStalePendingOrders calls this with
+      // nobody behind it (a PENDING order older than 24 hours, swept when an owner opens the
+      // Orders page). A person cancelling passes themselves.
+      const ledgerOn = await stockLedgerEnabled(tx, tenantId);
+      await incrementStock(
+        tx,
+        tenantId,
+        order.items,
+        ledgerOn ? { reason: "ORDER_CANCELLED", actor, orderId: order.id } : null,
+      );
     }
     return next;
   });

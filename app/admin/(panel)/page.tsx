@@ -284,7 +284,7 @@ export default async function AdminHome() {
                         <span className="block truncate text-sm font-medium">{v.product.name}</span>
                         {label && <span className="block truncate text-xs text-muted-foreground">{label}</span>}
                       </span>
-                      <StockBadge stock={v.stock} />
+                      <StockBadge stock={v.stock} lowAt={v.lowAt} />
                     </Link>
                   </li>
                 );

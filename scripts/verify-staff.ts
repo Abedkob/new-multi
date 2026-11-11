@@ -15,14 +15,16 @@ import "dotenv/config";
 import "./_owner";
 import assert from "node:assert/strict";
 import { prisma } from "../lib/prisma";
-import { createStoreWithOwner, setTenantCounterSales } from "../lib/data/tenants";
+import { createStoreWithOwner, setTenantCounterSales, setTenantStock } from "../lib/data/tenants";
 import { createStaffAccount, listStaffAccounts, revokeStaffAccount } from "../lib/data/staff";
-import { createProduct } from "../lib/data/products";
+import { createProduct, setVariantStock } from "../lib/data/products";
 import { placeOrder } from "../lib/data/orders";
 import { recordCounterSale, voidCounterSale } from "../lib/data/counter-sales";
 import { generateTempPassword, hashPassword } from "../lib/passwords";
 import { claimNotification } from "../lib/data/notifications";
 import { CAPABILITIES, can } from "../lib/permissions";
+import { costForRole, maySeeStockCost } from "../lib/stock";
+import { recordStockReceipt } from "../lib/data/stock-batches";
 
 const BASE = process.env.BASE_URL ?? "http://localhost:3000";
 
@@ -323,6 +325,94 @@ async function main() {
       ok("voiding is owner-only, for the same reason cancelling an order is");
     }
 
+    // ------------------------------------------------------------- the stockroom (stock:read)
+    // The same before-and-after as the till, because `stock:read` has the same shape: a
+    // capability a staff member always holds, gated by whether this store has the module at all.
+    {
+      const navBefore = await session.get("/admin/orders");
+      assert.ok(
+        !navBefore.body.includes('href="/admin/stock"'),
+        "a store with no stock module must not offer one in the sidebar",
+      );
+      // A 404, deliberately NOT /admin/no-access: the refusal page means "your role may not",
+      // and this store simply has no stockroom — for either role.
+      for (const path of ["/admin/stock", "/admin/stock/history"]) {
+        assert.equal(
+          (await session.get(path)).status,
+          404,
+          `a store with no stock module has no ${path}`,
+        );
+      }
+
+      await setTenantStock(tenantId, created.user.id);
+      // One movement, so the history has something to render and a reason tab to count.
+      await setVariantStock(tenantId, variantId, 4, { userId: staff.id, name: "Packer" });
+
+      const navAfter = await session.get("/admin/orders");
+      assert.ok(
+        navAfter.body.includes('href="/admin/stock"'),
+        "once the module is on, a staff member must be offered it",
+      );
+      const overview = await session.get("/admin/stock");
+      assert.equal(overview.status, 200, "a staff member may read the stock overview");
+      const history = await session.get("/admin/stock/history");
+      assert.equal(history.status, 200, "and the movement history");
+      assert.ok(
+        history.body.includes("Corrected by hand"),
+        "a reason is a sentence a shopkeeper can read, never the enum value",
+      );
+      // As an element's text, not anywhere: `?reason=ADJUST` in a tab's href is how a filtered
+      // list becomes a URL, which is the point of StatusFilter. What must never appear is the
+      // enum rendered where a sentence belongs.
+      assert.ok(
+        !/>\s*(ADJUST|SALE|COUNTER_SALE|ORDER_CANCELLED|VARIANT_REMOVED|OPENING)\s*</.test(
+          history.body,
+        ),
+        "the enum must not be rendered as text where a sentence belongs",
+      );
+      // D92: the cost column is decided by the role and left out of the query, so it is absent
+      // from the markup rather than merely hidden by CSS.
+      assert.equal(maySeeStockCost("STAFF"), false);
+      assert.ok(
+        !history.body.includes("Cost each"),
+        "a staff member must not be shown what stock cost: that is the owner's margin",
+      );
+      ok("a staff member reaches the stockroom once it is on, with reasons in words and no costs");
+
+      // stock:move — the job in a stockroom, and the one thing it deliberately does not carry.
+      for (const path of ["/admin/stock/receive", "/admin/stock/count"]) {
+        const page = await session.get(path);
+        assert.equal(page.status, 200, `a staff member may open ${path}: this is the job`);
+      }
+      // Deliberately NOT "the cost label is absent from the form". It is a per-line field, so it
+      // cannot appear on a form with no lines — that assertion would have passed whatever the
+      // role, which is worse than no assertion. The rule is what refuses, and a staff member who
+      // posts a cost anyway has it dropped, so that is what gets checked.
+      assert.equal(costForRole("STAFF", 4500), null);
+      assert.equal(costForRole("STORE_OWNER", 4500), 4500);
+      // Receiving is exercised rather than asserted about, through the data layer with the staff
+      // member as the actor, which is what the action does after its capability check.
+      const delivered = await recordStockReceipt(tenantId, {
+        submissionId: `staff-receipt-${run}`,
+        reference: "DN-STAFF",
+        actor: { userId: staff.id, name: "Packer" },
+        // Posted the way a staff member's browser could post it; the ACTION is what drops it,
+        // so the data layer storing it here is correct and is not the thing under test.
+        lines: [{ variantId, quantity: 7, unitCostCents: costForRole("STAFF", 4500) }],
+      });
+      const line = await prisma.stockMovement.findFirstOrThrow({
+        where: { tenantId, batchId: delivered.id },
+      });
+      assert.equal(line.delta, 7, "a staff member's delivery moves the shelf");
+      assert.equal(
+        line.unitCostCents,
+        null,
+        "and carries no cost, because the rule dropped it before it reached the writer",
+      );
+      assert.equal(line.actorUserId, staff.id, "the movement names who received it");
+      ok("a staff member can receive a delivery and count a shelf, and never records a cost");
+    }
+
     // ------------------------------------------------------- notifications: new orders, nothing else
     // D60's half of this is enforced in the writer, before a row exists. Asserted here as well
     // as in verify:notifications because this is the suite that knows what a staff account is.
@@ -444,12 +534,12 @@ async function main() {
     // ------------------------------------------------------------- the table says what it says
     assert.deepEqual(
       CAPABILITIES.filter((capability) => can("STAFF", capability)).length,
-      8,
-      "D73 plus the till: eight capabilities, and this suite walks all eight. If this number " +
-        "moved, the new capability needs a leg above before it is granted to staff — a count " +
-        "that is merely updated turns this suite into a tautology.",
+      10,
+      "D73 plus the till and the stockroom: ten capabilities, and this suite walks all ten. If " +
+        "this number moved, the new capability needs a leg above before it is granted to staff — " +
+        "a count that is merely updated turns this suite into a tautology.",
     );
-    ok("the eight capabilities this suite exercised are the eight the table grants");
+    ok("the ten capabilities this suite exercised are the ten the table grants");
   } finally {
     await prisma.user.deleteMany({ where: { staffTenantId: tenantId } });
     await prisma.tenant.deleteMany({ where: { id: tenantId } });

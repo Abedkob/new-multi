@@ -58,6 +58,32 @@ export const ADMIN_CAPABILITIES = {
   "categories:read": ["STORE_OWNER", "STAFF"],
   "categories:write": ["STORE_OWNER"],
 
+  // -------------------------------------------- the stockroom: where each number came from (D91)
+  /**
+   * See the stock overview and the movement history.
+   *
+   * `products:stock` is deliberately NOT reused for these screens even though it means much the
+   * same thing, because it also guards `/admin/products/[id]/stock`, which every store has whether
+   * or not it has the stock module. Hanging the module's gate on it would hide that screen too.
+   *
+   * Staff, because the person who notices an empty shelf is usually the person standing in front
+   * of it, and because a movement history is the answer to "who took these" — a question staff
+   * need to be able to settle about their own work rather than have settled about them.
+   */
+  "stock:read": ["STORE_OWNER", "STAFF"],
+  /**
+   * Submit a document that moves stock: receive a delivery, count a shelf.
+   *
+   * Staff, because this is the job. Receiving goods and counting shelves is what somebody in the
+   * stockroom does all day, and an owner who had to do both themselves would have no reason to
+   * switch the module on.
+   *
+   * What staff do *not* get with it is the unit cost, which is a rule about the person rather than
+   * a capability (`maySeeStockCost`, D92) — one screen, one grant, and the figure dropped in the
+   * action whatever was posted.
+   */
+  "stock:move": ["STORE_OWNER", "STAFF"],
+
   // ------------------------------------------------------------- the owner's own store decisions
   /** Discounts and coupons: what the store charges. */
   "discounts:write": ["STORE_OWNER"],

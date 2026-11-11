@@ -12,8 +12,35 @@ import { encodeMessage } from "@/lib/i18n/types";
  * Different products can use entirely different keys (size+color, just size, material+size...).
  */
 
-/** At or below this many left, the admin flags a variant as low on stock. */
+/**
+ * The fallback "running low" threshold: what every product used before `Product.lowStockThreshold`
+ * existed, and what a product without one of its own still uses.
+ *
+ * It is no longer the rule. Read it through `effectiveLowStock` rather than comparing against it,
+ * so one product's threshold cannot be applied to another's.
+ */
 export const LOW_STOCK = 3;
+
+/**
+ * The most stock the admin will accept for one variant.
+ *
+ * One number, because there were two: the product form admitted nine digits while the narrow
+ * stock screen capped at a million, so the same figure was accepted on one screen and refused on
+ * the other.
+ */
+export const MAX_STOCK = 1_000_000;
+
+/**
+ * The threshold that actually applies to a product: its own, or the platform default.
+ *
+ * Pure and structurally typed, so the badge, the dashboard, the stock screens and the low-stock
+ * sweep all answer this question the same way. A threshold of 0 is meaningful — "tell me only
+ * when it is gone" — so only null and nonsense fall back.
+ */
+export function effectiveLowStock(product: { lowStockThreshold?: number | null }): number {
+  const own = product.lowStockThreshold;
+  return own == null || own < 0 ? LOW_STOCK : own;
+}
 
 export type Attributes = Record<string, string>;
 

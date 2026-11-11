@@ -52,7 +52,8 @@ import { createStoreWithOwner, updateTenantDeliverySettings } from "../lib/data/
 import { deliverySettingsSchema } from "../lib/delivery";
 import { toStoreProduct } from "../lib/store-product";
 import { cartLinesSchema, checkoutSchema, productFormSchema } from "../lib/validation";
-import { variantSetIssues } from "../lib/variants";
+import { LOW_STOCK, effectiveLowStock, variantSetIssues } from "../lib/variants";
+import { getDashboard } from "../lib/data/dashboard";
 import { createCoupon } from "../lib/data/coupons";
 
 let passed = 0;
@@ -705,6 +706,66 @@ async function main() {
       assert.equal((await getOrder(A, o.id))!.status, "PENDING");
       assert.equal(await stockOf(tS.id), 4);
       assert.ok((await listOrders(A)).some((x) => x.id === o.id));
+    });
+
+    // ------- the low-stock threshold (D95): per product, with the old constant as the fallback
+    await check("a product with no threshold of its own is judged by the platform default", async () => {
+      assert.equal(effectiveLowStock({ lowStockThreshold: null }), LOW_STOCK);
+      assert.equal(effectiveLowStock({}), LOW_STOCK, "an absent field is not a threshold of 0");
+      assert.equal(effectiveLowStock({ lowStockThreshold: -1 }), LOW_STOCK, "nonsense falls back");
+      assert.equal(effectiveLowStock({ lowStockThreshold: 0 }), 0, "0 means 'only when it is gone'");
+      assert.equal(effectiveLowStock({ lowStockThreshold: 7 }), 7);
+    });
+
+    await check("with no product carrying a threshold, running low means what it meant before", async () => {
+      const store = await mk("LowStockDefault");
+      try {
+        const t = store.tenant.id;
+        const low = await createProduct(t, base({ name: "Low Default", variants: [v({}, 2)] }));
+        await createProduct(t, base({ name: "Plenty Default", variants: [v({}, LOW_STOCK + 5)] }));
+        const gone = await createProduct(t, base({ name: "Gone Default", variants: [v({}, 0)] }));
+
+        const rows = (await getDashboard(t)).lowStock;
+        assert.deepEqual(
+          rows.map((r) => r.product.name).sort(),
+          ["Gone Default", "Low Default"],
+          "exactly the variants at or below the platform default",
+        );
+        assert.ok(
+          rows.every((r) => r.lowAt === LOW_STOCK),
+          "and every row reports the default as the threshold that applied",
+        );
+        assert.ok(rows.some((r) => r.product.id === low.id && r.stock === 2));
+        assert.ok(rows.some((r) => r.product.id === gone.id && r.stock === 0));
+      } finally {
+        await prisma.tenant.deleteMany({ where: { id: store.tenant.id } });
+        await prisma.user.deleteMany({ where: { id: store.user.id } });
+      }
+    });
+
+    await check("a product's own threshold decides its own rows, and 0 is a real threshold", async () => {
+      const store = await mk("LowStockOwn");
+      try {
+        const t = store.tenant.id;
+        const plenty = await createProduct(t, base({ name: "Plenty Own", variants: [v({}, 8)] }));
+        const few = await createProduct(t, base({ name: "Few Own", variants: [v({}, 2)] }));
+
+        await prisma.product.update({ where: { id: plenty.id }, data: { lowStockThreshold: 10 } });
+        const raised = (await getDashboard(t)).lowStock.find((r) => r.product.id === plenty.id);
+        assert.ok(raised, "8 left is low once the product says 10 is low");
+        assert.equal(raised.lowAt, 10, "the row reports the product's own threshold");
+        assert.equal(raised.stock, 8);
+
+        await prisma.product.update({ where: { id: few.id }, data: { lowStockThreshold: 0 } });
+        const names = (await getDashboard(t)).lowStock.map((r) => r.product.id);
+        assert.ok(
+          !names.includes(few.id),
+          "a threshold of 0 means 2 left is not low - the number is respected, not treated as unset",
+        );
+      } finally {
+        await prisma.tenant.deleteMany({ where: { id: store.tenant.id } });
+        await prisma.user.deleteMany({ where: { id: store.user.id } });
+      }
     });
 
     await check("orders are newest first", async () => {

@@ -132,6 +132,38 @@ export function setTenantCounterSales(id: string, operatorId: string | null) {
 }
 
 /**
+ * The stock module, switched on and off by the platform (D85).
+ *
+ * Deliberately a second function rather than a parameter on `setTenantCounterSales`: a store can
+ * have a till without a stockroom, or a stockroom without a counter, and one function taking a
+ * column name would be a way to flip the wrong switch.
+ *
+ * Turning it off sets the boolean false and leaves `stockFirstEnabledAt` — the ledger stays
+ * readable, and a later re-enable reconciles each variant against whatever is actually on the
+ * shelf rather than trusting the gap (lib/stock/invariant.ts).
+ */
+export function setTenantStock(id: string, operatorId: string | null) {
+  return withBypass(async (db) => {
+    if (operatorId === null) {
+      await db.tenant.update({
+        where: { id },
+        data: { stockEnabled: false },
+        select: { id: true },
+      });
+      return;
+    }
+    // COALESCE in one statement, for the reason setTenantCounterSales gives: "set it only if it is
+    // still null" is the whole point, and a read-then-write would race two operators.
+    await db.$executeRaw`
+      UPDATE "Tenant"
+      SET "stockEnabled" = true,
+          "stockEnabledBy" = ${operatorId},
+          "stockFirstEnabledAt" = COALESCE("stockFirstEnabledAt", now())
+      WHERE id = ${id}`;
+  });
+}
+
+/**
  * A store's privacy identity and reporting basis, edited after creation.
  *
  * Changing the reporting zone re-buckets future days only — past aggregates are not rewritten,

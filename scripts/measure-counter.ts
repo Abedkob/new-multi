@@ -15,9 +15,10 @@
  * trigger for adding the extension is written down rather than guessed: search p95 above 150ms at
  * a realistic catalogue. Below that, the index is not worth a new Postgres extension.
  *
- * Fixtures are bulk-inserted with generate_series rather than through createProduct: 2,000
- * transactions would make the setup longer than the measurement, and nothing here is testing the
- * product writer.
+ * The catalogue itself comes from scripts/fixtures/catalogue.ts, shared with
+ * `pnpm measure:stock` — both scripts report numbers "at 2,000 products x 3 variants", and that
+ * has to mean the same rows or the two sets of figures are not comparable. The sales below stay
+ * here: they are the till's own fixture and nothing else reads them.
  */
 
 import "dotenv/config";
@@ -30,6 +31,13 @@ import {
   recordCounterSale,
   searchTillItems,
 } from "../lib/data/counter-sales";
+import {
+  CATALOGUE_WORDS,
+  analyzeTables,
+  explain,
+  seedCatalogue,
+  time,
+} from "./fixtures/catalogue";
 
 const arg = (name: string) =>
   process.argv.find((a) => a.startsWith(`--${name}=`))?.split("=")[1];
@@ -38,34 +46,6 @@ const PRODUCTS = Number(arg("products") ?? 2000);
 const VARIANTS_EACH = Number(arg("variants") ?? 3);
 const SALES = Number(arg("sales") ?? 500);
 const ITERATIONS = Number(arg("iterations") ?? 25);
-
-/** The words the fixture's product names are built from, so a search term matches a real subset. */
-const WORDS = ["mug", "plate", "bowl", "shirt", "scarf", "lamp", "vase", "chair", "towel", "candle"];
-
-function percentile(values: number[], p: number) {
-  const sorted = [...values].sort((a, b) => a - b);
-  return sorted[Math.min(sorted.length - 1, Math.floor((p / 100) * sorted.length))] ?? 0;
-}
-
-async function time(label: string, iterations: number, fn: (i: number) => Promise<unknown>) {
-  const samples: number[] = [];
-  for (let i = 0; i < iterations; i++) {
-    const started = performance.now();
-    await fn(i);
-    samples.push(performance.now() - started);
-  }
-  const row = {
-    operation: label,
-    runs: iterations,
-    p50: `${percentile(samples, 50).toFixed(0)}ms`,
-    p95: `${percentile(samples, 95).toFixed(0)}ms`,
-    max: `${Math.max(...samples).toFixed(0)}ms`,
-  };
-  console.log(
-    `  ${row.operation.padEnd(26)} p50 ${row.p50.padStart(7)}   p95 ${row.p95.padStart(7)}   max ${row.max.padStart(7)}   (${row.runs} runs)`,
-  );
-  return percentile(samples, 95);
-}
 
 async function main() {
   const run = Date.now().toString(36);
@@ -83,24 +63,10 @@ async function main() {
       `\nSeeding ${PRODUCTS} products x ${VARIANTS_EACH} variants and ${SALES} sales...`,
     );
     const seedStarted = performance.now();
-
-    await prisma.$executeRaw`
-      INSERT INTO "Product" ("id","tenantId","name","description","basePriceCents","imageUrl","slug","isBestSeller","createdAt","updatedAt")
-      SELECT 'mp-' || ${run} || '-' || g, ${tenantId},
-             (ARRAY['Mug','Plate','Bowl','Shirt','Scarf','Lamp','Vase','Chair','Towel','Candle'])[1 + (g % 10)]
-               || ' ' || g,
-             '', 500 + (g % 50) * 100, '',
-             'mp-' || ${run} || '-' || g, false, now(), now()
-      FROM generate_series(1, ${PRODUCTS}) AS g`;
-
-    await prisma.$executeRaw`
-      INSERT INTO "ProductVariant" ("id","productId","attributes","stock","sortOrder","createdAt")
-      SELECT 'mv-' || ${run} || '-' || g || '-' || v,
-             'mp-' || ${run} || '-' || g,
-             jsonb_build_object('Size', (ARRAY['S','M','L'])[v]),
-             500, v, now()
-      FROM generate_series(1, ${PRODUCTS}) AS g,
-           generate_series(1, ${VARIANTS_EACH}) AS v`;
+    const catalogue = await seedCatalogue(tenantId, run, {
+      products: PRODUCTS,
+      variantsEach: VARIANTS_EACH,
+    });
 
     // Sales and their lines, so the history list and the takings aggregate have something to
     // scan. Half cash, half card, so the FILTER clauses in the aggregate do real work.
@@ -118,26 +84,17 @@ async function main() {
              'Measure line', 1000, 1000, 1 + (l % 3)
       FROM generate_series(1, ${SALES}) AS g, generate_series(1, 2) AS l`;
 
-    // ANALYZE before measuring anything. A freshly bulk-loaded table has no statistics, so the
-    // planner estimates one row everywhere and picks plans it would never choose in production.
-    // Without this the first run timed the takings aggregate on a nested loop that discarded
-    // 271,068 rows — a measurement of the planner's ignorance, not of the query.
-    await prisma.$executeRawUnsafe(
-      'ANALYZE "Product", "ProductVariant", "CounterSale", "CounterSaleItem"',
-    );
+    // ANALYZE before measuring anything — see the helper for the 271,068-row plan this prevents.
+    await analyzeTables(["Product", "ProductVariant", "CounterSale", "CounterSaleItem"]);
     console.log(
       `  seeded and analyzed in ${((performance.now() - seedStarted) / 1000).toFixed(1)}s\n`,
     );
 
-    const sellable = await prisma.productVariant.findMany({
-      where: { product: { tenantId } },
-      select: { id: true },
-      take: 4,
-    });
+    const sellable = catalogue.sample.map((id) => ({ id }));
 
     console.log("Latency:");
     const searchP95 = await time("searchTillItems", ITERATIONS, (i) =>
-      searchTillItems(tenantId, WORDS[i % WORDS.length]),
+      searchTillItems(tenantId, CATALOGUE_WORDS[i % CATALOGUE_WORDS.length]),
     );
     await time("recordCounterSale (2 lines)", ITERATIONS, (i) =>
       recordCounterSale(tenantId, {
@@ -161,16 +118,18 @@ async function main() {
     );
 
     // ---- the two plans worth reading -------------------------------------------------------
-    console.log("\nEXPLAIN ANALYZE — the product search (an unanchored ILIKE):");
-    const searchPlan = await prisma.$queryRaw<{ "QUERY PLAN": string }[]>`
-      EXPLAIN ANALYZE
-      SELECT id, name FROM "Product"
-      WHERE "tenantId" = ${tenantId} AND name ILIKE ${"%mug%"}
-      ORDER BY name ASC LIMIT 20`;
-    for (const row of searchPlan) console.log(`  ${row["QUERY PLAN"]}`);
+    await explain(
+      "the product search (an unanchored ILIKE)",
+      prisma.$queryRaw<{ "QUERY PLAN": string }[]>`
+        EXPLAIN ANALYZE
+        SELECT id, name FROM "Product"
+        WHERE "tenantId" = ${tenantId} AND name ILIKE ${"%mug%"}
+        ORDER BY name ASC LIMIT 20`,
+    );
 
-    console.log("\nEXPLAIN ANALYZE — the takings aggregate:");
-    const takingsPlan = await prisma.$queryRaw<{ "QUERY PLAN": string }[]>`
+    await explain(
+      "the takings aggregate",
+      prisma.$queryRaw<{ "QUERY PLAN": string }[]>`
       EXPLAIN ANALYZE
       WITH per_sale AS (
         SELECT s.id, s.payment, s.status,
@@ -182,8 +141,8 @@ async function main() {
           AND s."createdAt" < ${new Date(Date.now() + 86_400_000)}
         GROUP BY s.id, s.payment, s.status
       )
-      SELECT COUNT(*)::int, COALESCE(SUM(total), 0)::int FROM per_sale`;
-    for (const row of takingsPlan) console.log(`  ${row["QUERY PLAN"]}`);
+      SELECT COUNT(*)::int, COALESCE(SUM(total), 0)::int FROM per_sale`,
+    );
 
     console.log(
       `\nThe index decision: search p95 was ${searchP95.toFixed(0)}ms at ${PRODUCTS} products ` +

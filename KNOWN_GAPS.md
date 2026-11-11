@@ -151,6 +151,54 @@ Newest sections at the bottom; delete an item when it's fixed.
   the owner's dashboard tile. A configurable cap or an approval flow is a decision for when that
   figure says one is needed.
 
+## Stock management
+
+- **A movement filed against another store's document is accepted, and this is deliberate.**
+  `StockMovement.batchId` has to be a plain foreign key: `ON DELETE SET NULL` cannot null a
+  composite whose `tenantId` is `NOT NULL`, and the alternative, `CASCADE`, would let a document
+  delete ledger rows — which is the one thing a ledger must not permit. Postgres checks a foreign
+  key with the referencing table's privileges and does **not** apply RLS to the referenced table,
+  so the tenant policy cannot reach this column. Measured, not assumed:
+  `scripts/fixtures/stock-cross-tenant.ts` attempts it as `app_user` on every `pnpm verify:stock`
+  run and prints the answer. What it buys an attacker is nothing — the row is still their own
+  tenant's, the other store's document stays unreadable, and the other store's history filters on
+  `tenantId` as well as `batchId`, so the row never appears in it. The only effect is a dangling
+  reference inside the writer's own ledger, reachable solely through direct SQL, since the
+  application never accepts a batch id from a caller. Not fixed, because the fix is the `CASCADE`
+  this paragraph rejects.
+- **Nothing computes with unit cost.** It is captured at receipt because that is the only moment
+  anyone knows it, and owner-only because it is a purchasing fact about margins. There is no
+  valuation, no COGS, no average or FIFO cost, no margin anywhere. A cost column with no
+  arithmetic behind it is a deliberate stopping point: every one of those needs a decision about
+  which cost applies to which unit, and nobody has asked.
+- **No suppliers, purchase orders, warehouses or transfers.** A receipt's `reference` is free text
+  — a delivery note number, a date, anything — and is never parsed. One store is one place.
+- **A movement cannot be edited or voided.** Correct it with another movement: that is what a
+  ledger is. There is no "undo this receipt" button, so a receipt entered twice is fixed by a
+  stocktake rather than by deleting anything. The submission id prevents the common case (a double
+  tap, a retry) from needing that at all.
+- **No CSV import or export, no barcodes, no SKUs.** The picker searches `Product.name`, which has
+  no text index in this schema — see `pnpm measure:stock` for the measured figure (8ms p95 at
+  2,000 products) and the written trigger for adding `pg_trgm` (150ms).
+- **A stocktake is capped at 50 lines**, like a cart and a till sale, and for the same reason: past
+  that nobody is reading what they are submitting. A shop counting four hundred lines does it as
+  several stocktakes, which is also how it would walk the shelves.
+- **Counter and online stock are one shelf, and that is the point** — but counter units still never
+  reach `AnalyticsProductDaily` (see the till's section above). The stockroom does not change that:
+  a movement explains where stock went, while product performance still means online performance.
+- **The two page-render budgets are unmeasured.** `/admin/stock` and `/admin/stock/history` were
+  measured at the database layer only, because a page figure needs a production build and
+  `lib/env.ts` refuses to boot without five production secrets this `.env` lacks. The queries are
+  far inside budget (16ms and 77ms p95 against 800ms), so the page figures are expected to be
+  comfortable, but "expected" is not "measured" — they belong in the VPS run before the pilot,
+  beside the load test.
+- **The module's cost to a sale is over its budget**, at 3.8ms against a 10% allowance on a 9ms
+  operation. Recorded in CLAUDE.md with the method, including the fact that the first measurement
+  hid it: timing the two configurations in blocks instead of alternating them let cache drift
+  cancel the real cost and report 15ms vs 17ms. Whether 3.8ms on a checkout is worth a complete
+  stock history is a product decision, not a measurement, and it is written down as such rather
+  than argued away.
+
 ## Testing and ops
 
 - **The till's query COUNTS are not asserted, only its latency.** `pnpm measure:counter` reports
@@ -235,7 +283,10 @@ Newest sections at the bottom; delete an item when it's fixed.
 ## Storefront sections and templates
 
 - **Storefront filtering:** the shop page has no price/in-stock filters or sorting (Classic's
-  old sidebar filters were dropped in the 11-section rework).
+  old sidebar filters were dropped in the 11-section rework). Still true of the **storefront**,
+  and worth not confusing with the admin: a merchant can now see what is running out
+  (`/admin/stock`) and search their own catalogue by name, but a shopper cannot filter by
+  availability, and an out-of-stock product is still listed rather than hidden or sorted down.
 - **Best sellers are a manual flag** (`Product.isBestSeller`), not sales data, and both
   New arrivals and Best sellers are capped at 8 products.
 - **Reviews are typed in by hand** (max 3 quotes), not a review system. The demo store's

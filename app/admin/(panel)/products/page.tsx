@@ -21,6 +21,7 @@ import { listProductsPage } from "@/lib/data/products";
 import { formatPrice } from "@/lib/format";
 import { getT } from "@/lib/i18n/locale";
 import { calculatePrice } from "@/lib/pricing";
+import { effectiveLowStock } from "@/lib/variants";
 import { can, requireCapability } from "@/lib/permissions";
 import { deleteProductAction } from "./actions";
 import { DeleteButton } from "./delete-button";
@@ -116,6 +117,10 @@ export default async function ProductsPage({ searchParams }: PageProps<"/admin/p
                 const max = Math.max(...shown.map((price) => price.finalPriceCents));
                 const minRegular = Math.min(...shown.map((price) => price.regularPriceCents));
                 const onSale = shown.some((price) => price.discountCents > 0);
+                // The badge on this row reads the product's TOTAL across variants against the
+                // product's threshold — so "low" here means "few left altogether", while the same
+                // badge on the dashboard and the stock screen reads one variant. The sold-out
+                // count below carries the per-variant story.
                 const totalStock = p.variants.reduce((sum, v) => sum + v.stock, 0);
                 const soldOut = p.variants.filter((v) => v.stock <= 0).length;
                 return (
@@ -160,7 +165,7 @@ export default async function ProductsPage({ searchParams }: PageProps<"/admin/p
                     </TableCell>
                     <TableCell>
                       <div className="grid justify-items-start gap-1">
-                        <StockBadge stock={totalStock} />
+                        <StockBadge stock={totalStock} lowAt={effectiveLowStock(p)} />
                         {totalStock > 0 && soldOut > 0 && (
                           <span className="text-xs text-muted-foreground">
                             {soldOut} {t(soldOut === 1 ? "products.variants.option" : "products.variants.options")}{" "}

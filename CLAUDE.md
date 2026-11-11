@@ -62,6 +62,9 @@ pnpm dev                              # http://localhost:3000
 | `pnpm verify:container-commands` | Static check that every command a runbook tells an operator to run **inside the container** exists in the image's runtime stage (no server needed) |
 | `pnpm verify:rollout` | Pure check that the rollout's two shapes agree — `includesWith` (a request) and `whereWith` (a job's tenant filter) — in all three modes, that every analytics stage walk is gated and the housekeeping ones are not, and that the mode is read in exactly one place (no server or database) |
 | `pnpm verify:counter` | Test the in-store till: idempotent submissions, stock moving once in each direction, an honest void, frozen snapshots, the staff discount ceiling, the database's own CHECKs, cross-tenant refusal as `app_user`, and that a counter sale moves **no** web aggregate |
+| `pnpm verify:stock` | Test the stock module: the low-stock alert's transition and re-arm, the ledger invariant after every one of the six writers, that the module **off** writes no movement row, that the product form can no longer overwrite a counted shelf, the compare-and-swap, receiving and stocktaking (idempotency, the merged line, the variance the server really found, a sale landing mid-count), the owner-only cost rule, and that stock still moves in one file |
+| `pnpm verify:stock-ui` | Test the stockroom's two read screens through a real owner session: the 404 before the module is on, the per-product threshold on screen, the search, a removed option's write-off reading from its snapshots, the owner's cost column, and Arabic/RTL with no English left behind (needs server) |
+| `pnpm measure:stock` | Build 2,000 products x 3 variants and 100,000 movements and time the stockroom against its budgets, with the plans for the three statements that could degrade. Alternates the module on and off to measure what it costs a sale — timing them in blocks instead let cache drift hide it. Reports; asserts nothing |
 | `pnpm measure:counter` | Build a realistic catalogue (2,000 products x 3 variants, 500 sales) and time the till's four operations, with `EXPLAIN ANALYZE` for the search and the takings aggregate. Reports; asserts nothing |
 | `pnpm verify:admin-ui` | Static check of the admin UI baseline ([ADMIN_UI.md](ADMIN_UI.md)): no `components/ui/card` under `app/admin`, every solid-bordered panel names its surface, one `h1` per page, no physical-direction classes. Carries a `PENDING` list of unconverted screens that may shrink but never grow (no server needed) |
 | `pnpm verify:edge` | Static check of the edge trust gate (D75): the four modes, the strip list, the single `countryFrom` caller, the https upgrade, and that no committed config enables HSTS (no server needed) |
@@ -72,7 +75,7 @@ pnpm dev                              # http://localhost:3000
 | `pnpm verify:insights` | Test §6's insight rules at, just below and just above every threshold (pure; no server or database) |
 | `pnpm verify:integrations` | Test the owner's Google/Meta connections: snippet extraction, consent gating, verification tags on a custom domain, audit rows (needs server) |
 | `pnpm uploads:migrate --rewrite-from=<old URL>` | Rewrite stored R2 URLs after moving buckets/domains |
-| `pnpm e2e:categories` / `e2e:variants` / `e2e:discounts` / `e2e:social-links` / `e2e:pages` / `e2e:checkout` / `e2e:counter` / `e2e:kinetic` / `e2e:mirage` / `e2e:prism` | Chrome automation tests, one per feature area (needs server + Chrome installed; each creates/removes throwaway stores) |
+| `pnpm e2e:categories` / `e2e:variants` / `e2e:discounts` / `e2e:social-links` / `e2e:pages` / `e2e:checkout` / `e2e:counter` / `e2e:stock` / `e2e:kinetic` / `e2e:mirage` / `e2e:prism` | Chrome automation tests, one per feature area (needs server + Chrome installed; each creates/removes throwaway stores) |
 
 **After pulling changes:**
 ```bash
@@ -344,6 +347,116 @@ operator switches it on per store.
   front of a customer is not notified about it.
 - Counter units do **not** appear in `AnalyticsProductDaily`, so product performance means online
   performance (KNOWN_GAPS.md).
+
+## Stock Management (the stockroom)
+
+Added in Phase 8 (D85-D96). `ProductVariant.stock` was one mutable `Int` with no `updatedAt`, no
+history and no audit trail, and two writers changed it silently: `setVariantStock` set it
+absolutely with no record of the old figure, and `updateProduct` did the same for every variant on
+every product save while hard-deleting the ones an owner removed from the form. A merchant who
+sells both online and over a counter could not answer "why is this number what it is?".
+
+A platform-admin switch per store, like the till. Off until an operator enables it, and **with it
+off every stock path behaves exactly as it did before this phase** — no movement row is written and
+no statement is added.
+
+- **A movement IS the audit record.** `StockMovement` carries its own actor and its own timestamp,
+  which is why this phase adds no `AuditAction` and why the switch itself needs no audit row: its
+  trail is the operator id and the timestamp on `Tenant.stockEnabled` / `stockFirstEnabledAt` /
+  `stockEnabledBy`. `hasStockHistory` (may read) and `canMoveStock` (may record now) are the two
+  different questions, exactly as `hasCounterSaleHistory` and `canSellAtCounter` are.
+- **The ledger lives in `lib/data/stock.ts`**, the one file allowed to move stock — not a
+  coincidence: a file that is already the only one permitted to change the number is the only
+  honest place to record that it changed. `verify:counter` and `verify:stock` both grep to prove
+  `stock: { decrement`/`gte`/`increment` and `stockMovement.createMany` exist nowhere else, so a
+  sixth writer cannot move stock without a movement, and `lib/stock/invariant.ts` catches whatever
+  the grep misses.
+- **`balanceAfter` is stored, not derived.** Summing deltas is wrong wherever there is history from
+  before the module or a gap from it being off — both deliberate — and "left: 14" is what makes a
+  row readable to a shopkeeper.
+- **The epoch is reconciliation, not a timestamp (a departure from the plan).** The plan keyed
+  `OPENING` rows to a time window, which cannot work: stock still moves while the module is off, so
+  `stockFirstEnabledAt` stops being a usable epoch after the first off-period. Instead a variant's
+  next movement compares the ledger's last balance to the live figure and writes an `OPENING`
+  (delta 0) for any gap. Strictly more robust — it also catches a writer that bypassed the ledger —
+  and it needs no fourth column.
+- **Ordering is a per-variant counter, not a sequence** (D86). `variantSeq` is `MAX + 1` computed
+  while the writer holds that variant's row lock, which it always does because the `UPDATE` that
+  changed the stock took it. A global `autoincrement()` was a trap: nothing else in this schema uses
+  a sequence, no migration contains a `GRANT`, and `scripts/sql/rls-role.sql` grants on **tables**
+  only — so `app_user` would have had no `USAGE` and every insert would have failed **in production
+  alone** while passing every suite, because the suites connect as the owner. `verify:isolation`
+  now writes a movement as `app_user` precisely to hold that down.
+- **An absolute set is a compare-and-swap, and `expect` must come from the caller** (D89). Two
+  staff counting one shelf used to clobber each other with no error. `setStockTo` takes the figure
+  the person was shown; reading the current value and swapping against *that* is no protection at
+  all, since the two transactions serialise on the row lock and both succeed — the same bug one
+  layer down. A stocktake deliberately passes no `expect`: a count is authoritative, and the server
+  recomputes the variance from what it finds under a `FOR UPDATE` lock (D94).
+- **The product form no longer writes a saved variant's stock while the module is on** (D90). The
+  field is *ignored server-side*, not merely hidden: the form holds `products:write` and has never
+  named `products:stock`, so a stale tab or a direct post would still replace a counted shelf. A
+  brand-new variant keeps its submitted stock and gets an `OPENING`; a removed one gets a
+  `VARIANT_REMOVED` written **before** the `deleteMany`, which is the only surviving record of the
+  stock it held.
+- **Unit cost is a role rule, not a capability** (D92, `maySeeStockCost` / `costForRole`), following
+  `maxManualDiscountCents`. Captured at receipt because that is the only moment anyone knows it;
+  **nothing computes with it** — no valuation, no COGS, no margin. Dropped in the action for a
+  non-owner whatever was posted, and left out of the history **query**, not the markup.
+- **One document table** (D93), `StockBatch` with `kind RECEIPT | COUNT`: same lifecycle, same
+  idempotency (`submissionId` + `linesFingerprint`, the till's mechanism verbatim), same actor
+  snapshot. There are no `[id]` detail routes — a document *is* the history filtered, so
+  `/admin/stock/history?batch=…` is both the receipt view and a useful filter.
+- **`batchId` is the one column the tenant policy cannot cover.** It has to be a plain foreign key
+  (`SET NULL` cannot null a composite whose `tenantId` is `NOT NULL`, and `CASCADE` would let a
+  document delete ledger rows), and Postgres checks a foreign key without applying RLS to the
+  referenced table. So a store *can* file its own movement against another store's document id.
+  It leaks nothing and corrupts nothing; `scripts/fixtures/stock-cross-tenant.ts` reports it on
+  every run and KNOWN_GAPS.md records why it is not fixed.
+- **Running low is ungated and is not an analytics alert** (D95, D96). `Product.lowStockThreshold`
+  is a strict generalisation of the `LOW_STOCK = 3` that already shipped (null means 3), so it
+  ships for every store. The alert fires on the **transition** recorded in `NotificationAlertState`
+  and re-arms only when stock rises strictly above the threshold — no cooldown, so a discontinued
+  product goes quiet and stays quiet. It walks the stock rather than `ownerTenants()`, which
+  filters by the analytics rollout whose default is `off`: built the other way it would have been
+  invisible to almost every merchant. And it stays out of `ANALYTICS_ALERT_TYPES`, because "two
+  left" is a counted fact measured against the owner's own number, so D54's "insights invent no
+  thresholds" is satisfied by construction.
+- **Three capabilities, two screens, one switch.** `stock:read` (both roles, gated by
+  `hasStockHistory`) and `stock:move` (both roles, gated by `tenant.stockEnabled`) are the
+  stockroom's; `products:stock` is deliberately **not** reused for the gate, because it also guards
+  `/admin/products/[id]/stock`, which every store has. A store with no module gets a **404**, not
+  `/admin/no-access`: the refusal page means "your role may not", and this is not about the role.
+
+### What it costs
+
+`pnpm measure:stock`, 2,000 products x 3 variants and 100,000 movements, dev laptop, after
+`ANALYZE` (always `ANALYZE` — see `scripts/fixtures/catalogue.ts`):
+
+| Operation | p95 | Budget |
+|---|---|---|
+| `getStockAttention` (the overview) | 16ms | 800ms |
+| `listStockMovementsPage`, page 1 | 77ms | 800ms |
+| `listStockMovementsPage`, page 200 | 75ms | 800ms |
+| one variant's own history | 7ms | 800ms |
+| `searchStockVariants` (the picker) | 8ms | 300ms |
+| a 50-line receipt | 76ms | 1,000ms |
+
+**The module costs a sale 3.8ms, which is over the plan's 10% budget and is recorded as over.**
+The first version of the script timed 25 orders with the module off and then 25 with it on, got
+15ms vs 17ms, and called it noise — the "off" block had simply run before the cache was warm, so
+drift was cancelling the real cost. Alternating the two configurations showed 9.1ms vs 14.5ms, and
+that is what made cutting a round trip worth doing (one `DISTINCT ON` for each variant's newest
+movement, instead of a `groupBy` for the mark and a `findMany` for the balance): 5.4ms → 3.8ms, and
+the 50-line receipt 102ms → 76ms. The budget's 10% was written against an unknown baseline; at 9ms
+it allows 0.9ms, which no round trip fits inside. A store with the module **off** pays one extra
+column on a `SELECT` `placeOrder` already runs, and `verify:stock` holds that down statically.
+
+**Not measured:** `/admin/stock` and `/admin/stock/history` end to end. Those need a production
+build — `next dev` numbers measure the compiler — and this machine cannot produce one, because
+`lib/env.ts` refuses to boot without five production secrets this `.env` lacks. The database half
+of both pages is in the table above, which is where their cost is; the page figures belong in the
+VPS run before the pilot, beside the load test.
 
 ## Staff Accounts & Capabilities
 
@@ -631,7 +744,7 @@ leg was added — and that leg's first run skipped itself with a plausible excus
 ## Known Gaps
 
 See [PHASE_5_ACCEPTANCE.md](PHASE_5_ACCEPTANCE.md) for what the analytics and marketing screens are proven to do, and [KNOWN_GAPS.md](KNOWN_GAPS.md) for:
-- Intentional MVP limitations (e.g., no caching, cart is in-memory only, no pagination on admin products).
+- Intentional MVP limitations (e.g., no caching, cart is in-memory only, no storefront filtering by availability). **Not** admin pagination, which this entry claimed for several phases: `listProductsPage`, `AdminPagination` and `ADMIN_PAGE_SIZES` have paginated the admin lists since Phase 7.
 - Production readiness TODOs (e.g., no automated scheduler, etc.).
 - Rough edges flagged for future work (e.g., `ContentKey` is untyped, content editor doesn't warn about missing-content optional sections).
 

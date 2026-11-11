@@ -38,7 +38,13 @@ import {
   recordDeliveryOutcome,
   type NotificationDraft,
 } from "../lib/data/notifications";
-import { NOTIFIABLE_TYPES, TYPE_AUDIENCE, mayReceive } from "../lib/notifications/types";
+import {
+  ANALYTICS_ALERT_TYPES,
+  NOTIFIABLE_TYPES,
+  TYPE_AUDIENCE,
+  mayReceive,
+  needsEvidence,
+} from "../lib/notifications/types";
 import {
   FORBIDDEN_PAYLOAD_FIELDS,
   assertPayloadIsSafe,
@@ -182,6 +188,27 @@ function matrixChecks() {
     assert.ok(placed.has(type as never), `${type} belongs to no role's list`);
   }
   ok("D60", `${placed.size} types placed, staff limited to NEW_ORDER, no type in both audiences`);
+
+  // D96: running low is the owner's, and it is NOT an analytics alert.
+  //
+  // The second half is the one worth pinning. Every other owner alert is a verdict about a trend
+  // and therefore owes an evidence sentence (D54, P5-09); "two left" is a counted fact measured
+  // against a threshold the owner typed themselves, so it asserts nothing and infers nothing. If
+  // somebody added it to ANALYTICS_ALERT_TYPES, `needsEvidence` would start demanding a sentence
+  // this alert has no way to produce — and the thresholds it would be read as inventing are
+  // exactly what D54 forbids.
+  assert.equal(TYPE_AUDIENCE.LOW_STOCK, "OWNER", "running low is the owner's business");
+  assert.ok(mayReceive("STORE_OWNER", "LOW_STOCK"), "and an owner may receive it");
+  assert.ok(
+    !mayReceive("STAFF", "LOW_STOCK"),
+    "a staff account may not: D73 gives them orders and stock, not the owner's alerts",
+  );
+  assert.ok(
+    !ANALYTICS_ALERT_TYPES.includes("LOW_STOCK") && !needsEvidence("LOW_STOCK"),
+    "LOW_STOCK must stay out of the analytics alerts: it is a counted fact, not an inference, " +
+      "and the threshold it names is the owner's own number",
+  );
+  ok("D96", "running low is an owner type, refused to staff, and not an analytics alert");
 
   // The contract-rejection signal must be its own type, not folded into ingestion health: it has
   // its own threshold and its own meaning (P6-25).

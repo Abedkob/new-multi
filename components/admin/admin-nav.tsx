@@ -6,6 +6,7 @@ import { usePathname } from "next/navigation";
 import {
   ExternalLink,
   BadgePercent,
+  Boxes,
   FolderTree,
   House,
   KeyRound,
@@ -83,6 +84,7 @@ function useNavLinks(): NavLink[] {
     // splitting them.
     { href: "/admin/products", label: t("nav.products"), icon: Package, capability: "products:read", group: "catalogue" },
     { href: "/admin/categories", label: t("nav.categories"), icon: FolderTree, capability: "categories:read", group: "catalogue" },
+    { href: "/admin/stock", label: t("nav.stock"), icon: Boxes, capability: "stock:read", group: "catalogue" },
     { href: "/admin/discounts", label: t("nav.discounts"), icon: BadgePercent, capability: "discounts:write", group: "catalogue" },
 
     // Storefront — everything a shopper reads as the store's own word.

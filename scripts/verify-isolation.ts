@@ -32,6 +32,8 @@ import {
   updateDiscount,
 } from "../lib/data/discounts";
 import { setSectionVisible } from "../lib/data/sections";
+import { setTenantStock } from "../lib/data/tenants";
+import { setVariantStock } from "../lib/data/products";
 import { parseSectionVisibility } from "../lib/sections";
 import { createCoupon, getCoupon, updateCoupon } from "../lib/data/coupons";
 import {
@@ -414,6 +416,69 @@ async function main() {
       );
       assert.equal(staff.staffTenantId, A);
       await withBypass((db) => db.user.delete({ where: { id: staff.id } }));
+    });
+
+    await check("the restricted role can write a stock movement, and cannot read another store's", async () => {
+      // The reason this is here and not only in verify:stock: that suite connects as the OWNER
+      // (via scripts/_owner.ts), and every failure mode of the movement counter that matters is
+      // invisible from there. `scripts/sql/rls-role.sql` grants SELECT/INSERT/UPDATE/DELETE on
+      // TABLES and nothing else, so an ordering column backed by a sequence would have needed a
+      // USAGE grant nobody wrote — and would have failed on the first real insert in production
+      // while passing every suite. The per-variant counter needs no such object, and this is
+      // where that claim is actually tested: as app_user, with RLS live.
+      await setTenantStock(A, a.user.id);
+      const owned = await getProduct(A, pa.id);
+      assert.ok(owned?.variants[0], "A's product must still have a variant to move");
+      const moved = await setVariantStock(A, owned.variants[0].id, 3, {
+        userId: a.user.id,
+        name: "A",
+      });
+      assert.equal(moved.ok, true, "app_user must be able to insert a movement");
+      const written = await withTenant(A, (db) =>
+        db.stockMovement.findMany({ where: { tenantId: A }, select: { variantSeq: true } }),
+      );
+      assert.ok(written.length >= 1, "and the row is really there");
+
+      // B's session must not reach it, in either direction.
+      assert.deepEqual(
+        await withTenant(B, (db) => db.stockMovement.findMany({ where: { tenantId: A } })),
+        [],
+        "store B must not be able to read store A's ledger",
+      );
+      await assert.rejects(
+        withTenant(B, (db) =>
+          db.stockMovement.create({
+            data: {
+              tenantId: A,
+              variantId: owned.variants[0].id,
+              variantSeq: 9999,
+              productNameSnapshot: "forged",
+              delta: 1000,
+              balanceAfter: 1000,
+              reason: "ADJUST",
+              actorNameSnapshot: "B",
+            },
+          }),
+        ),
+        /row-level security|violates/i,
+        "and must not be able to write one into it (the policy's WITH CHECK half)",
+      );
+      await assert.rejects(
+        withTenant(B, (db) =>
+          db.stockBatch.create({
+            data: {
+              tenantId: A,
+              kind: "RECEIPT",
+              submissionId: `forged-${Date.now()}`,
+              linesFingerprint: "x",
+              actorNameSnapshot: "B",
+            },
+          }),
+        ),
+        /row-level security|violates/i,
+        "same for a document header",
+      );
+      await setTenantStock(A, null);
     });
 
     console.log("Sanity: owners can manage their own data:");

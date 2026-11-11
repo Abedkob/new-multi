@@ -16,7 +16,14 @@ import { Prisma } from "@/generated/prisma/client";
 import { normalizeAdminPageSize } from "@/lib/admin-pagination";
 import { withTenant } from "@/lib/prisma";
 import { calculatePrice } from "@/lib/pricing";
-import { decrementStockOrThrow, incrementStock, StockShortError } from "@/lib/data/stock";
+import {
+  decrementStockOrThrow,
+  incrementStock,
+  recordStockMovements,
+  soldLines,
+  stockLedgerEnabled,
+  StockShortError,
+} from "@/lib/data/stock";
 import { isLicenseActive } from "@/lib/license/status";
 import { maxManualDiscountCents, type CounterSalePaymentValue } from "@/lib/counter-sales";
 import { parseAttributes, variantLabel } from "@/lib/variants";
@@ -167,8 +174,12 @@ export async function recordCounterSale(
     return await withTenant(tenantId, async (tx) => {
       // Lock the store row for this transaction, so a pause or a switch flipped mid-sale either
       // waits for this sale or takes effect before it. Same reasoning as placeOrder.
-      const tenantRows = await tx.$queryRaw<{ isPaused: boolean; counterSalesEnabled: boolean }[]>`
-        SELECT "isPaused", "counterSalesEnabled"
+      const tenantRows = await tx.$queryRaw<{
+        isPaused: boolean;
+        counterSalesEnabled: boolean;
+        stockEnabled: boolean;
+      }[]>`
+        SELECT "isPaused", "counterSalesEnabled", "stockEnabled"
         FROM "Tenant" WHERE id = ${tenantId} FOR SHARE`;
       const licenseRows = await tx.$queryRaw<{
         status: string;
@@ -264,6 +275,24 @@ export async function recordCounterSale(
         },
         select: { id: true },
       });
+
+      // The ledger, after the sale exists, because the movement names it. `stockEnabled` rode
+      // along on the FOR SHARE read above, so a store without the module pays one column and no
+      // extra statement. The cashier is the actor here, unlike a storefront sale: a counter sale
+      // is somebody's action and the till already records whose.
+      if (tenant.stockEnabled) {
+        await recordStockMovements(
+          tx,
+          tenantId,
+          {
+            reason: "COUNTER_SALE",
+            actor: { userId: input.soldByUserId, name: input.soldByName },
+            counterSaleId: sale.id,
+            at: pricedAt,
+          },
+          soldLines(wanted),
+        );
+      }
       return { id: sale.id, totalCents, idempotent: false };
     });
   } catch (error) {
@@ -310,7 +339,7 @@ export type VoidResult = {
 export async function voidCounterSale(
   tenantId: string,
   id: string,
-  input: { reason: string; voidedByUserId: string },
+  input: { reason: string; voidedByUserId: string; voidedByName?: string },
 ): Promise<VoidResult> {
   const reason = input.reason.trim().slice(0, MAX_REASON);
   if (!reason) throw new CounterSaleError("INVALID", "A void needs a reason.");
@@ -341,7 +370,25 @@ export async function voidCounterSale(
       throw new CounterSaleError("ALREADY_VOIDED", "That sale was already voided.");
     }
 
-    const restoredLines = await incrementStock(tx, tenantId, sale.items);
+    // One extra read, and only on a void. The sale id is known here, so the ledger travels with
+    // the restore rather than following it.
+    //
+    // `voidedByName` is optional because `counter:void` is owner-only (D73) and every caller has
+    // the member's name to hand; the fallback keeps the CHECK on actorNameSnapshot satisfiable for
+    // a caller that does not, rather than failing a void over a label.
+    const ledgerOn = await stockLedgerEnabled(tx, tenantId);
+    const restoredLines = await incrementStock(
+      tx,
+      tenantId,
+      sale.items,
+      ledgerOn
+        ? {
+            reason: "COUNTER_VOID",
+            actor: { userId: input.voidedByUserId, name: input.voidedByName || "Store" },
+            counterSaleId: sale.id,
+          }
+        : null,
+    );
     // Recorded rather than inferred. A line whose variant was deleted cannot be restored, and a
     // variant deleted AFTER this void would make a later read of the same sale draw the opposite
     // conclusion — so the answer is written down at the moment it was true.

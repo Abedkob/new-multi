@@ -5,6 +5,7 @@ import { getTenantById } from "@/lib/data/tenants";
 import { requireTenantMember } from "@/lib/session";
 import { CAPABILITIES, can } from "@/lib/permissions";
 import { hasCounterSaleHistory } from "@/lib/counter-sales";
+import { hasStockHistory } from "@/lib/stock";
 import { getStoreUrl } from "@/lib/store-url";
 
 export default async function AdminLayout({
@@ -32,6 +33,11 @@ export default async function AdminLayout({
     if (!can(member.role, capability)) return false;
     if (capability === "counter:read") return hasCounterSaleHistory(tenant);
     if (capability === "counter:sell") return tenant.counterSalesEnabled;
+    // The stockroom, by the same rule and for the same reason: the history stays reachable once a
+    // store has ever had the module, so an owner never loses sight of movements already recorded.
+    // Two more columns on the row above, so still no extra query.
+    if (capability === "stock:read") return hasStockHistory(tenant);
+    if (capability === "stock:move") return tenant.stockEnabled;
     return true;
   });
 

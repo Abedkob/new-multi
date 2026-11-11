@@ -93,6 +93,7 @@ export async function saveOwnerPreferencesAction(values: OwnerPreferences) {
     funnelAlerts: !!values.funnelAlerts,
     searchAlerts: !!values.searchAlerts,
     trafficAlerts: !!values.trafficAlerts,
+    lowStockAlerts: !!values.lowStockAlerts,
     showOrderAmount: !!values.showOrderAmount,
   };
   await saveOwnerPreferences(owner.userId, next);

@@ -18,6 +18,7 @@ export const TYPE_AUDIENCE: Record<NotificationType, NotificationAudience> = {
   FUNNEL_ALERT: "OWNER",
   SEARCH_ALERT: "OWNER",
   TRAFFIC_ALERT: "OWNER",
+  LOW_STOCK: "OWNER",
   INACTIVE_STORE: "PLATFORM",
   STORE_DECLINE: "PLATFORM",
   INGESTION_HEALTH: "PLATFORM",
@@ -36,6 +37,7 @@ export const OWNER_PREFERENCE_FIELD = {
   FUNNEL_ALERT: "funnelAlerts",
   SEARCH_ALERT: "searchAlerts",
   TRAFFIC_ALERT: "trafficAlerts",
+  LOW_STOCK: "lowStockAlerts",
 } as const satisfies Partial<Record<NotificationType, string>>;
 
 /** The platform preference column that governs each platform type (§9.7). */
@@ -84,6 +86,7 @@ export const NOTIFIABLE_TYPES: Record<NotifiableRole, readonly NotificationType[
     "FUNNEL_ALERT",
     "SEARCH_ALERT",
     "TRAFFIC_ALERT",
+    "LOW_STOCK",
   ],
   /** D60. Not a `Role` in the database yet; see the docstring above. */
   STAFF: ["NEW_ORDER"],

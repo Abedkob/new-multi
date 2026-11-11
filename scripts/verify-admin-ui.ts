@@ -282,7 +282,11 @@ for (const rule of RULES) {
   for (const scope of SCOPES) {
     const mine = files.filter((f) => f.scope === scope);
     const sectionDirs = mine
-      .filter((f) => f.key.endsWith("layout.tsx") && f.source.includes("PageHeader"))
+      // `<PageHeader`, not `PageHeader`: a section layout is one that RENDERS the heading. The
+      // substring matched a layout that only named the component in a comment — the stock
+      // module's gate layout, which draws nothing and says so — and that falsely made every page
+      // under it an offender for owning the h1 it is supposed to own.
+      .filter((f) => f.key.endsWith("layout.tsx") && f.source.includes("<PageHeader"))
       .map((f) => f.key.replace(/layout\.tsx$/, ""))
       // The scope's own root layout is not a section: every page is under it, and the page is
       // where that heading belongs.
